@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.env
+.env.*
+.venv
+venv/
+ENV/
+env/
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+coverage.xml
+*.cover
+
+# Type Checking & Linting
+.mypy_cache/
+.ruff_cache/
+
+# SampleMind AI Specific
+data/
+!data/.gitkeep
+samples/
+cache/
+logs/
+models/
+uploads/
+.env.local
+.env.production
+config/secrets/
+*.bin
+*.onnx
+*.pb
+*.wav
+*.mp3
+*.flac
+*.aiff
+!tests/fixtures/audio/
+*.db
+*.sqlite
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Node.js (for frontend)
+node_modules/
+.next/
+out/
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+.cache/

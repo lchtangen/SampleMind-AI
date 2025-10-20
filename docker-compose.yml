@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  samplemind-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: samplemind-api
+    ports:
+      - "8000:8000"
+    environment:
+      - SAMPLEMIND_ENV=development
+      - MONGODB_URL=mongodb://mongodb:27017/samplemind
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./src:/app/src:cached
+      - ./data:/data
+    depends_on:
+      - mongodb
+      - redis
+      - ollama
+    networks:
+      - samplemind-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: samplemind-ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - samplemind-network
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7.0
+    container_name: samplemind-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=samplemind
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - samplemind-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: samplemind-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 1gb
+    volumes:
+      - redis_data:/data
+    networks:
+      - samplemind-network
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: samplemind-chromadb
+    ports:
+      - "8002:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    networks:
+      - samplemind-network
+    restart: unless-stopped
+
+networks:
+  samplemind-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  redis_data:
+  chromadb_data:
+  ollama_models:

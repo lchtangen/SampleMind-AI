@@ -1,0 +1,76 @@
+name: ❓ Question
+description: Ask a question about SampleMind AI
+title: "[Question]: "
+labels: ["question"]
+assignees:
+  - lchtangen
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're here to help! 💡
+        
+        **Note:** For general discussions, consider joining our [Discord community](https://discord.gg/samplemind)
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      description: What is your question about?
+      options:
+        - Installation & Setup
+        - Usage & Features
+        - Configuration
+        - AI Models
+        - Performance & Optimization
+        - DAW Integration
+        - Troubleshooting
+        - Development & Contributing
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context or what you've already tried
+      placeholder: |
+        I'm trying to...
+        I've already looked at...
+        I've tried...
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment (if relevant)
+      description: Your setup details
+      placeholder: |
+        - OS: macOS 14.0
+        - Python: 3.11.5
+        - SampleMind AI: 6.0.0-beta
+        - Installation: pip
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following
+      options:
+        - label: I have checked the documentation
+          required: true
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: This is not a bug report (use Bug Report template instead)
+          required: true
+

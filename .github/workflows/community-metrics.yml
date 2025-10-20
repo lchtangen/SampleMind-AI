@@ -1,0 +1,113 @@
+name: Community Metrics
+
+on:
+  schedule:
+    - cron: '0 12 * * *'  # Daily at 12:00 UTC
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  update-metrics:
+    name: Update Community Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Fetch GitHub Stats
+        id: github-stats
+        run: |
+          STARS=$(curl -s https://api.github.com/repos/${{ github.repository }} | jq '.stargazers_count')
+          FORKS=$(curl -s https://api.github.com/repos/${{ github.repository }} | jq '.forks_count')
+          WATCHERS=$(curl -s https://api.github.com/repos/${{ github.repository }} | jq '.subscribers_count')
+          ISSUES=$(curl -s https://api.github.com/repos/${{ github.repository }}/issues?state=open | jq 'length')
+          
+          echo "stars=$STARS" >> $GITHUB_OUTPUT
+          echo "forks=$FORKS" >> $GITHUB_OUTPUT
+          echo "watchers=$WATCHERS" >> $GITHUB_OUTPUT
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+      
+      - name: Fetch PyPI Downloads
+        id: pypi-stats
+        run: |
+          # Note: This requires the package to be published on PyPI
+          DOWNLOADS=$(curl -s https://api.pepy.tech/api/v2/projects/samplemind-ai | jq '.total_downloads // 0')
+          echo "downloads=$DOWNLOADS" >> $GITHUB_OUTPUT
+        continue-on-error: true
+      
+      - name: Calculate Growth
+        id: growth
+        run: |
+          # Store previous stats in GitHub cache or artifact
+          # For now, just output current stats
+          echo "📊 Current Stats:"
+          echo "⭐ Stars: ${{ steps.github-stats.outputs.stars }}"
+          echo "🍴 Forks: ${{ steps.github-stats.outputs.forks }}"
+          echo "👀 Watchers: ${{ steps.github-stats.outputs.watchers }}"
+          echo "📦 Downloads: ${{ steps.pypi-stats.outputs.downloads }}"
+      
+      - name: Post to Discord
+        if: github.event_name == 'schedule'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK" ]; then
+            curl -X POST "$DISCORD_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "embeds": [{
+                  "title": "📊 Daily Community Metrics",
+                  "color": 5814783,
+                  "fields": [
+                    {
+                      "name": "⭐ GitHub Stars",
+                      "value": "${{ steps.github-stats.outputs.stars }}",
+                      "inline": true
+                    },
+                    {
+                      "name": "🍴 Forks",
+                      "value": "${{ steps.github-stats.outputs.forks }}",
+                      "inline": true
+                    },
+                    {
+                      "name": "👀 Watchers",
+                      "value": "${{ steps.github-stats.outputs.watchers }}",
+                      "inline": true
+                    },
+                    {
+                      "name": "📦 PyPI Downloads",
+                      "value": "${{ steps.pypi-stats.outputs.downloads }}",
+                      "inline": true
+                    },
+                    {
+                      "name": "🐛 Open Issues",
+                      "value": "${{ steps.github-stats.outputs.issues }}",
+                      "inline": true
+                    }
+                  ],
+                  "footer": {
+                    "text": "SampleMind AI Community Metrics"
+                  },
+                  "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+                }]
+              }'
+          fi
+      
+      - name: Update README Badge
+        if: github.event_name == 'schedule'
+        run: |
+          # This would update dynamic badges in README
+          # For now, just log the stats
+          echo "Stats logged for potential README update"
+      
+      - name: Create Issue on Milestones
+        if: github.event_name == 'schedule'
+        run: |
+          STARS=${{ steps.github-stats.outputs.stars }}
+          
+          # Check for milestone achievements
+          if [ "$STARS" -eq 100 ] || [ "$STARS" -eq 500 ] || [ "$STARS" -eq 1000 ]; then
+            echo "🎉 Milestone reached: $STARS stars!"
+            # Could create a celebration issue here
+          fi
+

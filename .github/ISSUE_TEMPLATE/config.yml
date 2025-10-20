@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discord Community
+    url: https://discord.gg/samplemind
+    about: Join our Discord for general discussions, help, and community support
+  - name: 📚 Documentation
+    url: https://docs.samplemind.ai
+    about: Check out our comprehensive documentation
+  - name: 🐦 Twitter/X
+    url: https://twitter.com/samplemindai
+    about: Follow us for updates and announcements
+  - name: 🔒 Security Issue
+    url: https://github.com/lchtangen/samplemind-ai/security/advisories/new
+    about: Report security vulnerabilities privately
+

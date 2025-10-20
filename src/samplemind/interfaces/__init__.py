@@ -1,0 +1,1 @@
+# SampleMind AI v6 - Interfaces Package
