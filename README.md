@@ -5,10 +5,11 @@
 ### **Analyze 10,000 Samples in 60 Seconds. Offline. In Your Terminal.**
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104.0+-green.svg)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile)
+[![GitHub Stars](https://img.shields.io/github/stars/lchtangen/samplemind-ai?style=social)](https://github.com/lchtangen/samplemind-ai/stargazers)
 [![Discord](https://img.shields.io/badge/discord-join-7289da.svg)](https://discord.gg/samplemind)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 **No API keys. No cloud. No subscriptions. 20 AI models running locally.**
 
@@ -81,6 +82,23 @@ Because your time is valuable.
 > — **Developer on Hacker News**
 
 *Be the first to share your experience! Tag us with #SampleMindAI*
+
+## 📊 How Does It Compare?
+
+| Feature | SampleMind AI | Splice | Loopcloud | Manual Organization |
+|---------|---------------|--------|-----------|---------------------|
+| **Cost** | 🟢 Free Forever | 🔴 $10-30/month | 🔴 $10-20/month | 🟢 Free |
+| **Privacy** | 🟢 100% Offline | 🔴 Cloud Upload | 🔴 Cloud Upload | 🟢 Local |
+| **Speed** | 🟢 100 samples/sec | 🟡 ~10 samples/sec | 🟡 ~10 samples/sec | 🔴 1 sample/min |
+| **AI Models** | 🟢 20 Local Models | 🟡 Cloud AI | 🟡 Cloud AI | 🔴 None |
+| **Internet Required** | 🟢 No | 🔴 Yes | 🔴 Yes | 🟢 No |
+| **Open Source** | 🟢 Yes (MIT) | 🔴 No | 🔴 No | 🟢 N/A |
+| **Customizable** | 🟢 Fully | 🔴 Limited | 🔴 Limited | 🟢 Fully |
+| **Terminal UI** | 🟢 Beautiful CLI | 🔴 GUI Only | 🔴 GUI Only | 🔴 Finder/Explorer |
+| **Batch Processing** | 🟢 Unlimited | 🟡 Limited | 🟡 Limited | 🔴 Manual |
+| **API Access** | 🟢 Full REST API | 🔴 No | 🔴 No | 🔴 No |
+
+**Winner:** SampleMind AI for speed, privacy, and cost. Cloud services for collaborative features (coming in v6.2).
 
 ## 🚀 Quick Start
 
