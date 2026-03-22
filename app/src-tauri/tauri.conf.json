@@ -1,0 +1,39 @@
+{
+  "productName": "SampleMind AI",
+  "version": "0.1.0",
+  "identifier": "com.samplemind.ai",
+
+  "build": {
+    "frontendDist": "../dist"
+  },
+
+  "app": {
+    "withGlobalTauri": false,
+
+    "windows": [
+      {
+        "label": "main",
+        "title": "SampleMind AI",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 960,
+        "minHeight": 600,
+        "center": true,
+        "resizable": true,
+        "decorations": true,
+        "visible": false,
+        "url": "index.html"
+      }
+    ],
+
+    "security": {
+      "csp": null
+    }
+  },
+
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": ["icons/icon.png"]
+  }
+}
