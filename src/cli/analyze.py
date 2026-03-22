@@ -1,5 +1,5 @@
 import os
-from .audio_analysis import analyze_file
+from analyzer.audio_analysis import analyze_file
 
 def analyze_samples(folder: str):
     if not os.path.exists(folder):
@@ -9,7 +9,7 @@ def analyze_samples(folder: str):
     wav_files = [f for f in os.listdir(folder) if f.lower().endswith(".wav")]
     if not wav_files:
         print("⚠️ No WAV files found.")
-        returntreee
+        return
 
     for file in wav_files:
         file_path = os.path.join(folder, file)
