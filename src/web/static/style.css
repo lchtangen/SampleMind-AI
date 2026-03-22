@@ -32,7 +32,45 @@ header {
   border-bottom: 1px solid var(--border);
 }
 .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.header-right { display: flex; align-items: center; gap: 16px; }
 .library-count { color: var(--muted); font-size: 13px; }
+
+.import-btn {
+  background: var(--accent);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.import-btn:hover  { opacity: 0.85; }
+.import-btn:active { transform: scale(0.97); }
+.import-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Toast notification ── */
+.toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 13px;
+  z-index: 200;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  max-width: 420px;
+  text-align: center;
+  transition: opacity 0.3s;
+}
+.toast.hidden  { display: none; }
+.toast.success { border-color: var(--accent2); color: var(--accent2); }
+.toast.error   { border-color: var(--danger);  color: var(--danger); }
+.toast.loading { border-color: var(--accent);  color: var(--accent); }
 
 /* ── Main layout ── */
 main { padding: 24px 28px; }

@@ -10,8 +10,14 @@
 
   <header>
     <div class="logo">🎧 SampleMind AI</div>
-    <span class="library-count">{{ total }} samples in library</span>
+    <div class="header-right">
+      <span class="library-count" id="library-count">{{ total }} samples in library</span>
+      <button id="import-btn" class="import-btn">+ Import Folder</button>
+    </div>
   </header>
+
+  <!-- ── Import progress toast ── -->
+  <div id="import-toast" class="toast hidden"></div>
 
   <main>
     <!-- ── Search & Filter Bar ── -->

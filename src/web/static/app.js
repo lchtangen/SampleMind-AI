@@ -1,14 +1,22 @@
 /**
  * app.js — SampleMind AI frontend
  *
- * Three things this file does:
- * 1. Live search — calls /api/samples as you type, re-renders the table
- *    without reloading the page (this is called an AJAX request, using fetch())
- * 2. Tag modal — clicking 🏷️ opens a form to edit a sample's metadata,
- *    then POSTs to /api/tag to save it
- * 3. Audio playback — clicking ▶ streams the WAV from /audio/<id> into
- *    the <audio> element in the player bar at the bottom
+ * 1. Live search   — /api/samples as you type (AJAX, no page reload)
+ * 2. Tag modal     — POST /api/tag to update metadata
+ * 3. Audio playback — stream WAV from /audio/<id>
+ * 4. Import folder — native OS dialog (Tauri) or path prompt (browser)
+ *    then POST /api/import with the chosen folder path
  */
+
+// ── Tauri IPC bridge ─────────────────────────────────────────────────────────
+//
+// window.__TAURI__ is injected by Tauri when withGlobalTauri=true.
+// The ?? fallback means this code still works when opened in a plain browser
+// (useful for debugging the UI without running the full desktop app).
+//
+// invoke('pick_folder') calls the Rust #[tauri::command] fn pick_folder()
+// which opens a native OS folder-picker dialog.
+const invoke = window.__TAURI__?.core?.invoke ?? (() => Promise.resolve(null));
 
 // ── Grab elements we'll reuse ───────────────────────────────────────────────
 const searchInput      = document.getElementById("search-input");
@@ -17,13 +25,97 @@ const energyFilter     = document.getElementById("energy-filter");
 const instrumentFilter = document.getElementById("instrument-filter");
 const bpmMin           = document.getElementById("bpm-min");
 const bpmMax           = document.getElementById("bpm-max");
-const tbody        = document.getElementById("sample-tbody");
-const modal        = document.getElementById("tag-modal");
-const playerBar    = document.getElementById("player-bar");
-const audioPlayer  = document.getElementById("audio-player");
-const playerName   = document.getElementById("player-filename");
+const tbody            = document.getElementById("sample-tbody");
+const modal            = document.getElementById("tag-modal");
+const playerBar        = document.getElementById("player-bar");
+const audioPlayer      = document.getElementById("audio-player");
+const playerName       = document.getElementById("player-filename");
+const importBtn        = document.getElementById("import-btn");
+const importToast      = document.getElementById("import-toast");
+const libraryCount     = document.getElementById("library-count");
 
-let currentPlayBtn = null;  // track which ▶ button is "playing" state
+let currentPlayBtn = null;
+
+
+// ── Toast helper ─────────────────────────────────────────────────────────────
+
+function showToast(msg, type = "loading", autoDismiss = 0) {
+  importToast.textContent = msg;
+  importToast.className   = `toast ${type}`;
+  if (autoDismiss > 0) {
+    setTimeout(() => { importToast.classList.add("hidden"); }, autoDismiss);
+  }
+}
+
+
+// ── Import folder ─────────────────────────────────────────────────────────────
+//
+// How this works end-to-end:
+// 1. User clicks "+ Import Folder"
+// 2. If running in Tauri: invoke('pick_folder') → Rust opens native OS dialog
+//    If running in browser: prompt() asks for a folder path (dev/debug mode)
+// 3. JS POSTs the path to Flask /api/import
+// 4. Flask runs import_samples(path) and returns { imported, log }
+// 5. Toast shows result, table refreshes
+
+importBtn.addEventListener("click", async () => {
+  importBtn.disabled = true;
+  showToast("Opening folder picker…");
+
+  let folderPath = null;
+
+  if (window.__TAURI__) {
+    // Running inside Tauri desktop app — use native OS dialog
+    try {
+      folderPath = await invoke("pick_folder");
+    } catch (err) {
+      showToast(`❌ Dialog error: ${err}`, "error", 4000);
+      importBtn.disabled = false;
+      return;
+    }
+  } else {
+    // Running in a browser — prompt for path (debugging only)
+    folderPath = window.prompt("Enter folder path containing WAV files:");
+  }
+
+  if (!folderPath) {
+    // User cancelled the dialog
+    importToast.classList.add("hidden");
+    importBtn.disabled = false;
+    return;
+  }
+
+  showToast(`⏳ Importing from ${folderPath}…`);
+
+  try {
+    const res  = await fetch("/api/import", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ path: folderPath }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showToast(`✅ Imported ${data.imported} sample(s)`, "success", 4000);
+      fetchSamples();          // refresh the table
+      updateLibraryCount();    // update header count
+    } else {
+      showToast(`❌ ${data.error}`, "error", 5000);
+    }
+  } catch (err) {
+    showToast(`❌ Network error: ${err}`, "error", 5000);
+  }
+
+  importBtn.disabled = false;
+});
+
+async function updateLibraryCount() {
+  try {
+    const res  = await fetch("/api/status");
+    const data = await res.json();
+    if (libraryCount) libraryCount.textContent = `${data.total} samples in library`;
+  } catch {}
+}
 
 
 // ── Live search ─────────────────────────────────────────────────────────────

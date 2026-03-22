@@ -5,6 +5,8 @@ Routes:
   GET  /              → main library view (with optional filter params)
   GET  /api/samples   → JSON endpoint used by app.js for live search
   POST /api/tag       → update tags on a sample via the web UI
+  POST /api/import    → import a folder of WAV files (called from Tauri via JS)
+  GET  /api/status    → health check + library stats
   GET  /audio/<id>    → stream a WAV file to the browser for playback
 
 Flask concepts:
@@ -91,6 +93,51 @@ def api_tag():
     if updated:
         return jsonify({"ok": True})
     return jsonify({"error": "Sample not found"}), 404
+
+
+@app.route("/api/import", methods=["POST"])
+def api_import():
+    """
+    Import a folder of WAV files, triggered from the Tauri desktop app.
+
+    Flow:
+      1. Tauri Rust opens a native folder-picker dialog
+      2. JS receives the selected path
+      3. JS POSTs {"path": "/chosen/folder"} here
+      4. Flask runs the importer and returns results
+
+    The importer runs synchronously — for large folders this blocks,
+    but it's fine for now. Future: use Server-Sent Events for progress.
+    """
+    data = request.json or {}
+    folder = data.get("path", "").strip()
+
+    if not folder:
+        return jsonify({"error": "path is required"}), 400
+    if not os.path.isdir(folder):
+        return jsonify({"error": f"Not a directory: {folder}"}), 400
+
+    # Capture importer output by redirecting stdout temporarily
+    import io, contextlib
+    from cli.importer import import_samples
+
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            import_samples(folder)
+        output = buf.getvalue()
+        # Count how many were imported from the output line
+        imported = sum(1 for line in output.splitlines() if line.strip().startswith("✅"))
+        return jsonify({"ok": True, "imported": imported, "log": output})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/status")
+def api_status():
+    """Health check + library stats. Used by the JS to know the server is up."""
+    init_db()
+    return jsonify({"ok": True, "total": count_samples()})
 
 
 @app.route("/audio/<int:sample_id>")
