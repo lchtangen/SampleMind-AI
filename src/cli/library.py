@@ -1,31 +1,46 @@
 """
-library.py — CLI command to list and search the sample library.
+library.py — list and search the sample library.
 
-The `list` command queries the SQLite database and prints a table.
-Optional filters: --key, --bpm-min, --bpm-max
+list:   show everything, with optional BPM/key filters
+search: filter by filename, genre, energy, BPM, key simultaneously
 """
 
-from data.database import get_all_samples, count_samples, init_db
+from data.database import get_all_samples, search_samples, count_samples, init_db
+
+
+def _print_table(rows):
+    if not rows:
+        print("🔍 No samples matched your filters.")
+        return
+    print(f"\n{'#':<4} {'Filename':<36} {'BPM':<7} {'Key':<10} {'Genre':<12} {'Energy':<8} {'Mood'}")
+    print("─" * 96)
+    for i, r in enumerate(rows, 1):
+        print(
+            f"{i:<4} {r['filename']:<36} {str(r['bpm']):<7} {(r['key'] or ''):<10} "
+            f"{(r['genre'] or ''):<12} {(r['energy'] or ''):<8} {r['mood'] or ''}"
+        )
+    print()
 
 
 def list_samples(key=None, bpm_min=None, bpm_max=None):
     init_db()
     total = count_samples()
-
     if total == 0:
-        print("📭 Library is empty. Run `samplemind import <folder>` first.")
+        print("📭 Library is empty. Run `python main.py import <folder>` first.")
         return
-
     rows = get_all_samples(bpm_min=bpm_min, bpm_max=bpm_max, key=key)
+    _print_table(rows)
+    print(f"{len(rows)} result(s)  |  {total} total in library")
 
-    if not rows:
-        print("🔍 No samples matched your filters.")
+
+def search_library(query=None, key=None, bpm_min=None, bpm_max=None,
+                   genre=None, energy=None):
+    init_db()
+    total = count_samples()
+    if total == 0:
+        print("📭 Library is empty. Run `python main.py import <folder>` first.")
         return
-
-    # Print a simple table
-    print(f"\n{'#':<4} {'Filename':<40} {'BPM':<7} {'Key':<10} {'Imported'}")
-    print("─" * 80)
-    for i, row in enumerate(rows, 1):
-        print(f"{i:<4} {row['filename']:<40} {row['bpm']:<7} {row['key']:<10} {row['imported_at'][:10]}")
-
-    print(f"\n{len(rows)} result(s)  |  {total} total in library")
+    rows = search_samples(query=query, bpm_min=bpm_min, bpm_max=bpm_max,
+                          key=key, genre=genre, energy=energy)
+    _print_table(rows)
+    print(f"{len(rows)} result(s)  |  {total} total in library")

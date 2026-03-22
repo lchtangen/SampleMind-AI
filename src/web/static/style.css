@@ -1,0 +1,190 @@
+/* SampleMind AI — dark theme UI */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0f1117;
+  --surface:  #1a1d27;
+  --border:   #2a2d3a;
+  --accent:   #7c6ff7;
+  --accent2:  #4ecca3;
+  --text:     #e8eaf0;
+  --muted:    #6b7280;
+  --danger:   #ef4444;
+  --radius:   8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.logo { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.library-count { color: var(--muted); font-size: 13px; }
+
+/* ── Main layout ── */
+main { padding: 24px 28px; }
+
+/* ── Filters ── */
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.filters input,
+.filters select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.filters input:focus,
+.filters select:focus { border-color: var(--accent); }
+#search-input { flex: 1; min-width: 200px; }
+#bpm-min, #bpm-max { width: 100px; }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+thead tr { background: #12141e; }
+th {
+  padding: 10px 14px;
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #1f2235; }
+
+.filename { font-weight: 500; color: var(--accent2); }
+.empty { color: var(--muted); text-align: center; padding: 32px; }
+
+/* editable cells show a subtle underline hint */
+.editable { cursor: pointer; border-bottom: 1px dashed var(--border); }
+
+/* ── Buttons ── */
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 5px 10px;
+  transition: opacity 0.15s;
+}
+button:hover { opacity: 0.8; }
+
+.play-btn {
+  background: var(--accent);
+  color: white;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 11px;
+}
+.play-btn.playing { background: var(--accent2); }
+.tag-btn { background: #2a2d3a; color: var(--text); }
+
+/* ── Modal ── */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal.hidden { display: none; }
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.modal-box h2 { font-size: 16px; }
+.modal-box p  { color: var(--accent2); font-size: 13px; }
+.modal-box label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.modal-box input,
+.modal-box select {
+  background: #12141e;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+}
+.modal-box input:focus,
+.modal-box select:focus { border-color: var(--accent); }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+#modal-save   { background: var(--accent); color: white; padding: 8px 18px; }
+#modal-cancel { background: #2a2d3a; color: var(--text); padding: 8px 18px; }
+
+/* ── Player bar ── */
+#player-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 50;
+}
+#player-bar.hidden { display: none; }
+#player-filename { color: var(--accent2); font-weight: 500; min-width: 200px; }
+#audio-player { flex: 1; height: 36px; }
+
+/* Style native audio player to match theme */
+audio { accent-color: var(--accent); filter: invert(0.9) hue-rotate(210deg); }

@@ -1,79 +1,136 @@
 """
 database.py — SQLite storage for SampleMind AI
 
-This module manages a local database file (~/.samplemind/library.db).
-It stores one row per sample with its metadata: file path, BPM, key, mood.
+Manages ~/.samplemind/library.db — a single file, no server needed.
+Each row = one sample with auto-detected + manually tagged metadata.
 
-sqlite3 is part of Python's standard library — no installation needed.
+Migration strategy: _migrate() adds new columns to existing databases
+so users don't lose their library when the schema evolves.
 """
 
 import sqlite3
 import os
 
-# The database lives in the user's home directory so it persists across
-# different project folders and terminal sessions.
 DB_PATH = os.path.expanduser("~/.samplemind/library.db")
 
 
 def _connect() -> sqlite3.Connection:
-    """Open (or create) the database file and return a connection."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row  # rows behave like dicts: row["bpm"] works
     return conn
 
 
+def _migrate(conn: sqlite3.Connection):
+    """
+    Add columns that didn't exist in older versions of the schema.
+    ALTER TABLE ADD COLUMN is safe to run repeatedly — it silently fails
+    if the column already exists (we catch that specific error).
+    """
+    new_columns = [
+        ("genre",  "TEXT"),
+        ("energy", "TEXT"),  # low / mid / high
+        ("tags",   "TEXT"),  # comma-separated free-form tags
+    ]
+    for col_name, col_type in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE samples ADD COLUMN {col_name} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # column already exists — that's fine
+
+
 def init_db():
-    """Create the samples table if it doesn't exist yet."""
+    """Create the samples table (if needed) and apply any migrations."""
     with _connect() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS samples (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                filename  TEXT NOT NULL,
-                path      TEXT NOT NULL UNIQUE,
-                bpm       REAL,
-                key       TEXT,
-                mood      TEXT,
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename    TEXT NOT NULL,
+                path        TEXT NOT NULL UNIQUE,
+                bpm         REAL,
+                key         TEXT,
+                mood        TEXT,
+                genre       TEXT,
+                energy      TEXT,
+                tags        TEXT,
                 imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        _migrate(conn)
 
 
 def save_sample(filename: str, path: str, bpm: float, key: str, mood: str = None):
-    """
-    Insert a sample into the database.
-    INSERT OR REPLACE means re-importing the same file updates its metadata
-    instead of creating a duplicate row.
-    """
+    """Insert or update a sample. Re-importing the same path updates BPM/key."""
     with _connect() as conn:
         conn.execute("""
-            INSERT OR REPLACE INTO samples (filename, path, bpm, key, mood)
+            INSERT INTO samples (filename, path, bpm, key, mood)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+                bpm  = excluded.bpm,
+                key  = excluded.key,
+                mood = excluded.mood
         """, (filename, path, bpm, key, mood))
 
 
-def get_all_samples(bpm_min=None, bpm_max=None, key=None):
+def tag_sample(path: str, genre: str = None, mood: str = None,
+               energy: str = None, tags: str = None) -> bool:
     """
-    Query all samples, with optional filters.
-    The ? placeholders protect against SQL injection — never use f-strings for SQL.
+    Update the manual tags on a sample by its file path.
+    Only updates fields that are explicitly passed (None = leave unchanged).
+    Returns True if the sample was found, False if not in the library.
     """
-    query = "SELECT * FROM samples WHERE 1=1"
+    fields, params = [], []
+    if genre  is not None: fields.append("genre = ?");  params.append(genre)
+    if mood   is not None: fields.append("mood = ?");   params.append(mood)
+    if energy is not None: fields.append("energy = ?"); params.append(energy)
+    if tags   is not None: fields.append("tags = ?");   params.append(tags)
+
+    if not fields:
+        return False
+
+    params.append(path)
+    with _connect() as conn:
+        cur = conn.execute(
+            f"UPDATE samples SET {', '.join(fields)} WHERE path = ?", params
+        )
+        return cur.rowcount > 0
+
+
+def get_sample_by_name(name: str):
+    """Find a sample by partial filename match (case-insensitive)."""
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM samples WHERE filename LIKE ? LIMIT 1",
+            (f"%{name}%",)
+        ).fetchone()
+
+
+def search_samples(query: str = None, bpm_min=None, bpm_max=None,
+                   key=None, genre=None, energy=None):
+    """
+    Full search with all filters combined.
+    query = partial filename or tag match.
+    """
+    sql = "SELECT * FROM samples WHERE 1=1"
     params = []
 
-    if bpm_min is not None:
-        query += " AND bpm >= ?"
-        params.append(bpm_min)
-    if bpm_max is not None:
-        query += " AND bpm <= ?"
-        params.append(bpm_max)
-    if key is not None:
-        query += " AND key LIKE ?"
-        params.append(f"%{key}%")
+    if query:
+        sql += " AND (filename LIKE ? OR tags LIKE ?)"
+        params += [f"%{query}%", f"%{query}%"]
+    if bpm_min  is not None: sql += " AND bpm >= ?";        params.append(bpm_min)
+    if bpm_max  is not None: sql += " AND bpm <= ?";        params.append(bpm_max)
+    if key      is not None: sql += " AND key LIKE ?";      params.append(f"%{key}%")
+    if genre    is not None: sql += " AND genre LIKE ?";    params.append(f"%{genre}%")
+    if energy   is not None: sql += " AND energy = ?";      params.append(energy)
 
-    query += " ORDER BY imported_at DESC"
+    sql += " ORDER BY imported_at DESC"
 
     with _connect() as conn:
-        return conn.execute(query, params).fetchall()
+        return conn.execute(sql, params).fetchall()
+
+
+def get_all_samples(bpm_min=None, bpm_max=None, key=None):
+    return search_samples(bpm_min=bpm_min, bpm_max=bpm_max, key=key)
 
 
 def count_samples() -> int:
