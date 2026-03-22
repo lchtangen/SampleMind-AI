@@ -36,12 +36,13 @@ def index():
     """
     init_db()
     filters = {
-        "query":   request.args.get("q"),
-        "genre":   request.args.get("genre"),
-        "energy":  request.args.get("energy"),
-        "key":     request.args.get("key"),
-        "bpm_min": request.args.get("bpm_min", type=float),
-        "bpm_max": request.args.get("bpm_max", type=float),
+        "query":      request.args.get("q"),
+        "genre":      request.args.get("genre"),
+        "energy":     request.args.get("energy"),
+        "key":        request.args.get("key"),
+        "instrument": request.args.get("instrument"),
+        "bpm_min":    request.args.get("bpm_min", type=float),
+        "bpm_max":    request.args.get("bpm_max", type=float),
     }
     samples = search_samples(**filters)
     total = count_samples()
@@ -56,12 +57,13 @@ def api_samples():
     """
     init_db()
     filters = {
-        "query":   request.args.get("q"),
-        "genre":   request.args.get("genre"),
-        "energy":  request.args.get("energy"),
-        "key":     request.args.get("key"),
-        "bpm_min": request.args.get("bpm_min", type=float),
-        "bpm_max": request.args.get("bpm_max", type=float),
+        "query":      request.args.get("q"),
+        "genre":      request.args.get("genre"),
+        "energy":     request.args.get("energy"),
+        "key":        request.args.get("key"),
+        "instrument": request.args.get("instrument"),
+        "bpm_min":    request.args.get("bpm_min", type=float),
+        "bpm_max":    request.args.get("bpm_max", type=float),
     }
     rows = search_samples(**filters)
     # sqlite3.Row objects aren't JSON-serializable, so convert to plain dicts

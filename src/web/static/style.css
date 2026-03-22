@@ -188,3 +188,15 @@ button:hover { opacity: 0.8; }
 
 /* Style native audio player to match theme */
 audio { accent-color: var(--accent); filter: invert(0.9) hue-rotate(210deg); }
+
+/* ── Instrument type chips ── */
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.chip.instrument { background: #1e2235; color: var(--accent); border: 1px solid var(--accent); }

@@ -28,9 +28,10 @@ def _migrate(conn: sqlite3.Connection):
     if the column already exists (we catch that specific error).
     """
     new_columns = [
-        ("genre",  "TEXT"),
-        ("energy", "TEXT"),  # low / mid / high
-        ("tags",   "TEXT"),  # comma-separated free-form tags
+        ("genre",      "TEXT"),
+        ("energy",     "TEXT"),   # low / mid / high
+        ("tags",       "TEXT"),   # comma-separated free-form tags
+        ("instrument", "TEXT"),   # kick / snare / hihat / bass / pad / lead / loop / sfx
     ]
     for col_name, col_type in new_columns:
         try:
@@ -59,17 +60,20 @@ def init_db():
         _migrate(conn)
 
 
-def save_sample(filename: str, path: str, bpm: float, key: str, mood: str = None):
-    """Insert or update a sample. Re-importing the same path updates BPM/key."""
+def save_sample(filename: str, path: str, bpm: float, key: str,
+                mood: str = None, energy: str = None, instrument: str = None):
+    """Insert or update a sample. Re-importing the same path updates auto-detected fields."""
     with _connect() as conn:
         conn.execute("""
-            INSERT INTO samples (filename, path, bpm, key, mood)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO samples (filename, path, bpm, key, mood, energy, instrument)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(path) DO UPDATE SET
-                bpm  = excluded.bpm,
-                key  = excluded.key,
-                mood = excluded.mood
-        """, (filename, path, bpm, key, mood))
+                bpm        = excluded.bpm,
+                key        = excluded.key,
+                mood       = excluded.mood,
+                energy     = excluded.energy,
+                instrument = excluded.instrument
+        """, (filename, path, bpm, key, mood, energy, instrument))
 
 
 def tag_sample(path: str, genre: str = None, mood: str = None,
@@ -106,7 +110,7 @@ def get_sample_by_name(name: str):
 
 
 def search_samples(query: str = None, bpm_min=None, bpm_max=None,
-                   key=None, genre=None, energy=None):
+                   key=None, genre=None, energy=None, instrument=None):
     """
     Full search with all filters combined.
     query = partial filename or tag match.
@@ -120,8 +124,9 @@ def search_samples(query: str = None, bpm_min=None, bpm_max=None,
     if bpm_min  is not None: sql += " AND bpm >= ?";        params.append(bpm_min)
     if bpm_max  is not None: sql += " AND bpm <= ?";        params.append(bpm_max)
     if key      is not None: sql += " AND key LIKE ?";      params.append(f"%{key}%")
-    if genre    is not None: sql += " AND genre LIKE ?";    params.append(f"%{genre}%")
-    if energy   is not None: sql += " AND energy = ?";      params.append(energy)
+    if genre      is not None: sql += " AND genre LIKE ?";      params.append(f"%{genre}%")
+    if energy     is not None: sql += " AND energy = ?";        params.append(energy)
+    if instrument is not None: sql += " AND instrument LIKE ?"; params.append(f"%{instrument}%")
 
     sql += " ORDER BY imported_at DESC"
 

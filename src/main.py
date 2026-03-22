@@ -35,10 +35,12 @@ def main():
 
     # 🔎 search — multi-filter search
     p = subparsers.add_parser("search", help="Search the library with multiple filters")
-    p.add_argument("query",     nargs="?", default=None, help="Partial filename or tag")
-    p.add_argument("--key",     default=None, help="Key filter (e.g. 'C maj')")
-    p.add_argument("--genre",   default=None, help="Genre filter (e.g. trap)")
-    p.add_argument("--energy",  default=None, choices=["low", "mid", "high"])
+    p.add_argument("query",        nargs="?", default=None, help="Partial filename or tag")
+    p.add_argument("--key",        default=None, help="Key filter (e.g. 'C maj')")
+    p.add_argument("--genre",      default=None, help="Genre filter (e.g. trap)")
+    p.add_argument("--energy",     default=None, choices=["low", "mid", "high"])
+    p.add_argument("--instrument", default=None,
+                   choices=["kick","snare","hihat","bass","pad","lead","loop","sfx","unknown"])
     p.add_argument("--bpm-min", type=float, default=None)
     p.add_argument("--bpm-max", type=float, default=None)
 
@@ -64,7 +66,8 @@ def main():
         list_samples(key=args.key, bpm_min=args.bpm_min, bpm_max=args.bpm_max)
     elif args.command == "search":
         search_library(query=args.query, key=args.key, bpm_min=args.bpm_min,
-                       bpm_max=args.bpm_max, genre=args.genre, energy=args.energy)
+                       bpm_max=args.bpm_max, genre=args.genre, energy=args.energy,
+                       instrument=args.instrument)
     elif args.command == "tag":
         tag_samples(args.name, genre=args.genre, mood=args.mood,
                     energy=args.energy, tags=args.tags)

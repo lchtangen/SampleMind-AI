@@ -11,11 +11,12 @@
  */
 
 // ── Grab elements we'll reuse ───────────────────────────────────────────────
-const searchInput  = document.getElementById("search-input");
-const genreFilter  = document.getElementById("genre-filter");
-const energyFilter = document.getElementById("energy-filter");
-const bpmMin       = document.getElementById("bpm-min");
-const bpmMax       = document.getElementById("bpm-max");
+const searchInput      = document.getElementById("search-input");
+const genreFilter      = document.getElementById("genre-filter");
+const energyFilter     = document.getElementById("energy-filter");
+const instrumentFilter = document.getElementById("instrument-filter");
+const bpmMin           = document.getElementById("bpm-min");
+const bpmMax           = document.getElementById("bpm-max");
 const tbody        = document.getElementById("sample-tbody");
 const modal        = document.getElementById("tag-modal");
 const playerBar    = document.getElementById("player-bar");
@@ -35,18 +36,19 @@ function onFilterChange() {
   debounceTimer = setTimeout(fetchSamples, 300);
 }
 
-[searchInput, genreFilter, energyFilter, bpmMin, bpmMax].forEach(el => {
+[searchInput, genreFilter, energyFilter, instrumentFilter, bpmMin, bpmMax].forEach(el => {
   el.addEventListener("input", onFilterChange);
 });
 
 async function fetchSamples() {
   // Build query string from current filter values
   const params = new URLSearchParams();
-  if (searchInput.value)  params.set("q",       searchInput.value);
-  if (genreFilter.value)  params.set("genre",   genreFilter.value);
-  if (energyFilter.value) params.set("energy",  energyFilter.value);
-  if (bpmMin.value)       params.set("bpm_min", bpmMin.value);
-  if (bpmMax.value)       params.set("bpm_max", bpmMax.value);
+  if (searchInput.value)      params.set("q",          searchInput.value);
+  if (genreFilter.value)      params.set("genre",      genreFilter.value);
+  if (energyFilter.value)     params.set("energy",     energyFilter.value);
+  if (instrumentFilter.value) params.set("instrument", instrumentFilter.value);
+  if (bpmMin.value)           params.set("bpm_min",    bpmMin.value);
+  if (bpmMax.value)           params.set("bpm_max",    bpmMax.value);
 
   // fetch() is the modern way to make HTTP requests from JS
   // await pauses execution until the response arrives
@@ -67,6 +69,7 @@ function renderTable(samples) {
       <td class="filename">${escHtml(s.filename)}</td>
       <td>${s.bpm ?? "—"}</td>
       <td>${escHtml(s.key ?? "—")}</td>
+      <td><span class="chip instrument">${escHtml(s.instrument ?? "—")}</span></td>
       <td class="editable" data-field="genre">${escHtml(s.genre ?? "")}</td>
       <td class="editable" data-field="energy">${escHtml(s.energy ?? "")}</td>
       <td class="editable" data-field="mood">${escHtml(s.mood ?? "")}</td>

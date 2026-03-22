@@ -1,10 +1,11 @@
 import librosa
 import numpy as np
 from typing import Tuple
+from analyzer.classifier import classify
 
 
-# Load audio once and reuse — avoids reading the file twice per analysis.
 def _load(file_path: str):
+    """Load audio once — reused by all analysis functions."""
     return librosa.load(file_path)
 
 
@@ -17,12 +18,9 @@ def analyze_key(y, sr) -> str:
     """
     Detect root note + major/minor quality.
 
-    How it works:
-    - chroma_cens: 12 energy values, one per semitone (C, C#, D ... B)
-    - The note with highest average energy = root note
-    - tonnetz: encodes harmonic relationships (fifths, thirds, tritones)
-      Minor keys have higher mean absolute tonnetz values than major keys
-      because minor thirds create more harmonic "tension".
+    - chroma_cens: 12 energy values, one per semitone (C through B)
+    - Highest average energy note = root note
+    - tonnetz: harmonic tension — minor keys score higher than major
     """
     chroma = librosa.feature.chroma_cens(y=y, sr=sr)
     chroma_mean = chroma.mean(axis=1)
@@ -36,6 +34,22 @@ def analyze_key(y, sr) -> str:
     return f"{root} {quality}"
 
 
-def analyze_file(file_path: str) -> Tuple[float, str]:
+def analyze_file(file_path: str) -> dict:
+    """
+    Full analysis of a WAV file. Returns a dict with:
+      bpm, key, energy, mood, instrument
+
+    All fields are auto-detected from the audio signal.
+    """
     y, sr = _load(file_path)
-    return analyze_bpm(y, sr), analyze_key(y, sr)
+    bpm = analyze_bpm(y, sr)
+    key = analyze_key(y, sr)
+    ai  = classify(y, sr, key)
+
+    return {
+        "bpm":        bpm,
+        "key":        key,
+        "energy":     ai["energy"],
+        "mood":       ai["mood"],
+        "instrument": ai["instrument"],
+    }

@@ -33,6 +33,13 @@
         {% endfor %}
       </select>
 
+      <select id="instrument-filter">
+        <option value="">All types</option>
+        {% for t in ["kick","snare","hihat","bass","pad","lead","loop","sfx"] %}
+          <option value="{{ t }}" {% if filters.instrument == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+
       <input id="bpm-min" type="number" placeholder="BPM min"
              value="{{ filters.bpm_min or '' }}" min="40" max="300" />
       <input id="bpm-max" type="number" placeholder="BPM max"
@@ -47,6 +54,7 @@
             <th>Filename</th>
             <th>BPM</th>
             <th>Key</th>
+            <th>Type</th>
             <th>Genre</th>
             <th>Energy</th>
             <th>Mood</th>
@@ -60,6 +68,7 @@
             <td class="filename">{{ s.filename }}</td>
             <td>{{ s.bpm or '—' }}</td>
             <td>{{ s.key or '—' }}</td>
+            <td><span class="chip instrument">{{ s.instrument or '—' }}</span></td>
             <td class="editable" data-field="genre">{{ s.genre or '' }}</td>
             <td class="editable" data-field="energy">{{ s.energy or '' }}</td>
             <td class="editable" data-field="mood">{{ s.mood or '' }}</td>
