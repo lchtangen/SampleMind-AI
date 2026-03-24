@@ -133,6 +133,49 @@ def api_import():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/import-files", methods=["POST"])
+def api_import_files():
+    """
+    Import a specific list of WAV file paths.
+    Used when the user drag-drops individual files (not a whole folder).
+
+    Expects: { "paths": ["/abs/path/to/a.wav", "/abs/path/to/b.wav", ...] }
+    """
+    data  = request.json or {}
+    paths = data.get("paths", [])
+
+    if not paths:
+        return jsonify({"error": "paths list is required"}), 400
+
+    import io, contextlib
+    from analyzer.audio_analysis import analyze_file
+    from data.database import init_db, save_sample
+
+    init_db()
+    imported, errors = 0, []
+
+    for file_path in paths:
+        if not file_path.lower().endswith(".wav"):
+            continue
+        if not os.path.isfile(file_path):
+            errors.append(f"Not found: {file_path}")
+            continue
+        try:
+            r = analyze_file(file_path)
+            save_sample(
+                filename=os.path.basename(file_path),
+                path=os.path.abspath(file_path),
+                bpm=r["bpm"], key=r["key"],
+                mood=r["mood"], energy=r["energy"],
+                instrument=r["instrument"],
+            )
+            imported += 1
+        except Exception as e:
+            errors.append(f"{os.path.basename(file_path)}: {e}")
+
+    return jsonify({"ok": True, "imported": imported, "errors": errors})
+
+
 @app.route("/api/status")
 def api_status():
     """Health check + library stats. Used by the JS to know the server is up."""

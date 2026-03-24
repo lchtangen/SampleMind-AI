@@ -227,6 +227,39 @@ button:hover { opacity: 0.8; }
 /* Style native audio player to match theme */
 audio { accent-color: var(--accent); filter: invert(0.9) hue-rotate(210deg); }
 
+/* ── Drag-and-drop overlay ── */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 17, 23, 0.88);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  pointer-events: none;
+}
+.drop-overlay.hidden { display: none; }
+.drop-overlay.active { pointer-events: all; }
+
+.drop-box {
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  padding: 48px 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: pulse-border 1.2s ease-in-out infinite;
+}
+@keyframes pulse-border {
+  0%, 100% { border-color: var(--accent);  opacity: 1; }
+  50%       { border-color: var(--accent2); opacity: 0.8; }
+}
+.drop-icon  { font-size: 52px; line-height: 1; }
+.drop-title { font-size: 22px; font-weight: 700; color: var(--text); }
+.drop-hint  { font-size: 13px; color: var(--muted); }
+
 /* ── Instrument type chips ── */
 .chip {
   display: inline-block;

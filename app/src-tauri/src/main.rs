@@ -28,6 +28,36 @@ fn main_py(root: &PathBuf) -> PathBuf {
     root.join("src").join("main.py")
 }
 
+/// Resolve how to spawn the backend server.
+///
+/// Two modes:
+///
+/// DEV  (debug build): spawn Python from the local venv + src/main.py
+///      This is what `pnpm tauri dev` uses — fast iteration, no bundling.
+///
+/// PROD (release build): use the bundled `samplemind-server` sidecar binary
+///      produced by PyInstaller. No Python installation required on the user's machine.
+///      Tauri puts sidecar binaries next to the app executable.
+///
+/// Returns (executable, optional_script_arg)
+fn resolve_server(app: &tauri::AppHandle) -> (PathBuf, Option<PathBuf>) {
+    #[cfg(debug_assertions)]
+    {
+        // Debug: use venv python + src/main.py
+        let root = repo_root();
+        (python_exe(&root), Some(main_py(&root)))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        // Release: use the PyInstaller sidecar bundled with the app
+        let binary = app
+            .path()
+            .resolve("binaries/samplemind-server", tauri::path::BaseDirectory::Resource)
+            .unwrap_or_else(|_| PathBuf::from("samplemind-server"));
+        (binary, None)
+    }
+}
+
 // ── Port polling ─────────────────────────────────────────────────────────────
 
 fn wait_for_port(port: u16, timeout_secs: u64) -> bool {
@@ -70,6 +100,18 @@ fn pick_folder(app: tauri::AppHandle) -> Option<String> {
         .file()
         .blocking_pick_folder()
         .map(|path| path.to_string())
+}
+
+// ── Tauri command: path info ─────────────────────────────────────────────────
+
+/// Check if a path is a directory.
+/// Called from JS after a drag-drop to decide whether to use /api/import
+/// (folder) or /api/import-files (list of WAV paths).
+///
+/// JS can't access the filesystem directly — it has to ask Rust.
+#[tauri::command]
+fn is_directory(path: String) -> bool {
+    std::path::Path::new(&path).is_dir()
 }
 
 // ── System tray ──────────────────────────────────────────────────────────────
@@ -128,7 +170,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())   // register the dialog plugin
-        .invoke_handler(tauri::generate_handler![pick_folder])  // register our command
+        .invoke_handler(tauri::generate_handler![pick_folder, is_directory])
         .setup(move |app| {
             // ── System tray ───────────────────────────────────────────────
             setup_tray(app)?;
@@ -138,21 +180,27 @@ fn main() {
                 .expect("window 'main' not found");
             window.show()?;
 
-            let win = window.clone();
+            let win        = window.clone();
+            let app_handle = app.handle().clone();
             std::thread::spawn(move || {
-                let root   = repo_root();
-                let python = python_exe(&root);
-                let script = main_py(&root);
+                let (exe, script) = resolve_server(&app_handle);
 
-                if !script.exists() {
-                    set_status(&win, "❌ main.py not found — check repo structure");
-                    return;
+                // In dev mode, verify main.py exists before spawning
+                if let Some(ref s) = script {
+                    if !s.exists() {
+                        set_status(&win, "❌ main.py not found — check repo structure");
+                        return;
+                    }
                 }
 
                 set_status(&win, "Starting Python server…");
+                eprintln!("[SampleMind] Spawning: {:?} serve --port {}", exe, FLASK_PORT);
 
-                let child = Command::new(&python)
-                    .arg(&script)
+                let mut cmd = Command::new(&exe);
+                if let Some(ref s) = script {
+                    cmd.arg(s);
+                }
+                let child = cmd
                     .arg("serve")
                     .arg("--port")
                     .arg(FLASK_PORT.to_string())

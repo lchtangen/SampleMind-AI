@@ -11,12 +11,12 @@
 // ── Tauri IPC bridge ─────────────────────────────────────────────────────────
 //
 // window.__TAURI__ is injected by Tauri when withGlobalTauri=true.
-// The ?? fallback means this code still works when opened in a plain browser
-// (useful for debugging the UI without running the full desktop app).
+// ?? fallbacks mean the UI still works in a plain browser for debugging.
 //
-// invoke('pick_folder') calls the Rust #[tauri::command] fn pick_folder()
-// which opens a native OS folder-picker dialog.
-const invoke = window.__TAURI__?.core?.invoke ?? (() => Promise.resolve(null));
+// invoke(cmd, args) — call a Rust #[tauri::command]
+// listen(event, cb) — subscribe to a Tauri event (like drag-drop)
+const invoke = window.__TAURI__?.core?.invoke  ?? (() => Promise.resolve(null));
+const listen  = window.__TAURI__?.event?.listen ?? (() => Promise.resolve(() => {}));
 
 // ── Grab elements we'll reuse ───────────────────────────────────────────────
 const searchInput      = document.getElementById("search-input");
@@ -280,4 +280,109 @@ document.getElementById("modal-save").addEventListener("click", async () => {
 // Close modal on backdrop click
 modal.addEventListener("click", e => {
   if (e.target === modal) modal.classList.add("hidden");
+});
+
+
+// ── Drag-and-drop import ──────────────────────────────────────────────────────
+//
+// Tauri gives us REAL filesystem paths when files are dragged onto the window.
+// This is fundamentally different from browser drag-drop which gives sandboxed
+// File objects — in Tauri, you can drop any file from anywhere on the system.
+//
+// Event flow:
+//   tauri://drag-drop { type: 'enter' }  → show overlay
+//   tauri://drag-drop { type: 'over'  }  → (ignore, just hover)
+//   tauri://drag-drop { type: 'drop'  }  → handle the paths
+//   tauri://drag-drop { type: 'leave' }  → hide overlay
+//
+// For each drop we:
+//   1. Ask Rust is_directory(path) for the first path
+//   2. If folder  → POST /api/import       { path }
+//   3. If files   → POST /api/import-files { paths }
+
+const dropOverlay = document.getElementById("drop-overlay");
+
+async function handleDrop(paths) {
+  if (!paths || paths.length === 0) return;
+
+  dropOverlay.classList.add("hidden");
+  dropOverlay.classList.remove("active");
+
+  // Determine if we got a folder or individual files
+  const firstIsDir = await invoke("is_directory", { path: paths[0] });
+
+  if (firstIsDir) {
+    // Folder drop — use the existing folder import endpoint
+    showToast(`⏳ Importing from ${paths[0]}…`);
+    try {
+      const res  = await fetch("/api/import", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ path: paths[0] }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`✅ Imported ${data.imported} sample(s)`, "success", 4000);
+        fetchSamples();
+        updateLibraryCount();
+      } else {
+        showToast(`❌ ${data.error}`, "error", 5000);
+      }
+    } catch (err) {
+      showToast(`❌ ${err}`, "error", 5000);
+    }
+  } else {
+    // Individual file drop — filter to WAV files only
+    const wavPaths = paths.filter(p => p.toLowerCase().endsWith(".wav"));
+
+    if (wavPaths.length === 0) {
+      showToast("⚠️ No WAV files in the dropped items", "error", 3000);
+      return;
+    }
+
+    showToast(`⏳ Importing ${wavPaths.length} WAV file(s)…`);
+    try {
+      const res  = await fetch("/api/import-files", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ paths: wavPaths }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const errs = data.errors?.length ? ` (${data.errors.length} failed)` : "";
+        showToast(`✅ Imported ${data.imported} sample(s)${errs}`, "success", 4000);
+        fetchSamples();
+        updateLibraryCount();
+      } else {
+        showToast(`❌ ${data.error}`, "error", 5000);
+      }
+    } catch (err) {
+      showToast(`❌ ${err}`, "error", 5000);
+    }
+  }
+}
+
+// Subscribe to Tauri's drag-drop event stream.
+// listen() returns an unlisten function — call it to unsubscribe.
+listen("tauri://drag-drop", event => {
+  const { type, paths } = event.payload;
+
+  switch (type) {
+    case "enter":
+      // Files are hovering over the window — show the overlay
+      dropOverlay.classList.remove("hidden");
+      dropOverlay.classList.add("active");
+      break;
+
+    case "leave":
+      // Files left the window without dropping
+      dropOverlay.classList.add("hidden");
+      dropOverlay.classList.remove("active");
+      break;
+
+    case "drop":
+      // Files were released — handle them
+      handleDrop(paths);
+      break;
+  }
 });

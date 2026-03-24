@@ -8,3 +8,12 @@ venv/
 
 # OS junk
 .DS_Store
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# Tauri release bundles (too large for git)
+app/src-tauri/target/
+app/src-tauri/binaries/samplemind-server-x86_64-unknown-linux-gnu
