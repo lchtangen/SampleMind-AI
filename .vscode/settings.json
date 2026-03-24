@@ -1,41 +1,76 @@
 {
-
-    "python.analysis.extraPaths": ["./src"],
-
-    "python.defaultInterpreterPath": "venv/bin/python",
-
-    "editor.renderWhitespace": "none"
-
-    // Enable linting and set linter
-    "python.linting.enabled": true,
-    "python.linting.flake8Enabled": true,
-
-    // Format on save with black
+  // Python project setup
+  "python.defaultInterpreterPath": "venv/bin/python",
+  "python.analysis.extraPaths": [
+    "./src"
+  ],
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.inlayHints.variableTypes": true,
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  // Linting, formatting, and import hygiene
+  "flake8.args": [
+    "--max-line-length=100"
+  ],
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit",
+    "source.fixAll": "explicit"
+  },
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.formatOnSave": true,
-    "python.formatting.provider": "black",
-
-    // Enable type checking
-    "python.analysis.typeCheckingMode": "basic",
-
-    // Show line numbers
-    "editor.lineNumbers": "on",
-
-    // Set tab size
-    "editor.tabSize": 4,
-    // Auto-complete and IntelliSense
-    "editor.quickSuggestions": {
-      "other": true,
-      "comments": false,
-      "strings": true
+    "editor.tabSize": 4
+  },
+  // Test runner defaults
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "."
+  ],
+  // Editor quality-of-life
+  "editor.renderWhitespace": "selection",
+  "editor.lineNumbers": "on",
+  "editor.tabSize": 4,
+  "editor.quickSuggestions": {
+    "other": true,
+    "comments": false,
+    "strings": true
   },
   "editor.suggestSelection": "first",
   "editor.suggest.snippetsPreventQuickSuggestions": false,
-
-  // Enable code folding
   "editor.folding": true,
-
-  // Enable breadcrumbs for easy navigation
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
   "breadcrumbs.enabled": true,
-
-
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  // Search and explorer performance for generated/build artifacts
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/node_modules": true,
+    "app/src-tauri/target": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/node_modules": true,
+    "app/src-tauri/target": true
+  },
+  "files.watcherExclude": {
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "**/node_modules/**": true,
+    "app/src-tauri/target/**": true
+  },
+  // Source control helpers
+  "git.autofetch": true,
+  "git.confirmSync": false
 }

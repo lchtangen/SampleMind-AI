@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 venv/
+.venv/
 
 # VS Code
 .vscode/
@@ -14,6 +15,7 @@ build/
 dist/
 *.spec.bak
 
-# Tauri release bundles (too large for git)
+# Tauri release bundles and compiled sidecar binaries (too large for git)
 app/src-tauri/target/
-app/src-tauri/binaries/samplemind-server-x86_64-unknown-linux-gnu
+app/src-tauri/binaries/samplemind-server
+app/src-tauri/binaries/samplemind-server-*
