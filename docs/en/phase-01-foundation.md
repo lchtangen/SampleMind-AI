@@ -495,3 +495,256 @@ $ pwd
 /home/yourusername/dev/projects/SampleMind-AI  # ← Correct
 # /mnt/c/Users/...  ← Wrong, move the project
 ```
+
+---
+
+## 12. Expanded Ruff Configuration
+
+Ruff covers lint, format, and import sorting in one fast tool. Expand the rule set as the
+codebase matures to catch more classes of bugs:
+
+```toml
+# filename: pyproject.toml  (replace the [tool.ruff.lint] section)
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (undefined names, unused imports)
+    "I",    # isort (import order)
+    "UP",   # pyupgrade (use modern Python syntax)
+    "ANN",  # flake8-annotations (type hints on public functions)
+    "PTH",  # flake8-use-pathlib (ban os.path, use pathlib.Path)
+    "TCH",  # flake8-type-checking (move type-only imports to TYPE_CHECKING)
+    "RUF",  # Ruff-native rules (fast, opinionated)
+    "SIM",  # flake8-simplify (simplifiable conditions)
+    "TRY",  # tryceratops (exception handling best practices)
+]
+ignore = [
+    "ANN101",  # Missing type annotation for 'self' — not needed
+    "ANN102",  # Missing type annotation for 'cls' — not needed
+    "TRY003",  # Allow long exception messages in raise
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN"]   # Don't enforce type hints in test files
+"src/samplemind/cli/*" = ["ANN"]  # Typer handles types via annotations already
+
+[tool.ruff.lint.isort]
+known-first-party = ["samplemind"]
+force-sort-within-sections = true
+```
+
+Run ruff in watch mode during development:
+
+```bash
+# Watch mode — re-checks on every file save (great with tmux split)
+$ uv run ruff check src/ --watch
+
+# Auto-fix all safe issues
+$ uv run ruff check src/ --fix
+
+# Format the whole project
+$ uv run ruff format src/ tests/
+```
+
+---
+
+## 13. Parallel Tests with pytest-xdist
+
+For large test suites (Phase 2+ with many WAV fixture tests), run tests in parallel across
+CPU cores with `pytest-xdist`:
+
+```bash
+# Add to dev dependencies
+$ uv add --dev pytest-xdist
+```
+
+```toml
+# filename: pyproject.toml — update pytest config
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short -n auto"   # -n auto = use all available CPU cores
+markers = [
+    "slow: expensive tests (select with -m slow)",
+    "integration: tests that require a real database or filesystem",
+]
+```
+
+```bash
+# Run tests on all cores (fastest)
+$ uv run pytest -n auto
+
+# Run on exactly 4 cores
+$ uv run pytest -n 4
+
+# Skip slow tests on all cores
+$ uv run pytest -n auto -m "not slow"
+
+# Run only integration tests
+$ uv run pytest -m integration
+```
+
+> **Note:** Audio analysis tests with librosa are CPU-intensive. `-n auto` on an 8-core
+> machine reduces test time from ~60s to ~10s for a typical test suite.
+
+---
+
+## 14. Pre-commit Hooks
+
+Pre-commit hooks run ruff automatically before every `git commit`, preventing lint errors
+from ever entering the repository:
+
+```bash
+# Install pre-commit
+$ uv add --dev pre-commit
+
+# Install the git hooks
+$ uv run pre-commit install
+```
+
+```yaml
+# filename: .pre-commit-config.yaml
+
+repos:
+  # Ruff — lint and format in one pass
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Standard hooks — trailing whitespace, file endings, TOML/YAML validity
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-toml
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]  # Block accidental audio file commits
+```
+
+```bash
+# Run all hooks manually (without committing)
+$ uv run pre-commit run --all-files
+
+# Update hook versions
+$ uv run pre-commit autoupdate
+```
+
+---
+
+## 15. .editorconfig — Consistent Formatting Across Editors
+
+`.editorconfig` enforces consistent indentation and line endings for all editors (VS Code,
+Nvim, JetBrains, etc.) without requiring plugins:
+
+```ini
+# filename: .editorconfig
+# editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.py]
+indent_style = space
+indent_size = 4
+
+[*.{ts,svelte,js,json,toml,yaml,yml}]
+indent_style = space
+indent_size = 2
+
+[*.{rs}]
+indent_style = space
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false   # Markdown uses trailing spaces for line breaks
+
+[Makefile]
+indent_style = tab   # Makefiles require tabs
+```
+
+---
+
+## 16. Advanced WSL2 Performance
+
+### I/O Tuning — Stop WSL2 from Consuming All RAM
+
+By default WSL2 can consume up to 50% of system RAM for its VM. For a dev machine running
+FL Studio + VS Code + WSL2 simultaneously, cap it:
+
+```ini
+# filename: C:\Users\YourName\.wslconfig  (create this file on Windows)
+
+[wsl2]
+memory=6GB          # Max RAM for WSL2 VM
+processors=4        # Max CPU cores
+swap=2GB            # Swap file size
+localhostForwarding=true  # Forward WSL2 ports to Windows (for Flask, etc.)
+```
+
+### Symlink the Project into Windows for VS Code
+
+If you need to open the project from Windows Explorer occasionally:
+
+```powershell
+# PowerShell (run as Administrator)
+# Create a symlink from Windows to the WSL2 path
+New-Item -ItemType SymbolicLink `
+  -Path "C:\Projects\SampleMind" `
+  -Target "\\wsl$\Ubuntu\home\ubuntu\dev\projects\SampleMind-AI"
+```
+
+### Fast Git Operations — Enable fsmonitor
+
+```bash
+# Enable Git's built-in filesystem monitor (speeds up git status/add on large repos)
+$ git config core.fsmonitor true
+$ git config core.untrackedCache true
+
+# Confirm it's running
+$ git fsmonitor--daemon status
+```
+
+### Port Forwarding — Access Flask/Tauri from Windows Browser
+
+WSL2 ports are automatically forwarded to Windows. No extra config needed:
+
+```bash
+# Start Flask in WSL2:
+$ uv run samplemind serve --port 5000
+
+# Open in Windows Chrome/Edge (automatic forwarding):
+# http://localhost:5000
+```
+
+### Measuring Python Performance Baseline
+
+Before optimizing, measure. Run this to get a baseline for analysis speed:
+
+```bash
+# Measure import time of the samplemind package
+$ uv run python -X importtime -c "import samplemind" 2>&1 | tail -5
+
+# Profile a single file analysis (shows where time is spent)
+$ uv run python -m cProfile -s cumulative -c "
+from samplemind.analyzer.audio_analysis import analyze_file
+analyze_file('/tmp/test.wav')
+" | head -30
+
+# Benchmark batch analysis with hyperfine
+$ sudo apt install hyperfine  # WSL2 Ubuntu
+$ hyperfine --warmup 2 \
+  'uv run samplemind import /tmp/samples/ --json' \
+  --export-markdown bench-results.md
+```

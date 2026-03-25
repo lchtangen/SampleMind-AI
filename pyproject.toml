@@ -1,0 +1,137 @@
+[project]
+name = "samplemind"
+version = "0.1.0"
+description = "AI-powered sample library and DAW companion for FL Studio"
+authors = [{ name = "lchtangen" }]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.13"
+
+dependencies = [
+    # ── Audio analysis ────────────────────────────────────────────────────────
+    "librosa==0.11.0",
+    "numpy>=2.2",
+    "scipy>=1.15",
+    "soundfile>=0.13",
+    "soxr>=0.5",
+
+    # ── Machine learning (classifier + future ML models) ─────────────────────
+    "scikit-learn>=1.6",
+    "numba>=0.61",
+
+    # ── Web server ────────────────────────────────────────────────────────────
+    "flask>=3.1",
+    "flask-cors>=5.0",
+    "jinja2>=3.1",
+
+    # ── Database ORM (Phase 3 target: SQLModel + Alembic) ────────────────────
+    "sqlmodel>=0.0.21",
+    "alembic>=1.14",
+
+    # ── CLI ───────────────────────────────────────────────────────────────────
+    "typer>=0.12",
+    "rich>=13",
+
+    # ── Utilities ─────────────────────────────────────────────────────────────
+    "requests>=2.32",
+    "platformdirs>=4.3",
+
+    # ── Structured logging (observability) ───────────────────────────────────
+    "structlog>=24.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8",
+    "pytest-cov>=6",
+    "pytest-xdist>=3.6",       # parallel test execution (-n auto)
+    "pytest-benchmark>=4.0",   # performance regression tests
+
+    # Lint / format
+    "ruff>=0.9",
+    "pre-commit>=4",
+
+    # Distribution
+    "pyinstaller>=6.10",       # sidecar binary build
+]
+
+# FL Studio MIDI integration (optional — requires system rtmidi)
+midi = [
+    "python-rtmidi>=1.5",
+]
+
+[project.scripts]
+samplemind = "samplemind.cli.app:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/samplemind"]
+
+# ── pytest ─────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "slow: expensive audio analysis tests (skip with: pytest -m 'not slow')",
+    "integration: requires real filesystem or database",
+    "macos: requires macOS — AppleScript, AU plugin, IAC MIDI driver",
+    "juce: requires JUCE plugin built and installed",
+    "benchmark: performance regression tests (run with: pytest -m benchmark)",
+]
+
+# ── Coverage ───────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["samplemind"]
+omit = ["*/tests/*", "*/__pycache__/*", "*/conftest.py"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+# ── Ruff linting + formatting ──────────────────────────────────────────────────
+[tool.ruff]
+src = ["src"]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (undefined names, unused imports)
+    "I",    # isort (import order)
+    "UP",   # pyupgrade (use modern Python 3.13+ syntax)
+    "B",    # flake8-bugbear (likely bugs and design issues)
+    "C4",   # flake8-comprehensions (list/dict/set comprehension improvements)
+    "SIM",  # flake8-simplify (simplifiable conditions and expressions)
+    "RUF",  # Ruff-native rules (fast, well-tested)
+    "PTH",  # flake8-use-pathlib (prefer pathlib over os.path)
+]
+ignore = [
+    "E501",    # line too long — handled by ruff format
+    "SIM108",  # ternary operator — sometimes less readable than if/else
+    "RUF012",  # mutable class var annotation — SQLModel uses ClassVar pattern
+    "B008",    # do not perform function call in default arg — Typer uses this
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "PTH"]    # assert and os.path are fine in tests
+"src/main.py" = ["PTH", "E"]  # legacy file — do not enforce new rules
+
+[tool.ruff.lint.isort]
+known-first-party = ["samplemind"]
+force-sort-within-sections = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
