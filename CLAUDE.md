@@ -470,8 +470,13 @@ This table is the **canonical reference** — it mirrors `.auggie/routing.yaml` 
 | `src/samplemind/sidecar/**/*.py` | `fl-studio-agent` |
 | `src/samplemind/integrations/**/*.py` | `phase-07-fl-studio` |
 | `src/samplemind/packs/**/*.py` | `phase-09-sample-packs` |
+| `src/samplemind/search/**/*.py` | `phase-11-semantic-search` |
+| `src/samplemind/agent/**/*.py` | `phase-12-ai-curation` |
+| `src/samplemind/sync/**/*.py` | `phase-13-cloud-sync` |
+| `src/samplemind/analytics/**/*.py` | `phase-14-analytics` |
+| `src/samplemind/marketplace/**/*.py` | `phase-15-marketplace` |
+| `src/samplemind/generation/**/*.py` | `phase-16-ai-generation` |
 | `src/samplemind/utils/model_loader.py` | `ml-agent` |
-| `src/samplemind/search/**/*.py` | `ml-agent` |
 | `scripts/**/*.sh` | `devops-agent` |
 | `.github/workflows/*.yml` | `devops-agent` |
 | `.github/workflows/release.yml` | `phase-10-production` |
@@ -497,6 +502,12 @@ This table is the **canonical reference** — it mirrors `.auggie/routing.yaml` 
 | `import typer`, `typer.Typer()`, `@app.command()` | `phase-04-cli` |
 | `juce::`, `#include <juce_audio_processors` | `phase-08-vst-plugin` |
 | `from transformers import`, `AutoModelForCausalLM`, `load_in_8bit=True` | `ml-agent` |
+| `import faiss`, `CLAP`, `embed_audio`, `embed_text`, `VectorIndex` | `phase-11-semantic-search` |
+| `import litellm`, `analyze_library`, `curate(`, `playlist_by_energy` | `phase-12-ai-curation` |
+| `import boto3`, `s3.head_object`, `SyncSettings`, `push_metadata` | `phase-13-cloud-sync` |
+| `import plotly`, `bpm_histogram_chart`, `get_key_heatmap`, `get_summary` | `phase-14-analytics` |
+| `stripe.checkout`, `PackListing`, `validate_pack_for_marketplace` | `phase-15-marketplace` |
+| `from audiocraft`, `StableAudioPipeline`, `GenerationRequest`, `MODEL_REGISTRY` | `phase-16-ai-generation` |
 | `osascript`, `IAC Driver`, `win32com.client`, `nc -U /tmp/samplemind.sock` | `fl-studio-agent` |
 | `uv sync`, `astral-sh/setup-uv`, `runs-on: ubuntu`, `#!/usr/bin/env bash` | `devops-agent` |
 | `xcrun notarytool`, `codesign`, `APPLE_SIGNING_IDENTITY`, `universal-apple-darwin` | `phase-10-production` |
@@ -512,7 +523,13 @@ This table is the **canonical reference** — it mirrors `.auggie/routing.yaml` 
 | Flask, web UI, HTMX, SSE, login page, audio streaming | `web-agent` |
 | JWT, RBAC, permission, role, bcrypt, OAuth2, secure this endpoint | `security-agent` |
 | setup, CI/CD, GitHub Actions, WSL2, environment, install | `devops-agent` |
-| ML model, transformers, HuggingFace, embedding, semantic search | `ml-agent` |
+| ML model, transformers, HuggingFace, embedding | `ml-agent` |
+| CLAP, FAISS, vector index, cosine similarity, semantic search | `phase-11-semantic-search` |
+| curate, LiteLLM, energy arc, gap analysis, smart playlist | `phase-12-ai-curation` |
+| cloud sync, R2, Supabase, multi-device, sync push/pull | `phase-13-cloud-sync` |
+| analytics, Plotly, BPM histogram, key heatmap, growth timeline | `phase-14-analytics` |
+| marketplace, Stripe, pack publishing, signed URL, CDN | `phase-15-marketplace` |
+| generate sample, AudioCraft, Stable Audio, text-to-audio | `phase-16-ai-generation` |
 | document, write a doc, update README, phase doc, ARCHITECTURE | `doc-writer` |
 | FL Studio, JUCE, VST3, AU, sidecar, MIDI, AppleScript | `fl-studio-agent` |
 | Phase 2 | `phase-02-audio-testing` |
@@ -524,6 +541,12 @@ This table is the **canonical reference** — it mirrors `.auggie/routing.yaml` 
 | Phase 8 | `phase-08-vst-plugin` |
 | Phase 9 | `phase-09-sample-packs` |
 | Phase 10 | `phase-10-production` |
+| Phase 11 | `phase-11-semantic-search` |
+| Phase 12 | `phase-12-ai-curation` |
+| Phase 13 | `phase-13-cloud-sync` |
+| Phase 14 | `phase-14-analytics` |
+| Phase 15 | `phase-15-marketplace` |
+| Phase 16 | `phase-16-ai-generation` |
 
 ---
 

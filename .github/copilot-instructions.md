@@ -6,8 +6,13 @@ JUCE 8 VST3/AU plugin, SQLite database. All surfaces share the same DB.
 
 Primary production target: macOS 12+ Universal Binary (arm64 + x86_64)
 Development environment: Windows WSL2 Ubuntu 24.04 (Linux ext4 — NOT /mnt/c/)
-Documentation: docs/en/phase-01-foundation.md through docs/en/phase-10-production.md
-Architecture: ARCHITECTURE.md | Roadmap: ROADMAP.md
+Documentation: docs/en/phase-01-foundation.md through docs/en/phase-16-ai-sample-generation.md
+Architecture: ARCHITECTURE.md | Agent routing: AGENTS.md (root)
+
+**AI Tool Config:**
+- Augment Code (VS Code): `.augment/rules.md`, `.augment/memories/`, `.augment/skills/*/SKILL.md`
+- Claude Code: `CLAUDE.md` (root), `.claude/agents/*.md`, `.claude/commands/*.md`
+- GitHub Copilot: `.github/copilot-instructions.md` (this file), `.github/agents/*.md`
 
 ---
 
@@ -554,3 +559,103 @@ uv run alembic upgrade head
 cd app && pnpm tauri dev
 cd app && pnpm tauri build --target universal-apple-darwin
 ```
+
+---
+
+## Phase 11–16 Quick Reference
+
+### Phase 11 — Semantic Search
+```bash
+uv run samplemind semantic "dark trap kick" --top 20
+uv run samplemind semantic --audio ref.wav --top 10 --json
+uv run samplemind index rebuild --workers 4
+```
+- CLAP 2023 model: 512-dim embeddings, L2-normalized
+- FAISS IndexFlatIP: cosine similarity search < 5ms for 100k samples
+- Feature flag: `semantic_search` (enable via `~/.samplemind/flags.json`)
+- Key files: `src/samplemind/search/embeddings.py`, `vector_index.py`
+
+### Phase 12 — AI Curation
+```bash
+uv run samplemind curate analyze               # no LLM needed
+uv run samplemind curate "create dark set"     # dry-run (default)
+uv run samplemind curate "organize" --execute  # apply actions
+```
+- Providers: `anthropic/claude-sonnet-4-5`, `openai/gpt-4o`, `ollama/llama3.2`
+- Feature flag: `ai_curation`
+- All LLM calls mocked in tests — no API keys in CI
+- Key files: `src/samplemind/agent/curator.py`, `library_analyzer.py`
+
+### Phase 13 — Cloud Sync
+```bash
+uv run samplemind sync push       # upload metadata + new files to R2
+uv run samplemind sync pull       # merge from other devices
+uv run samplemind sync status     # show config
+```
+- File storage: Cloudflare R2 (S3-compatible), SHA-256 deduplication
+- Metadata: Supabase PostgreSQL, last-write-wins conflicts
+- Feature flag: `cloud_sync`
+- Key files: `src/samplemind/sync/file_sync.py`, `metadata_sync.py`
+
+### Phase 14 — Analytics Dashboard
+```bash
+uv run samplemind analytics               # terminal summary
+uv run samplemind analytics --json        # all chart data
+# Flask: http://localhost:5000/analytics  # interactive Plotly dashboard
+```
+- Charts: BPM histogram, key heatmap (12×2), growth timeline, instrument×energy
+- All aggregations: pure SQL, < 20ms for 500k samples
+- Dark theme: `plot_bgcolor: "#1e1e2e"`
+- Key files: `src/samplemind/analytics/engine.py`, `charts.py`
+
+### Phase 15 — Marketplace
+```bash
+uv run samplemind marketplace search "dark trap"
+uv run samplemind marketplace install dark-trap-vol-1
+uv run samplemind marketplace publish my-pack.smpack --price 9.99
+```
+- Payments: Stripe Connect (80% creator / 20% platform)
+- Validation: energy must be `low`/`mid`/`high` — never `medium`
+- Downloads: signed R2 URLs (24h expiry)
+- Feature flag: `pack_marketplace`
+
+### Phase 16 — AI Sample Generation
+```bash
+uv run samplemind generate "dark trap kick" --bpm 140 --import
+uv run samplemind generate "ambient pad A minor" --model stable-audio
+uv run samplemind generate "test" --model mock --json   # no downloads
+```
+- Models: `audiocraft/musicgen-small/medium/large`, `stable-audio`, `mock` (tests)
+- BPM loops: `duration = 4 × 4 × (60/BPM)` seconds
+- Quality flags: `bpm_match`, `key_match`, `instrument_match`, `clipping`
+- Apple Silicon: `PYTORCH_ENABLE_MPS_FALLBACK=1` for ~5x speedup
+- Key files: `src/samplemind/generation/pipeline.py`, `backends/`
+
+---
+
+## Agent Routing Table
+
+For feature-specific changes, use the appropriate `.github/agents/*.md` file:
+
+| If task involves… | Use agent |
+|-------------------|-----------|
+| pyproject.toml, uv, structlog, pydantic-settings | `phase-01-foundation.md` |
+| librosa, classifiers, WAV fixtures, LUFS, stereo | `phase-02-audio-testing.md` |
+| SQLModel, Alembic, FTS5, DB backup | `phase-03-database.md` |
+| Typer, Rich, CLI commands, watch mode, export | `phase-04-cli.md` |
+| Flask, FastAPI, HTMX, Socket.IO, WaveSurfer | `phase-05-web.md` |
+| Tauri, Rust, Svelte 5 Runes, system tray | `phase-06-desktop.md` |
+| FL Studio, AppleScript, MIDI clock, IAC Driver | `phase-07-fl-studio.md` |
+| JUCE, VST3, AU, sidecar socket, preset manager | `phase-08-vst-plugin.md` |
+| .smpack format, pack registry, licensing | `phase-09-sample-packs.md` |
+| CI/CD, signing, feature flags, crash reporter | `phase-10-production.md` |
+| CLAP, FAISS, vector index, cosine similarity | `phase-11-semantic-search.md` |
+| LiteLLM, library curation, smart playlists | `phase-12-ai-curation.md` |
+| Cloudflare R2, Supabase, multi-device sync | `phase-13-cloud-sync.md` |
+| Plotly, analytics, BPM histogram, key heatmap | `phase-14-analytics.md` |
+| Stripe, marketplace, pack publishing | `phase-15-marketplace.md` |
+| AudioCraft, Stable Audio, text-to-audio | `phase-16-ai-generation.md` |
+| audio analysis, fingerprinting, batch import | `audio-analyzer.md` |
+| Tauri, Rust, Svelte, app/, build, CI | `tauri-builder.md` |
+| docs/en/, docs/no/, ARCHITECTURE.md | `doc-writer.md` |
+| pytest, cargo test, CI, coverage, conftest | `test-runner.md` |
