@@ -555,3 +555,155 @@ $ ls src/samplemind/models.py
 SampleCreate has no genre/tags fields — upsert() never changes these.
 Make sure you use SampleUpdate for manual tagging, not SampleCreate.
 ```
+
+---
+
+## 8. Database Performance & Reliability (2026)
+
+### WAL Mode
+
+Enable Write-Ahead Logging for better concurrency (reads don't block writes):
+
+```python
+# src/samplemind/data/database.py — add to connection setup
+import sqlite3
+
+def get_connection(db_path: str) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    # Enable WAL mode — survives app restart (persistent setting)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA cache_size = -64000")  # 64MB cache
+    conn.execute("PRAGMA synchronous = NORMAL")  # safe + fast
+    conn.execute("PRAGMA temp_store = MEMORY")
+    conn.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
+    return conn
+```
+
+WAL mode benefits:
+- Concurrent reads during writes (desktop app + CLI can run simultaneously)
+- Faster writes (no fsync on every transaction)
+- Automatic checkpointing back to main database file
+
+### FTS5 Full-Text Search
+
+Add a virtual table for sub-50ms text search across filename, tags, and classifications:
+
+```sql
+-- Create FTS5 virtual table (run once in migration):
+CREATE VIRTUAL TABLE IF NOT EXISTS samples_fts USING fts5(
+    filename,
+    tags,
+    instrument,
+    mood,
+    content='samples',
+    content_rowid='id'
+);
+
+-- Populate from existing samples:
+INSERT INTO samples_fts(rowid, filename, tags, instrument, mood)
+SELECT id, filename, tags, instrument, mood FROM samples;
+
+-- Keep in sync with triggers:
+CREATE TRIGGER samples_ai AFTER INSERT ON samples BEGIN
+    INSERT INTO samples_fts(rowid, filename, tags, instrument, mood)
+    VALUES (new.id, new.filename, new.tags, new.instrument, new.mood);
+END;
+
+CREATE TRIGGER samples_ad AFTER DELETE ON samples BEGIN
+    INSERT INTO samples_fts(samples_fts, rowid, filename, tags, instrument, mood)
+    VALUES ('delete', old.id, old.filename, old.tags, old.instrument, old.mood);
+END;
+```
+
+FTS5 search query:
+```python
+def search_fts(conn: sqlite3.Connection, query: str) -> list[dict]:
+    cur = conn.execute(
+        """SELECT s.* FROM samples s
+           JOIN samples_fts fts ON s.id = fts.rowid
+           WHERE samples_fts MATCH ?
+           ORDER BY rank""",
+        (query,)
+    )
+    return [dict(row) for row in cur.fetchall()]
+```
+
+### `backup_db()` Function
+
+Safe hot backup using SQLite's built-in backup API (works while the database is in use):
+
+```python
+import sqlite3
+from pathlib import Path
+from datetime import datetime
+
+
+def backup_db(src_path: Path, dest_path: Path | None = None) -> Path:
+    """Create a hot backup of the SQLite database.
+
+    Uses SQLite's backup API — safe while the database is open and in use.
+    Creates dest_path if not provided (timestamped backup in same directory).
+    """
+    if dest_path is None:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest_path = src_path.parent / f"{src_path.stem}_backup_{ts}.db"
+
+    src = sqlite3.connect(str(src_path))
+    dst = sqlite3.connect(str(dest_path))
+    try:
+        src.backup(dst, pages=100)  # copy 100 pages at a time (non-blocking)
+    finally:
+        src.close()
+        dst.close()
+
+    return dest_path
+```
+
+CLI command:
+```bash
+uv run samplemind backup                   # backup to timestamped file
+uv run samplemind backup --dest ~/backup/library.db  # backup to specific path
+```
+
+### Alembic CI Step
+
+Add to `.github/workflows/ci.yml` to verify migrations apply cleanly on every push:
+
+```yaml
+- name: Run database migrations
+  run: |
+    uv run alembic upgrade head
+    echo "Migrations applied successfully"
+
+- name: Verify migration is current
+  run: |
+    # Fail if there are unapplied migrations
+    uv run alembic current
+    uv run alembic check
+```
+
+This catches:
+- Broken migration scripts (syntax errors, import failures)
+- Missing `alembic.ini` or `env.py` configuration
+- Conflicts between migration versions
+
+### PRAGMA Performance Settings Reference
+
+```sql
+-- Full set of recommended PRAGMAs for SampleMind:
+PRAGMA journal_mode=WAL;          -- concurrent reads, faster writes
+PRAGMA cache_size = -64000;       -- 64MB page cache (negative = kilobytes)
+PRAGMA synchronous = NORMAL;      -- safe + fast (not FULL which is slow)
+PRAGMA temp_store = MEMORY;       -- temp tables/indexes in RAM
+PRAGMA mmap_size = 268435456;     -- 256MB memory-mapped I/O
+PRAGMA optimize;                  -- run query planner analysis (on close)
+```
+
+Run `PRAGMA optimize` on database close (not open) for best effect:
+```python
+def close_connection(conn: sqlite3.Connection) -> None:
+    conn.execute("PRAGMA optimize")
+    conn.close()
+```
+

@@ -734,3 +734,187 @@ Use --no-verify to skip the check, but be aware the file may be corrupted.
 The pack was created with a newer version of SampleMind.
 Upgrade with: uv tool upgrade samplemind
 ```
+
+---
+
+## 7. Sample Pack Distribution (2026)
+
+### SHA-256 Integrity Verification
+
+Every `.smpack` file includes per-sample SHA-256 hashes in its manifest, verified on import:
+
+```python
+# src/samplemind/packs/importer.py
+import hashlib
+import json
+import zipfile
+from pathlib import Path
+
+
+def verify_pack(pack_path: Path) -> tuple[bool, list[str]]:
+    """Verify SHA-256 integrity of all samples in a .smpack file.
+
+    Returns (is_valid, list_of_errors).
+    """
+    errors = []
+    with zipfile.ZipFile(pack_path) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        for entry in manifest.get("samples", []):
+            filename = entry["filename"]
+            expected = entry.get("sha256")
+            if not expected:
+                errors.append(f"{filename}: missing sha256 in manifest")
+                continue
+            try:
+                data = zf.read(filename)
+                actual = hashlib.sha256(data).hexdigest()
+                if actual != expected:
+                    errors.append(f"{filename}: checksum mismatch (expected {expected[:8]}..., got {actual[:8]}...)")
+            except KeyError:
+                errors.append(f"{filename}: file missing from archive")
+
+    return len(errors) == 0, errors
+
+
+def import_pack(pack_path: Path, dest_dir: Path) -> dict:
+    """Import a .smpack file after verifying integrity."""
+    is_valid, errors = verify_pack(pack_path)
+    if not is_valid:
+        raise ValueError(f"Pack integrity check failed:\n" + "\n".join(errors))
+
+    # Extract and import samples...
+    with zipfile.ZipFile(pack_path) as zf:
+        manifest = json.loads(zf.read("manifest.json"))
+        extracted = []
+        for entry in manifest["samples"]:
+            out_path = dest_dir / entry["filename"]
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(zf.read(entry["filename"]))
+            extracted.append(out_path)
+    return {"extracted": len(extracted), "pack": manifest["name"]}
+```
+
+### Pack Versioning
+
+`manifest.json` uses semantic versioning:
+
+```json
+{
+  "name": "Dark Trap Essentials",
+  "slug": "dark-trap-essentials",
+  "version": "1.2.0",
+  "min_samplemind": "0.3.0",
+  "created_at": "2026-03-25T00:00:00Z",
+  "author": "SampleMind",
+  "description": "85 dark trap samples: kicks, 808s, snares, hihats",
+  "tags": ["trap", "dark", "808"],
+  "sample_count": 85,
+  "samples": [
+    {
+      "filename": "kicks/kick_808_128bpm.wav",
+      "sha256": "a1b2c3d4...",
+      "bpm": 128.0,
+      "key": "C min",
+      "instrument": "kick",
+      "mood": "dark",
+      "energy": "high",
+      "duration": 0.45
+    }
+  ]
+}
+```
+
+Validate `min_samplemind` version on import:
+```python
+from importlib.metadata import version
+from packaging.version import Version
+
+def check_compatibility(manifest: dict) -> None:
+    min_ver = manifest.get("min_samplemind", "0.0.0")
+    current = version("samplemind")
+    if Version(current) < Version(min_ver):
+        raise RuntimeError(
+            f"This pack requires SampleMind >= {min_ver} (you have {current}). "
+            f"Run: uv add samplemind>={min_ver}"
+        )
+```
+
+### Release Script
+
+```bash
+#!/bin/bash
+# scripts/release-pack.sh
+# Usage: ./scripts/release-pack.sh dark-trap-essentials 1.2.0
+set -euo pipefail
+
+PACK_SLUG="${1:?Usage: $0 <slug> <version>}"
+VERSION="${2:?Usage: $0 <slug> <version>}"
+PACK_FILE="dist/${PACK_SLUG}-${VERSION}.smpack"
+
+echo "Building pack: ${PACK_SLUG} v${VERSION}..."
+uv run samplemind pack create "${PACK_SLUG}" --version "${VERSION}" --output "${PACK_FILE}"
+
+echo "Verifying pack integrity..."
+uv run python -c "
+from samplemind.packs.importer import verify_pack
+from pathlib import Path
+ok, errors = verify_pack(Path('${PACK_FILE}'))
+if not ok:
+    print('ERRORS:', errors)
+    exit(1)
+print('Integrity OK')
+"
+
+echo "Computing SHA-256 of pack file..."
+PACK_SHA=$(sha256sum "${PACK_FILE}" | cut -d' ' -f1)
+echo "${PACK_SHA}  ${PACK_SLUG}-${VERSION}.smpack" > "${PACK_FILE}.sha256"
+
+echo "Creating GitHub Release..."
+gh release create "pack-${PACK_SLUG}-${VERSION}" \
+  "${PACK_FILE}" \
+  "${PACK_FILE}.sha256" \
+  --title "${PACK_SLUG} v${VERSION}" \
+  --notes "### ${PACK_SLUG} v${VERSION}
+
+Sample pack release.
+
+**SHA-256:** \`${PACK_SHA}\`
+
+Install with:
+\`\`\`bash
+uv run samplemind pack import ${PACK_SLUG}-${VERSION}.smpack
+\`\`\`"
+
+echo "Released: pack-${PACK_SLUG}-${VERSION}"
+```
+
+### Pack Registry (Future)
+
+A JSON index for the in-app pack browser (Phase 10+):
+
+```json
+{
+  "registry_version": "1",
+  "updated_at": "2026-03-25T00:00:00Z",
+  "packs": [
+    {
+      "slug": "dark-trap-essentials",
+      "name": "Dark Trap Essentials",
+      "version": "1.2.0",
+      "description": "85 dark trap samples",
+      "tags": ["trap", "dark"],
+      "sample_count": 85,
+      "download_url": "https://github.com/lchtangen/SampleMind-AI/releases/download/pack-dark-trap-essentials-1.2.0/dark-trap-essentials-1.2.0.smpack",
+      "sha256_url": "...sha256"
+    }
+  ]
+}
+```
+
+CLI command to browse registry:
+```bash
+uv run samplemind pack list          # list available packs from registry
+uv run samplemind pack search trap   # search registry
+uv run samplemind pack install dark-trap-essentials  # download + import
+```
+

@@ -598,3 +598,183 @@ Store files use the .svelte.ts suffix (not .ts).
 from flask_cors import CORS
 CORS(app, origins=["tauri://localhost", "http://localhost:5173"])
 ```
+
+---
+
+## 8. Desktop App Enhancements (2026)
+
+### SearchBar Component (Svelte 5 Runes)
+
+```svelte
+<!-- app/src/lib/components/SearchBar.svelte -->
+<script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import type { Sample } from "$lib/types";
+
+  interface Props {
+    onResults?: (samples: Sample[]) => void;
+  }
+
+  let { onResults }: Props = $props();
+
+  let query = $state('');
+  let loading = $state(false);
+  let debounceTimer: ReturnType<typeof setTimeout>;
+
+  $effect(() => {
+    clearTimeout(debounceTimer);
+    if (!query.trim()) {
+      onResults?.([]);
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      loading = true;
+      try {
+        const results = await invoke<Sample[]>('search_samples', { query });
+        onResults?.(results);
+      } finally {
+        loading = false;
+      }
+    }, 200);
+  });
+</script>
+
+<div class="search-bar">
+  <input
+    bind:value={query}
+    placeholder="Search samples... (⌘K)"
+    class="search-input"
+    type="search"
+  />
+  {#if loading}
+    <span class="spinner" aria-label="Searching..." />
+  {/if}
+</div>
+```
+
+### Native Notifications (tauri-plugin-notification)
+
+Add to `app/src-tauri/Cargo.toml`:
+```toml
+[dependencies]
+tauri-plugin-notification = "2"
+```
+
+Register in `main.rs`:
+```rust
+.plugin(tauri_plugin_notification::init())
+```
+
+Send notification from a Tauri command:
+```rust
+use tauri_plugin_notification::NotificationExt;
+
+#[tauri::command]
+pub async fn import_folder(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let result = run_import(&path).map_err(|e| e.to_string())?;
+    let count = result["imported"].as_u64().unwrap_or(0);
+
+    app.notification()
+        .builder()
+        .title("SampleMind")
+        .body(&format!("Import complete — {} samples added", count))
+        .show()
+        .map_err(|e| e.to_string())?;
+
+    Ok(result.to_string())
+}
+```
+
+Add to `app/src-tauri/capabilities/default.json`:
+```json
+"tauri:allow-notification",
+"notification:default"
+```
+
+### Deep Link Support (tauri-plugin-deep-link)
+
+Register URL scheme `samplemind://` so other apps can trigger imports:
+
+Add to `app/src-tauri/Cargo.toml`:
+```toml
+tauri-plugin-deep-link = "2"
+```
+
+Register scheme in `tauri.conf.json`:
+```json
+"bundle": {
+  "macOS": { "urlSchemes": ["samplemind"] },
+  "windows": { "urlSchemes": ["samplemind"] }
+}
+```
+
+Handle in `main.rs`:
+```rust
+.plugin(tauri_plugin_deep_link::init())
+.setup(|app| {
+    app.deep_link().on_open_url(|event| {
+        for url in event.urls() {
+            // samplemind://import?path=/Users/.../Samples
+            if url.host_str() == Some("import") {
+                if let Some(path) = url.query_pairs().find(|(k, _)| k == "path") {
+                    // trigger import for path.1
+                    println!("Deep link import: {}", path.1);
+                }
+            }
+        }
+    });
+    Ok(())
+})
+```
+
+### Auto-Updater (tauri-plugin-updater)
+
+Add to `app/src-tauri/Cargo.toml`:
+```toml
+tauri-plugin-updater = "2"
+```
+
+Configure in `tauri.conf.json`:
+```json
+"bundle": {
+  "updater": {
+    "active": true,
+    "dialog": true,
+    "pubkey": "<BASE64_ENCODED_PUBLIC_KEY>",
+    "endpoints": [
+      "https://api.github.com/repos/lchtangen/SampleMind-AI/releases/latest"
+    ]
+  }
+}
+```
+
+Auto-check on startup in `main.rs`:
+```rust
+.plugin(tauri_plugin_updater::Builder::new().build())
+.setup(|app| {
+    let handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        match handle.updater().check().await {
+            Ok(update) if update.is_update_available() => {
+                // Show native update dialog (if dialog: true in conf)
+                if let Err(e) = update.download_and_install(
+                    |chunk, total| { /* progress */ },
+                    || { /* restart prompt */ },
+                ).await {
+                    eprintln!("Update failed: {e}");
+                }
+            }
+            _ => {}
+        }
+    });
+    Ok(())
+})
+```
+
+Generate signing keys for the updater:
+```bash
+# Generate key pair (run once, save private key securely):
+pnpm tauri signer generate -w ~/.tauri/samplemind.key
+# Output: public key (add to tauri.conf.json) + private key (use in GitHub Actions)
+```
+

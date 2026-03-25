@@ -629,3 +629,186 @@ Install the Visual C++ Redistributable:
 https://aka.ms/vs/17/release/vc_redist.x64.exe
 The Tauri MSI installer should bundle this automatically.
 ```
+
+---
+
+## 8. Production Hardening (2026)
+
+### Sparkle Auto-Updater (macOS)
+
+Tauri's built-in updater uses Sparkle on macOS. Setup:
+
+```bash
+# Generate signing key pair (run once, save private key to GitHub Secrets):
+pnpm tauri signer generate -w ~/.tauri/samplemind-updater.key
+# Outputs: private key (TAURI_SIGNING_PRIVATE_KEY) + public key (add to tauri.conf.json)
+```
+
+GitHub Actions release step to sign the update:
+```yaml
+- name: Sign Tauri update
+  env:
+    TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}
+  run: |
+    cd app && pnpm tauri build --target universal-apple-darwin
+```
+
+The updater reads from GitHub Releases JSON. The release must include a
+`latest.json` file (generated automatically by Tauri's GitHub Actions plugin):
+```json
+{
+  "version": "0.2.0",
+  "notes": "Bug fixes and performance improvements",
+  "pub_date": "2026-03-25T00:00:00Z",
+  "platforms": {
+    "darwin-universal": {
+      "url": "https://github.com/.../SampleMind_0.2.0_universal.dmg",
+      "signature": "<TAURI_SIGNATURE>"
+    }
+  }
+}
+```
+
+### Azure Trusted Signing (Windows)
+
+Replace EV certificate requirement with Azure Trusted Signing (works with GitHub Actions):
+
+```yaml
+# .github/workflows/release.yml — Windows signing step
+- name: Sign Windows installer
+  uses: azure/trusted-signing-action@v0.4.0
+  with:
+    azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+    endpoint: https://eus.codesigning.azure.net/
+    trusted-signing-account-name: samplemind-signing
+    certificate-profile-name: SampleMind
+    files-folder: app/src-tauri/target/release/bundle/msi/
+    files-folder-filter: msi,exe
+    file-digest: SHA256
+    timestamp-rfc3161: http://timestamp.acs.microsoft.com
+    timestamp-digest: SHA256
+```
+
+Required GitHub Secrets:
+- `AZURE_TENANT_ID`
+- `AZURE_CLIENT_ID`
+- `AZURE_CLIENT_SECRET`
+
+### Sentry Crash Reporting (Opt-In)
+
+```bash
+uv add sentry-sdk
+```
+
+```python
+# src/samplemind/__init__.py
+import os
+
+def _init_sentry() -> None:
+    """Initialize Sentry if DSN is provided. Never auto-enabled."""
+    dsn = os.getenv("SAMPLEMIND_SENTRY_DSN")
+    if not dsn:
+        return
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=dsn,
+        traces_sample_rate=0.1,        # 10% of transactions
+        profiles_sample_rate=0.05,     # 5% profiling
+        release=__version__,
+        environment=os.getenv("SAMPLEMIND_ENV", "production"),
+        before_send=_strip_pii,        # remove file paths from events
+    )
+
+def _strip_pii(event: dict, hint: dict) -> dict:
+    """Remove absolute file paths from Sentry events (privacy)."""
+    import re
+    if "exception" in event:
+        for exc in event["exception"].get("values", []):
+            for frame in exc.get("stacktrace", {}).get("frames", []):
+                if "abs_path" in frame:
+                    frame["abs_path"] = re.sub(r"/Users/[^/]+", "/Users/<user>", frame["abs_path"])
+    return event
+
+_init_sentry()
+```
+
+Users opt in by setting the env var (or via a UI toggle in Phase 10):
+```bash
+export SAMPLEMIND_SENTRY_DSN="https://...@sentry.io/..."
+```
+
+### Production Release Checklist
+
+Before every release, verify:
+
+- [ ] **Version bumped** in `pyproject.toml`, `app/src-tauri/tauri.conf.json`, `app/package.json`
+- [ ] **macOS Developer ID** code signing configured in GitHub Actions
+- [ ] **Apple notarization** via `xcrun notarytool submit` (or CI action)
+- [ ] **Windows Azure Trusted Signing** configured in release.yml
+- [ ] **Universal Binary** verified: `lipo -info SampleMind.app/Contents/MacOS/SampleMind` shows `x86_64 arm64`
+- [ ] **Sidecar SHA-256** checksum included in release notes
+- [ ] **AU plugin auval** passes: `auval -v aufx SmPl SmAI`
+- [ ] **VST3 validated** in FL Studio 21 (macOS and Windows)
+- [ ] **Auto-updater signature** generated and embedded in latest.json
+- [ ] **Changelog** written in GitHub Release
+- [ ] **uv.lock committed** (deterministic builds for users)
+- [ ] `uv run pytest tests/ -n auto` passes on CI
+- [ ] `cargo clippy -- -D warnings` passes on CI
+- [ ] `uv run ruff check src/` passes on CI
+
+### Full Release Workflow (GitHub Actions)
+
+```yaml
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run pytest tests/ -n auto
+      - run: cd app && pnpm install
+      - name: Build Universal Binary
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: cd app && pnpm tauri build --target universal-apple-darwin
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: cd app && pnpm install
+      - run: cd app && pnpm tauri build
+      - name: Sign with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0.4.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: samplemind-signing
+          certificate-profile-name: SampleMind
+          files-folder: app/src-tauri/target/release/bundle/msi/
+```
+

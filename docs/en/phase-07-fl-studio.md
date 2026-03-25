@@ -554,3 +554,184 @@ $ python -c "import rtmidi; m = rtmidi.MidiOut(); print(m.get_ports())"
 FL Studio scans folders at startup. Press F5 in File Browser
 to force a re-scan of the folders.
 ```
+
+---
+
+## 8. FL Studio 21 & Windows Integration (2026)
+
+### FL Studio 21 Path Detection
+
+FL Studio 21 uses a different directory suffix. Update path detection to handle both:
+
+```python
+# src/samplemind/integrations/paths.py
+import platform
+from pathlib import Path
+
+
+def get_fl_studio_samples_dir() -> Path | None:
+    """Detect the FL Studio Samples directory for the current OS and version."""
+    system = platform.system()
+
+    if system == "Darwin":  # macOS
+        base = Path.home() / "Documents" / "Image-Line"
+        # Try FL Studio 21 first, fall back to FL Studio 20
+        for version_dir in ["FL Studio 21", "FL Studio"]:
+            candidate = base / version_dir / "Data" / "Patches" / "Samples" / "SampleMind"
+            if (base / version_dir).exists():
+                candidate.mkdir(parents=True, exist_ok=True)
+                return candidate
+
+    elif system == "Windows":
+        base = Path.home() / "Documents" / "Image-Line"
+        for version_dir in ["FL Studio 21", "FL Studio"]:
+            candidate = base / version_dir / "Data" / "Patches" / "Samples" / "SampleMind"
+            if (base / version_dir).exists():
+                candidate.mkdir(parents=True, exist_ok=True)
+                return candidate
+
+    return None
+```
+
+### macOS Paths Reference (FL Studio 20 and 21)
+
+```
+# FL Studio 20:
+~/Documents/Image-Line/FL Studio/Data/Patches/Samples/SampleMind/
+~/Library/Application Support/Image-Line/FL Studio/
+
+# FL Studio 21:
+~/Documents/Image-Line/FL Studio 21/Data/Patches/Samples/SampleMind/
+~/Library/Application Support/Image-Line/FL Studio 21/
+
+# Plugin locations (same for both versions):
+~/Library/Audio/Plug-Ins/Components/SampleMind.component  ← AU
+~/Library/Audio/Plug-Ins/VST3/SampleMind.vst3            ← VST3
+```
+
+### Windows Paths Reference (FL Studio 20 and 21)
+
+```
+# FL Studio 20:
+C:\Users\<name>\Documents\Image-Line\FL Studio\Data\Patches\Samples\SampleMind\
+%APPDATA%\Image-Line\FL Studio\
+
+# FL Studio 21:
+C:\Users\<name>\Documents\Image-Line\FL Studio 21\Data\Patches\Samples\SampleMind\
+%APPDATA%\Image-Line\FL Studio 21\
+
+# Plugin locations:
+C:\Program Files\Common Files\VST3\SampleMind.vst3
+```
+
+### Windows COM Automation
+
+Alternative to AppleScript for Windows — use `win32com` (from `pywin32`):
+
+```bash
+uv add pywin32  # Windows only
+```
+
+```python
+# src/samplemind/integrations/windows_com.py
+import platform
+from typing import TYPE_CHECKING
+
+
+def focus_fl_studio_windows() -> None:
+    """Bring FL Studio window to foreground on Windows using COM automation."""
+    if platform.system() != "Windows":
+        raise RuntimeError("Windows COM automation is only available on Windows")
+
+    import win32com.client
+    shell = win32com.client.Dispatch("WScript.Shell")
+    result = shell.AppActivate("FL Studio")
+    if not result:
+        raise RuntimeError("FL Studio is not running or could not be activated")
+
+
+def open_fl_studio_sample_browser_windows() -> None:
+    """Send F8 keystroke to FL Studio to open Sample Browser."""
+    if platform.system() != "Windows":
+        raise RuntimeError("Windows only")
+
+    import win32com.client
+    import win32con
+    shell = win32com.client.Dispatch("WScript.Shell")
+    shell.AppActivate("FL Studio")
+    shell.SendKeys("{F8}")
+```
+
+Guard Windows-only code in tests:
+```python
+import pytest, platform
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="Windows only")
+def test_windows_com_focus():
+    # ...
+```
+
+### MIDI Clock Sync via IAC Driver
+
+Send BPM and key information via MIDI CC messages to FL Studio:
+
+```python
+# src/samplemind/integrations/midi.py
+import rtmidi
+from typing import Optional
+
+
+def get_iac_port_index(name_hint: str = "SampleMind") -> Optional[int]:
+    """Find the IAC Driver port index by name."""
+    midiout = rtmidi.MidiOut()
+    ports = midiout.get_ports()
+    for i, port in enumerate(ports):
+        if name_hint.lower() in port.lower() or "iac" in port.lower():
+            return i
+    return None
+
+
+def send_sample_metadata_midi(bpm: float, key_index: int, port: int = 0) -> None:
+    """Send sample BPM and key as MIDI CC messages.
+
+    CC 14 = BPM tens digit (e.g. 128 → CC14=12)
+    CC 15 = BPM units digit (e.g. 128 → CC15=8)
+    CC 16 = Key index (0=C, 1=C#, 2=D, ..., 11=B)
+
+    FL Studio can map these CCs to tempo and other parameters.
+    """
+    midiout = rtmidi.MidiOut()
+    available = midiout.get_ports()
+    if not available:
+        raise RuntimeError("No MIDI output ports available. Enable IAC Driver in Audio MIDI Setup.")
+
+    midiout.open_port(port)
+    channel = 0xB0  # CC on channel 1
+    try:
+        bpm_int = int(round(bpm))
+        midiout.send_message([channel, 14, min(127, bpm_int // 10)])   # tens
+        midiout.send_message([channel, 15, min(127, bpm_int % 10)])    # units
+        midiout.send_message([channel, 16, min(127, key_index % 12)])  # key
+    finally:
+        midiout.close_port()
+```
+
+### IAC Driver Setup Guide (macOS)
+
+1. Open **Audio MIDI Setup** (`/Applications/Utilities/Audio MIDI Setup.app`)
+2. Go to **Window → Show MIDI Studio** (or press ⌘2)
+3. Double-click **IAC Driver**
+4. Check **"Device is online"**
+5. Under **Ports**, click **+** and name it **"SampleMind"**
+6. Click **Apply**
+7. In FL Studio: `Options → MIDI Settings → Input` — enable the IAC SampleMind port
+
+Test the connection:
+```bash
+uv run python -c "
+import rtmidi
+m = rtmidi.MidiOut()
+print('Available ports:', m.get_ports())
+"
+```
+

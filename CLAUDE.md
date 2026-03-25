@@ -1,4 +1,8 @@
-# SampleMind-AI — Claude Code Project Guide (2026)
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## SampleMind-AI — Claude Code Project Guide (2026)
 
 > AI-powered audio sample library manager for FL Studio (macOS primary, Windows secondary).
 > Development: Windows WSL2. Production: macOS 12+ Universal Binary.
@@ -87,6 +91,9 @@ and JUCE VST3/AU plugin — all reading the same database.
 
 # Open VS Code from WSL terminal:
 code .
+
+# Speed up git on WSL2:
+git config core.fsmonitor true
 ```
 
 ### macOS (production target — test before release)
@@ -103,16 +110,17 @@ cd app && pnpm tauri build --target universal-apple-darwin
 ### Common Commands
 
 ```bash
-# --- Python (current, uses venv) ---
+# --- Python (legacy — still needed for Tauri dev mode) ---
 source .venv/bin/activate
 python src/main.py list
 python src/web/app.py              # Flask at http://localhost:5000
 
-# --- Python (target, uses uv — Phase 1+) ---
+# --- Python (uv — use for all new work) ---
 uv sync                            # install deps
 uv run samplemind list
 uv run samplemind serve
 uv run pytest tests/ -v
+uv run pytest tests/test_audio_analysis.py::test_bpm -v  # single test
 uv run ruff check src/
 uv run ruff format src/
 
@@ -167,6 +175,23 @@ from samplemind.analyzer.audio_analysis import analyze_file
 - Avoid `sys.path.insert` hacks in new code.
 - Exception: If touching legacy files that already rely on legacy import patterns, do not rewrite unrelated import architecture unless requested.
 
+**Audio analysis canonical pattern:**
+
+```python
+y, sr = librosa.load(path, sr=22050, mono=True)   # always explicit sr
+rms = float(np.mean(librosa.feature.rms(y=y)))
+centroid = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
+zcr = float(np.mean(librosa.feature.zero_crossing_rate(y=y)))
+```
+
+**Audio fingerprinting** (SHA-256 of first 64 KB — for deduplication):
+
+```python
+def fingerprint_file(path: Path) -> str:
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read(65536)).hexdigest()
+```
+
 **CLI and IPC Contract:**
 
 - Use Typer for new CLI features in src/samplemind/cli.
@@ -211,6 +236,7 @@ let result: serde_json::Value = serde_json::from_slice(&output.stdout)?;
 ```bash
 # Python tests:
 uv run pytest tests/ -v
+uv run pytest tests/test_audio_analysis.py::test_bpm -v  # single test
 uv run pytest tests/ -m "not slow"   # skip slow tests
 uv run pytest tests/ -n auto          # parallel with pytest-xdist
 uv run pytest --cov=samplemind --cov-report=term-missing  # coverage
@@ -218,6 +244,16 @@ uv run pytest --cov=samplemind --cov-report=term-missing  # coverage
 # Rust tests:
 cargo test --manifest-path app/src-tauri/Cargo.toml
 ```
+
+**Test markers:**
+
+```python
+@pytest.mark.slow    # tests > 1s (audio analysis) — skipped in fast CI runs
+@pytest.mark.macos   # requires macOS (AppleScript, AU validation)
+@pytest.mark.juce    # requires JUCE plugin to be built
+```
+
+**Coverage targets:** analyzer 80%+, classifier 90%+, CLI 70%+.
 
 **WAV fixtures** — never commit real audio files:
 
@@ -366,9 +402,20 @@ This repo includes specialized phase agents under .claude/agents.
 
 Guideline:
 
+- Current DB file: `~/.samplemind/library.db`
+  (platformdirs target: `~/Library/Application Support/SampleMind/samplemind.db` on macOS).
 - For incremental features in current runtime paths, keep sqlite3 compatibility.
 - For explicit Phase 3 migration tasks, prefer SQLModel + Alembic and migrate end-to-end.
 - New database features (WAL mode, FTS5, backup): implement in `src/samplemind/data/database.py`
+
+**PRAGMA settings** (apply on connection open for performance):
+
+```sql
+PRAGMA journal_mode=WAL;
+PRAGMA cache_size = -64000;
+PRAGMA synchronous = NORMAL;
+PRAGMA temp_store = MEMORY;
+```
 
 ---
 

@@ -567,3 +567,190 @@ app.config["PERMANENT_SESSION_LIFETIME"] = 3600
 Check that the /audio/<id> route returns the correct MIME type (audio/wav)
 and that the file path in the database still exists.
 ```
+
+---
+
+## 8. Web UI Enhancements (2026)
+
+### Flask-CORS
+
+Add `flask-cors` to support Tauri WebView cross-origin requests:
+
+```bash
+uv add flask-cors
+```
+
+```python
+# src/samplemind/web/app.py
+from flask import Flask
+from flask_cors import CORS
+
+
+def create_app() -> Flask:
+    app = Flask(__name__)
+    # Allow Tauri WebView origin (tauri://localhost and http://localhost:1420)
+    CORS(app, origins=["tauri://localhost", "http://localhost:1420"])
+    # ... register blueprints
+    return app
+```
+
+### Dark Mode
+
+Add CSS custom properties and `prefers-color-scheme` support:
+
+```css
+/* src/samplemind/web/static/css/app.css */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --accent: #0d6efd;
+  --border: #dee2e6;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --accent: #e94560;
+  --border: #2d3748;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    /* ... */
+  }
+}
+```
+
+Toggle button in template:
+```html
+<!-- templates/base.html -->
+<button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+  🌙
+</button>
+<script>
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  localStorage.setItem('theme', document.documentElement.getAttribute('data-theme'));
+}
+// Restore saved preference:
+const saved = localStorage.getItem('theme');
+if (saved) document.documentElement.setAttribute('data-theme', saved);
+</script>
+```
+
+### Keyboard Shortcuts
+
+Add global keyboard shortcuts for power users:
+
+```javascript
+// src/samplemind/web/static/js/shortcuts.js
+document.addEventListener('keydown', (e) => {
+  // Don't trigger when typing in an input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  switch (e.key) {
+    case 'j':  // Navigate down
+      selectNextSample();
+      break;
+    case 'k':  // Navigate up
+      selectPrevSample();
+      break;
+    case ' ':  // Play/pause selected sample
+      e.preventDefault();
+      togglePlayback();
+      break;
+    case 't':  // Open tag editor
+      openTagEditor(getSelectedSampleId());
+      break;
+    case 'e':  // Export to FL Studio
+      exportToFLStudio(getSelectedSampleId());
+      break;
+    case '/':  // Focus search box
+      e.preventDefault();
+      document.getElementById('search-input').focus();
+      break;
+    case 'Escape':  // Clear selection / close modal
+      clearSelection();
+      break;
+  }
+});
+```
+
+### Bulk Tag Endpoint
+
+```python
+# src/samplemind/web/blueprints/library.py
+from flask import request, jsonify
+
+@bp.post("/api/samples/bulk-tag")
+def bulk_tag():
+    """Bulk add/remove/replace tags on multiple samples.
+
+    Body: {"ids": [1, 2, 3], "tags": ["dark", "trap"], "mode": "add"|"remove"|"replace"}
+    """
+    data = request.get_json()
+    ids: list[int] = data.get("ids", [])
+    tags: list[str] = data.get("tags", [])
+    mode: str = data.get("mode", "add")  # add | remove | replace
+
+    if not ids or not tags:
+        return jsonify({"error": "ids and tags are required"}), 400
+    if mode not in ("add", "remove", "replace"):
+        return jsonify({"error": "mode must be add, remove, or replace"}), 400
+
+    updated = bulk_update_tags(ids, tags, mode)
+    return jsonify({"updated": updated, "ids": ids})
+```
+
+Example HTMX call from the UI:
+```html
+<button hx-post="/api/samples/bulk-tag"
+        hx-vals='{"ids": [1,2,3], "tags": ["dark"], "mode": "add"}'
+        hx-target="#tag-status"
+        hx-swap="innerHTML">
+  Add "dark" tag to selected
+</button>
+```
+
+### SSE Progress Stream for Bulk Operations
+
+```python
+# src/samplemind/web/blueprints/import_bp.py
+import json
+from flask import Response, stream_with_context
+
+@bp.get("/api/import/progress")
+def import_progress():
+    """Server-Sent Events stream for import progress.
+
+    Client connects once; server pushes progress events until complete.
+    """
+    def generate():
+        for i, result in enumerate(run_import_with_progress()):
+            data = json.dumps({"completed": i + 1, "total": result["total"],
+                               "file": result["file"], "status": result["status"]})
+            yield f"data: {data}\n\n"
+        yield "data: {\"done\": true}\n\n"
+
+    return Response(stream_with_context(generate()),
+                    mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+```
+
+Client-side (HTMX + JS):
+```javascript
+const source = new EventSource('/api/import/progress');
+source.onmessage = (e) => {
+  const data = JSON.parse(e.data);
+  if (data.done) { source.close(); return; }
+  updateProgressBar(data.completed, data.total);
+};
+```
+

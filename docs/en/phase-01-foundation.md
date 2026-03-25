@@ -748,3 +748,124 @@ $ hyperfine --warmup 2 \
   'uv run samplemind import /tmp/samples/ --json' \
   --export-markdown bench-results.md
 ```
+
+---
+
+## 8. Dev Quality Tools (2026 Additions)
+
+### pre-commit Setup
+
+Install pre-commit and add ruff hooks to catch issues before every commit:
+
+```bash
+uv add --dev pre-commit
+uv run pre-commit install
+```
+
+Create `.pre-commit-config.yaml` at the repo root:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+```
+
+Run hooks manually on all files:
+```bash
+uv run pre-commit run --all-files
+```
+
+### .editorconfig
+
+Create `.editorconfig` at the repo root to enforce consistent formatting across editors:
+
+```ini
+# .editorconfig
+root = true
+
+[*]
+indent_style = space
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.py]
+indent_size = 4
+
+[*.{js,ts,svelte,json,yaml,yml,toml,md}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+[*.rs]
+indent_size = 4
+```
+
+VS Code respects `.editorconfig` automatically with the EditorConfig extension.
+
+### WSL2 Performance Tuning
+
+Git is significantly faster on WSL2 with these settings enabled:
+
+```bash
+# Enable filesystem monitor and untracked cache:
+git config core.fsmonitor true
+git config core.untrackedCache true
+
+# Verify:
+git config --get core.fsmonitor    # should print: true
+git config --get core.untrackedCache  # should print: true
+```
+
+**Critical:** Always develop on the Linux ext4 filesystem, not NTFS:
+
+```bash
+# Fast (Linux filesystem):
+/home/ubuntu/dev/projects/SampleMind-AI/  ✓
+
+# Slow (NTFS via NTFS-3g driver, 5-10x slower for git/python):
+/mnt/c/Users/YourName/SampleMind-AI/     ✗
+```
+
+Optional `/etc/wsl.conf` tuning for heavy workloads:
+
+```ini
+# /etc/wsl.conf (requires WSL restart: wsl --shutdown)
+[wsl2]
+memory=8GB          # limit WSL2 memory (default: 50% of host RAM)
+processors=4        # limit CPU cores if needed
+localhostForwarding=true
+```
+
+### VS Code WSL Extension Tips
+
+When using VS Code with the Remote – WSL extension, install these extensions
+**inside the WSL context** (not on Windows):
+
+```bash
+# From WSL terminal:
+code --install-extension ms-python.python
+code --install-extension ms-python.vscode-pylance
+code --install-extension charliermarsh.ruff
+code --install-extension tamasfe.even-better-toml
+code --install-extension svelte.svelte-vscode
+code --install-extension rust-lang.rust-analyzer
+```
+
+Verify extensions are running in WSL (not Windows) in the Extensions panel:
+look for the "WSL: Ubuntu" badge next to each extension.
+

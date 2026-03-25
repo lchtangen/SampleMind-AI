@@ -561,3 +561,132 @@ The Rust backend only reads stdout.
 stdout = Console(force_terminal=False)
 # This prevents ANSI escape codes in JSON output
 ```
+
+---
+
+## 7. Extended CLI Commands (2026)
+
+### `stats` Command
+
+```python
+# src/samplemind/cli/commands/stats.py
+import json
+import typer
+from rich.table import Table
+from rich import print as rprint
+from samplemind.data.database import get_stats
+
+
+def stats_command(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show library statistics."""
+    data = get_stats()
+
+    if json_output:
+        import sys
+        print(json.dumps(data), file=sys.stdout)
+        return
+
+    # Rich table output
+    table = Table(title="Library Statistics")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="white")
+
+    table.add_row("Total samples", str(data["total"]))
+    table.add_row("Kicks", str(data["by_instrument"].get("kick", 0)))
+    table.add_row("Snares", str(data["by_instrument"].get("snare", 0)))
+    table.add_row("Hihats", str(data["by_instrument"].get("hihat", 0)))
+    table.add_row("Bass", str(data["by_instrument"].get("bass", 0)))
+    table.add_row("Pads", str(data["by_instrument"].get("pad", 0)))
+    table.add_row("Dark mood", str(data["by_mood"].get("dark", 0)))
+    table.add_row("Bright mood", str(data["by_mood"].get("bright", 0)))
+    table.add_row("High energy", str(data["by_energy"].get("high", 0)))
+    table.add_row("Avg duration", f"{data['avg_duration']:.2f}s")
+
+    rprint(table)
+```
+
+Example output:
+```
+┌─────────────────────────────────────────┐
+│            Library Statistics           │
+├──────────────────┬──────────────────────┤
+│ Total samples    │ 1,247                │
+│ Kicks            │ 312                  │
+│ Snares           │ 198                  │
+│ Hihats           │ 287                  │
+│ Bass             │ 156                  │
+│ Pads             │ 294                  │
+│ Dark mood        │ 423                  │
+│ Bright mood      │ 323                  │
+│ High energy      │ 324                  │
+│ Avg duration     │ 1.24s                │
+└──────────────────┴──────────────────────┘
+```
+
+### `duplicates` Command
+
+```python
+# src/samplemind/cli/commands/duplicates.py
+import typer
+from rich.console import Console
+from samplemind.analyzer.fingerprint import find_duplicates
+from samplemind.data.database import get_all_paths
+
+console = Console()
+
+
+def duplicates_command(
+    remove: bool = typer.Option(False, "--remove", help="Delete duplicate files (keep first)"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Find duplicate samples by audio fingerprint (SHA-256 of first 64KB)."""
+    all_paths = get_all_paths()
+    dupes = find_duplicates(all_paths)
+
+    if not dupes:
+        console.print("[green]No duplicates found.[/green]")
+        return
+
+    total_dupes = sum(len(ps) - 1 for ps in dupes.values())
+    console.print(f"[yellow]Found {len(dupes)} duplicate groups ({total_dupes} redundant files)[/yellow]")
+
+    for fp, paths in dupes.items():
+        console.print(f"\n[dim]{fp[:16]}...[/dim]")
+        for i, path in enumerate(paths):
+            marker = "[green]KEEP[/green]" if i == 0 else "[red]DUPE[/red]"
+            console.print(f"  {marker} {path}")
+            if remove and i > 0:
+                path.unlink()
+                console.print(f"    [dim]deleted[/dim]")
+```
+
+### `--workers` Flag on Import and Analyze
+
+Add to import and analyze commands:
+
+```python
+# In import command:
+workers: int = typer.Option(
+    0, "--workers", "-w",
+    help="Parallel analysis workers (0 = auto-detect CPU count)",
+)
+
+# In analyze command:
+workers: int = typer.Option(
+    0, "--workers",
+    help="Parallel workers for batch mode (0 = auto)",
+)
+```
+
+Usage:
+```bash
+uv run samplemind import ~/Music/Samples/ --workers 8
+uv run samplemind analyze ~/Music/Samples/ --workers 0  # auto
+uv run samplemind import ~/Music/ --workers 1           # single-threaded (debug)
+```
+
+The `--workers 0` default uses `os.cpu_count()` automatically — recommended for most machines.
+Use `--workers 1` for debugging analysis issues (easier to read stack traces).
+

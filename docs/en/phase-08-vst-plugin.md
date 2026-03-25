@@ -446,3 +446,201 @@ Check that Python 3.13 is installed and available at the path
 findPythonExecutable() returns. Add debug logging in C++:
 DBG("Python path: " + pythonExe.getFullPathName());
 ```
+
+---
+
+## 8. JUCE Plugin Advanced (2026)
+
+### CMakePresets.json
+
+Add `CMakePresets.json` to `plugin/` for reproducible builds across platforms:
+
+```json
+{
+  "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 22, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "macos-release",
+      "displayName": "macOS Release (Xcode)",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build-macos-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "JUCE_BUILD_EXTRAS": "OFF",
+        "JUCE_BUILD_EXAMPLES": "OFF"
+      }
+    },
+    {
+      "name": "macos-debug",
+      "displayName": "macOS Debug (Xcode)",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build-macos-debug",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug"}
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux Debug (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-linux",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug"}
+    }
+  ],
+  "buildPresets": [
+    {"name": "macos-release", "configurePreset": "macos-release", "configuration": "Release"},
+    {"name": "macos-debug",   "configurePreset": "macos-debug",   "configuration": "Debug"},
+    {"name": "linux-debug",   "configurePreset": "linux-debug"}
+  ]
+}
+```
+
+Build with presets:
+```bash
+cd plugin
+cmake --preset macos-release
+cmake --build --preset macos-release
+```
+
+### Custom LookAndFeel (Dark Theme)
+
+```cpp
+// plugin/src/SampleMindLookAndFeel.h
+#pragma once
+#include <juce_gui_basics/juce_gui_basics.h>
+
+class SampleMindLookAndFeel : public juce::LookAndFeel_V4 {
+public:
+    SampleMindLookAndFeel() {
+        // Background colors
+        setColour(juce::ResizableWindow::backgroundColourId,  juce::Colour(0xFF1A1A2E));
+        setColour(juce::DocumentWindow::backgroundColourId,   juce::Colour(0xFF1A1A2E));
+
+        // Button colors
+        setColour(juce::TextButton::buttonColourId,           juce::Colour(0xFF16213E));
+        setColour(juce::TextButton::buttonOnColourId,         juce::Colour(0xFFE94560));
+        setColour(juce::TextButton::textColourOnId,           juce::Colours::white);
+        setColour(juce::TextButton::textColourOffId,          juce::Colour(0xFFCBD5E0));
+
+        // TextEditor colors
+        setColour(juce::TextEditor::backgroundColourId,       juce::Colour(0xFF0F3460));
+        setColour(juce::TextEditor::textColourId,             juce::Colours::white);
+        setColour(juce::TextEditor::highlightColourId,        juce::Colour(0xFFE94560));
+        setColour(juce::TextEditor::outlineColourId,          juce::Colour(0xFF2D3748));
+
+        // ListBox colors
+        setColour(juce::ListBox::backgroundColourId,          juce::Colour(0xFF16213E));
+        setColour(juce::ListBox::textColourId,                juce::Colour(0xFFE2E8F0));
+    }
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SampleMindLookAndFeel)
+};
+```
+
+Apply in `PluginEditor`:
+```cpp
+// PluginEditor.cpp constructor
+SampleMindAudioProcessorEditor::SampleMindAudioProcessorEditor(SampleMindAudioProcessor& p)
+    : AudioProcessorEditor(&p), processorRef(p)
+{
+    lookAndFeel = std::make_unique<SampleMindLookAndFeel>();
+    setLookAndFeel(lookAndFeel.get());
+    setSize(600, 400);
+}
+
+SampleMindAudioProcessorEditor::~SampleMindAudioProcessorEditor() {
+    setLookAndFeel(nullptr);  // Must reset before destruction
+}
+```
+
+### Sidecar Lifecycle Management
+
+```cpp
+// plugin/src/PluginProcessor.cpp
+
+void SampleMindAudioProcessor::prepareToPlay(double /*sampleRate*/, int /*blockSize*/) {
+    if (!pythonSidecar.isRunning()) {
+        juce::File sidecarPath = getSidecarPath();
+        if (!sidecarPath.exists()) {
+            DBG("SampleMind: sidecar binary not found at " + sidecarPath.getFullPathName());
+            return;
+        }
+        if (!pythonSidecar.launch(sidecarPath)) {
+            DBG("SampleMind: failed to launch sidecar");
+            return;
+        }
+        // Wait for "ready" signal (up to 5 seconds)
+        juce::String readyLine;
+        for (int i = 0; i < 50 && !readyLine.contains("ready"); ++i) {
+            juce::Thread::sleep(100);
+            readyLine = pythonSidecar.readProcessOutput(1024);
+        }
+        DBG("SampleMind: sidecar ready");
+        startTimer(5000);  // Start health check timer
+    }
+}
+
+void SampleMindAudioProcessor::releaseResources() {
+    stopTimer();
+    pythonSidecar.shutdown();
+}
+
+void SampleMindAudioProcessor::timerCallback() {
+    // Health check: send ping every 5 seconds
+    if (!pythonSidecar.ping()) {
+        DBG("SampleMind: sidecar health check failed — restarting");
+        pythonSidecar.shutdown();
+        prepareToPlay(getSampleRate(), getBlockSize());
+    }
+}
+```
+
+### AU Validation Script
+
+```bash
+#!/bin/bash
+# scripts/validate-au.sh
+set -euo pipefail
+
+PLUGIN_NAME="SampleMind"
+MANUFACTURER_CODE="SmAI"
+PLUGIN_TYPE_CODE="SmPl"
+
+echo "Installing AU plugin for validation..."
+cp -R "plugin/build-macos-release/SampleMind_artefacts/Release/AU/${PLUGIN_NAME}.component" \
+    ~/Library/Audio/Plug-Ins/Components/
+
+echo "Clearing AU cache..."
+killall -9 AudioComponentRegistrar 2>/dev/null || true
+
+echo "Running auval..."
+auval -v aufx "${PLUGIN_TYPE_CODE}" "${MANUFACTURER_CODE}"
+
+echo "AU validation passed for ${PLUGIN_NAME}."
+```
+
+Run before every release:
+```bash
+chmod +x scripts/validate-au.sh
+./scripts/validate-au.sh
+```
+
+### JUCE Plugin Code Signing
+
+Sign after building (replace `<TEAM>` and `<NAME>` with your Apple Developer credentials):
+
+```bash
+# Sign the AU component:
+codesign --deep --force --options runtime \
+  --sign "Developer ID Application: <NAME> (<TEAM>)" \
+  ~/Library/Audio/Plug-Ins/Components/SampleMind.component
+
+# Sign the VST3:
+codesign --deep --force --options runtime \
+  --sign "Developer ID Application: <NAME> (<TEAM>)" \
+  ~/Library/Audio/Plug-Ins/VST3/SampleMind.vst3
+
+# Verify signing:
+codesign --verify --verbose ~/Library/Audio/Plug-Ins/Components/SampleMind.component
+spctl --assess --type execute ~/Library/Audio/Plug-Ins/Components/SampleMind.component
+```
+

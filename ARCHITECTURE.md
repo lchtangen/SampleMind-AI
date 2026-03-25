@@ -328,3 +328,124 @@ SampleMind-AI/
 ├── ROADMAP.md
 └── README.md
 ```
+
+---
+
+## ML Pipeline
+
+Feature extraction → Classification pipeline details:
+
+- **Batch processing:** concurrent analysis with configurable `--workers` (default: CPU count via `os.cpu_count()`)
+- **Fingerprinting:** SHA-256 of first 64KB for deduplication detection before analysis
+- **Analysis cache:** skip re-analysis if file `mtime` is unchanged (planned Phase 2 optimization)
+- **Model targets:** audio fingerprint similarity search for "find similar sounds" feature (Phase 2+)
+- **ProcessPoolExecutor:** used for batch imports — each worker runs `analyze_file()` independently
+
+```
+Batch import flow:
+files[]
+  │
+  ├── fingerprint_file() ─────► deduplicate check (skip known files)
+  │
+  └── ProcessPoolExecutor(workers=N)
+        │
+        └── analyze_file(path)
+              ├── librosa.load()
+              ├── extract 8 features
+              ├── classify_energy/mood/instrument()
+              └── SampleRepository.upsert()
+```
+
+---
+
+## Performance Targets
+
+| Operation | Target | Notes |
+|-----------|--------|-------|
+| Single file analysis | < 500ms | librosa on 22050 Hz mono WAV |
+| Batch import (100 files) | < 30s | parallel workers, 8-core machine |
+| Search query | < 50ms | SQLite FTS5 full-text index |
+| Tauri cold start | < 2s | macOS, sidecar excluded |
+| Sidecar startup | < 3s | PyInstaller one-file bundle |
+| VST3 UI open | < 200ms | JUCE editor open, cached socket |
+
+**Current bottlenecks (Phase 1 state):**
+- Single file: ~800ms (librosa cold import overhead)
+- Batch: sequential (no workers yet — Phase 2 task)
+- Search: full table scan (no FTS5 yet — Phase 3 task)
+
+---
+
+## Security Model
+
+- **No network access required** — SampleMind is a fully local application
+- **macOS sandbox entitlements:** minimum required set only (no broad disk access)
+- **No credentials stored** — SQLite database is a plain user-owned file
+- **Sidecar binary:** PyInstaller one-file bundle; SHA-256 checksum verified at Tauri startup before execution
+- **Code signing:**
+  - macOS: Apple Developer ID Application certificate + notarization via `xcrun notarytool`
+  - Windows: Azure Trusted Signing (replaces EV certificate requirement)
+- **Audio files:** never copied or modified unless user explicitly triggers an export action
+- **No telemetry by default:** Sentry integration is opt-in via `SAMPLEMIND_SENTRY_DSN` env var
+- **Database:** no encryption (user data, not sensitive) — file permissions protect it
+
+---
+
+## Observability
+
+- **Structured logging:** Python `logging` module → `stderr` only (never `stdout`, preserves IPC contract)
+- **Log levels:**
+  - `DEBUG` — analysis feature values, import timing, socket messages
+  - `INFO` — import counts, search results, server startup
+  - `WARNING` — missing optional dependencies (soxr, rtmidi), degraded mode
+  - `ERROR` — analysis failures, DB write errors, sidecar crashes
+- **Sentry (opt-in, Phase 10):** crash reporting with `traces_sample_rate=0.1`, no PII captured
+- **Performance metrics:** import time and analysis time logged at `DEBUG` level per file
+- **CLI `--verbose` flag:** enables `DEBUG` logging for troubleshooting
+- **Tauri:** `tauri::api::log` for Rust-side events; forwarded to system console
+
+```python
+# Correct logging pattern — stderr only:
+import logging
+logger = logging.getLogger(__name__)
+logger.debug("analyze: path=%s duration_ms=%d", path, elapsed_ms)
+# NEVER: print(json_result) to stderr — breaks IPC
+# NEVER: logger.info(json.dumps(result)) — JSON to stderr confuses parsers
+```
+
+---
+
+## Sidecar v2 Architecture (Phase 8+)
+
+```
+JUCE Plugin                    Python Sidecar (PyInstaller bundle)
+┌─────────────────┐            ┌──────────────────────────────────────┐
+│ PluginEditor    │            │ server.py                            │
+│   .h/.cpp       │            │  asyncio event loop                  │
+│                 │            │  ┌──────────────────────────────┐    │
+│ PythonSidecar   │──socket───►│  │ Request dispatcher           │    │
+│   .h/.cpp       │            │  │  ping                        │    │
+│                 │◄──JSON────│  │  search { query, filters }   │    │
+│ juce::          │            │  │  analyze { path }            │    │
+│  ChildProcess   │            │  │  batch_analyze { paths[] }   │    │
+│  (lifecycle)    │            │  └──────────────────────────────┘    │
+└─────────────────┘            │  ┌──────────────────────────────┐    │
+                               │  │ SampleRepository (read-only) │    │
+                               │  │ Audio Analyzer               │    │
+                               │  └──────────────────────────────┘    │
+                               └──────────────────────────────────────┘
+
+Socket:   ~/tmp/samplemind.sock (Unix domain socket)
+Protocol: 4-byte big-endian length prefix + UTF-8 JSON body
+Lifecycle: plugin launches sidecar on editor open, kills on editor close
+Health:   ping every 5s, auto-restart on timeout (max 3 retries)
+Version:  {"version": 2, "action": "search", ...} — versioned envelope
+```
+
+**Sidecar startup sequence:**
+1. `PluginProcessor::prepareToPlay()` → `sidecar.launch(binaryPath)`
+2. `juce::ChildProcess::start()` with stdout/stderr captured
+3. Wait for "ready" JSON on stdout: `{"status": "ready", "version": 2}`
+4. Begin health-check ping loop (5s interval)
+5. On editor close: `PluginProcessor::releaseResources()` → `sidecar.shutdown()`
+

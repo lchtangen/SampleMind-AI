@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- AppleScript automation — required for FL Studio focus/control -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+
+    <!-- Allow unsigned executable memory — required for PyInstaller sidecar -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- User-selected file read/write — required for sample folder access -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Music folder access — required for ~/Music/SampleMind/ library -->
+    <key>com.apple.security.assets.music.read-write</key>
+    <true/>
+
+    <!-- Hardened runtime — required for notarization -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
+</dict>
+</plist>

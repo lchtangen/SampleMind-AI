@@ -572,3 +572,172 @@ This is a limitation of beat_track() — it always guesses a BPM.
 For samples without a clear beat (pads, SFX) the BPM value will not be meaningful.
 Consider filtering BPM display based on instrument type in the UI.
 ```
+
+---
+
+## 7. Advanced Analysis Features (2026)
+
+### Audio Fingerprinting (`src/samplemind/analyzer/fingerprint.py`)
+
+SHA-256 fingerprinting detects exact duplicate files before running expensive librosa analysis:
+
+```python
+# src/samplemind/analyzer/fingerprint.py
+import hashlib
+from pathlib import Path
+
+
+def fingerprint_file(path: Path) -> str:
+    """Compute SHA-256 of first 64KB — fast dedup detection.
+
+    Reading only the first 64KB is a deliberate trade-off:
+    - Fast enough to fingerprint 1000 files in under 1 second
+    - Catches exact duplicates and most near-duplicates (same file, different path)
+    - Does NOT catch re-encoded versions (different bitrate/format)
+    """
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read(65536)).hexdigest()
+
+
+def find_duplicates(paths: list[Path]) -> dict[str, list[Path]]:
+    """Group paths by fingerprint. Groups with len > 1 are duplicates.
+
+    Returns only groups that have more than one file.
+    """
+    groups: dict[str, list[Path]] = {}
+    for path in paths:
+        fp = fingerprint_file(path)
+        groups.setdefault(fp, []).append(path)
+    return {fp: ps for fp, ps in groups.items() if len(ps) > 1}
+```
+
+CLI integration:
+```bash
+uv run samplemind duplicates               # list all duplicates
+uv run samplemind duplicates --remove      # delete all but first occurrence
+uv run samplemind analyze file.wav --fingerprint  # fingerprint + check library
+```
+
+### Batch Processing (`src/samplemind/analyzer/batch.py`)
+
+Concurrent batch analysis using `ProcessPoolExecutor` — scales with available CPUs:
+
+```python
+# src/samplemind/analyzer/batch.py
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
+from pathlib import Path
+from typing import Callable
+
+from samplemind.analyzer.audio_analysis import analyze_file
+
+
+def analyze_batch(
+    paths: list[Path],
+    workers: int = 0,
+    progress_cb: Callable[[int, int], None] | None = None,
+) -> list[dict]:
+    """Analyze multiple files in parallel.
+
+    Args:
+        paths: List of audio file paths to analyze.
+        workers: Number of worker processes. 0 = os.cpu_count().
+        progress_cb: Optional callback(completed, total) for progress reporting.
+
+    Returns:
+        List of analysis result dicts, in input order.
+    """
+    workers = workers or os.cpu_count() or 1
+    results: list[dict] = [{}] * len(paths)
+
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        future_to_idx = {pool.submit(analyze_file, p): i for i, p in enumerate(paths)}
+        completed = 0
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                results[idx] = {"error": str(e), "path": str(paths[idx])}
+            completed += 1
+            if progress_cb:
+                progress_cb(completed, len(paths))
+
+    return results
+```
+
+### Coverage Configuration
+
+Add to `pyproject.toml`:
+
+```toml
+[tool.coverage.run]
+source = ["samplemind"]
+omit = ["*/tests/*", "*/__pycache__/*", "*/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"
+```
+
+Run with coverage:
+```bash
+uv run pytest tests/ --cov=samplemind --cov-report=term-missing
+uv run pytest tests/ --cov=samplemind --cov-report=html  # htmlcov/index.html
+```
+
+### Additional Test Fixtures
+
+Add to `tests/conftest.py`:
+
+```python
+@pytest.fixture
+def kick_wav(tmp_path: Path) -> Path:
+    """Simulated kick: high amplitude, low frequency (60 Hz), 0.5s.
+    Expected: energy=high, instrument=kick, mood=dark.
+    """
+    t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
+    samples = (0.9 * np.sin(2 * np.pi * 60 * t)).astype(np.float32)
+    path = tmp_path / "kick.wav"
+    sf.write(str(path), samples, 22050)
+    return path
+
+
+@pytest.fixture
+def hihat_wav(tmp_path: Path) -> Path:
+    """Simulated hihat: white noise, very short (0.1s), low amplitude.
+    Expected: high ZCR, high spectral centroid, instrument=hihat.
+    """
+    samples = np.random.uniform(-0.3, 0.3, 2205).astype(np.float32)
+    path = tmp_path / "hihat.wav"
+    sf.write(str(path), samples, 22050)
+    return path
+
+
+@pytest.fixture
+def bass_wav(tmp_path: Path) -> Path:
+    """Simulated bass: 80 Hz sine, 2 seconds, medium amplitude.
+    Expected: high low_freq_ratio, instrument=bass.
+    """
+    t = np.linspace(0, 2.0, int(22050 * 2.0), dtype=np.float32)
+    samples = (0.5 * np.sin(2 * np.pi * 80 * t)).astype(np.float32)
+    path = tmp_path / "bass.wav"
+    sf.write(str(path), samples, 22050)
+    return path
+
+
+@pytest.fixture
+def batch_wav_dir(tmp_path: Path) -> Path:
+    """Directory with 5 synthetic WAV files for batch processing tests."""
+    for i in range(5):
+        freq = [60, 80, 200, 1000, 5000][i]
+        t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
+        samples = (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+        sf.write(str(tmp_path / f"sample_{i:02d}.wav"), samples, 22050)
+    return tmp_path
+```
+
