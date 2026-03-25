@@ -7,6 +7,11 @@ description: >
   translating docs to Norwegian, adding troubleshooting entries, updating the 7-section
   phase doc structure, or any request that starts with "document", "write a doc", "add to the docs",
   "create a phase", "update the readme", or "explain in the docs".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  docs/en/*.md, docs/no/*.md, ARCHITECTURE.md, CLAUDE.md, README.md, CONTRIBUTING.md,
+  ROADMAP.md, .auggie/README.md, docs/**/*.md — or the file is a Markdown file that is
+  NOT a test fixture or code-adjacent config, and contains section headers like ## Overview,
+  ## Architecture, ## Phase, ## Usage, ## Installation, ## Contributing.
   Do NOT wait for the user to ask — route here for all documentation creation and editing tasks.
 model: sonnet
 tools: Read, Grep, Glob, Write

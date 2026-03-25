@@ -9,6 +9,14 @@ description: >
   tauri-plugin-notification, tauri-plugin-deep-link, tauri-plugin-updater, Sparkle updater,
   auto-update, deep-link URL scheme, native notifications, SearchBar component,
   Phase 6 or Phase 10 work. Also use for build errors, Cargo clippy failures, or any "build the app" request.
+  Also activate automatically when the currently open or reviewed file matches any of:
+  app/src-tauri/src/*.rs, app/src-tauri/src/**/*.rs, app/src-tauri/Cargo.toml,
+  app/src-tauri/tauri.conf.json, app/src-tauri/capabilities/**/*.json,
+  app/src-tauri/entitlements.plist, app/src/*.svelte, app/src/**/*.svelte,
+  app/src/*.ts, app/src/**/*.ts, app/package.json, .github/workflows/release.yml —
+  or the file contains: #[tauri::command], use tauri::, invoke(, $state(, $derived(,
+  $effect(, tauri-plugin-, fn main() { tauri::Builder, pnpm tauri, cargo clippy,
+  use std::process::Command, serde_json::from_slice.
   Do NOT wait for the user to ask — route here whenever the task touches Rust, Tauri, or Svelte.
 model: sonnet
 tools: Read, Grep, Glob, Bash

@@ -6,6 +6,14 @@ description: >
   /api/tag, /api/status, audio streaming /audio/<id>, login page, register page,
   library view, HTMX live search, SSE progress streams, flask-cors, Flask-Login,
   src/samplemind/web/app.py, src/web/app.py, or "update the web UI".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  src/samplemind/web/app.py, src/web/app.py, src/samplemind/web/templates/*.html,
+  src/samplemind/web/static/*.js, src/samplemind/web/static/*.css,
+  src/web/templates/*.html, src/web/static/*.js — or the file contains:
+  from flask import, @app.route, @login_required, render_template(, send_file(,
+  jsonify(, session["user_id"], flask_cors, CORS(app, stream_with_context,
+  hx-get=, hx-post=, hx-trigger=, hx-target=, text/event-stream,
+  url_for("login"), url_for("register"), abort(404), request.args.get.
   Do NOT wait for the user to ask — route here whenever the task touches Flask web code.
 model: sonnet
 tools: Read, Grep, Glob, Bash

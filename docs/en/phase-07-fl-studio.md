@@ -111,8 +111,8 @@ The simplest approach: write samples to a folder FL Studio can read directly.
 
 import shutil
 from pathlib import Path
-from samplemind.data.repository import SampleRepository
-from samplemind.models import Sample
+from samplemind.core.models.sample import Sample
+from samplemind.data.repositories.sample_repository import SampleRepository
 from samplemind.integrations.paths import get_fl_studio_samples_dir
 
 
@@ -177,7 +177,7 @@ CLI command for export:
 import typer
 from pathlib import Path
 from rich.console import Console
-from samplemind.data.repository import SampleRepository
+from samplemind.data.repositories.sample_repository import SampleRepository
 from samplemind.integrations.filesystem import export_to_fl_studio
 
 console = Console()
@@ -190,8 +190,7 @@ def export_cmd(
     energy: str = typer.Option(None, "--energy", help="Filter by energy level"),
 ):
     """Export samples to FL Studio's sample browser."""
-    repo = SampleRepository()
-    samples = repo.search(energy=energy)
+    samples = SampleRepository.search(energy=energy)
 
     if not samples:
         console.print("[yellow]No samples to export.[/yellow]")
@@ -374,7 +373,8 @@ Virtual MIDI lets SampleMind send BPM and key to FL Studio as MIDI messages.
 # Requires: uv add python-rtmidi
 
 import rtmidi
-from samplemind.models import Sample
+
+from samplemind.core.models.sample import Sample
 
 # MIDI CC numbers we use to send metadata
 CC_BPM_COARSE = 14    # BPM integer (0-127 = 0-127 BPM)
@@ -465,7 +465,7 @@ FL Studio's browser searches by filename, so consistent names matter:
 ```python
 # filename: src/samplemind/integrations/naming.py
 
-from samplemind.models import Sample
+from samplemind.core.models.sample import Sample
 
 
 def make_fl_filename(sample: Sample) -> str:

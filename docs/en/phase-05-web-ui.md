@@ -89,36 +89,41 @@ def create_app(config: dict = None) -> Flask:
 # filename: src/samplemind/web/blueprints/library.py
 
 from flask import Blueprint, render_template, request, send_file, abort
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
 from pathlib import Path
+
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 library_bp = Blueprint("library", __name__)
 
 
 @library_bp.before_app_request
-def setup():
-    init_db()
+def setup() -> None:
+    """Ensure all SQLModel tables exist before the first request.
+
+    init_orm() is idempotent — safe to call on every startup.
+    It imports both models and calls SQLModel.metadata.create_all(engine).
+    """
+    init_orm()
 
 
 @library_bp.route("/")
 def index():
     """Main page — returns full HTML on normal request."""
-    repo = SampleRepository()
-    samples = repo.search()
-    return render_template("index.html", samples=samples, total=repo.count())
+    samples = SampleRepository.search()   # no filters → all samples
+    return render_template("index.html", samples=samples, total=SampleRepository.count())
 
 
 @library_bp.route("/samples/partial")
 def samples_partial():
     """
     HTMX partial: returns only the table, not the whole page.
-    Called when search filters change.
+    Called when any search filter changes (triggered by hx-get on the inputs).
+    All filter parameters are optional — omitting one means "any value".
     """
-    repo = SampleRepository()
-    samples = repo.search(
-        query=request.args.get("q"),
-        energy=request.args.get("energy"),
+    samples = SampleRepository.search(
+        query=request.args.get("q"),          # full-text search on filename/tags
+        energy=request.args.get("energy"),    # "low" | "mid" | "high"
         instrument=request.args.get("instrument"),
         bpm_min=float(request.args["bpm_min"]) if request.args.get("bpm_min") else None,
         bpm_max=float(request.args["bpm_max"]) if request.args.get("bpm_max") else None,
@@ -130,13 +135,12 @@ def samples_partial():
 
 @library_bp.route("/audio/<int:sample_id>")
 def audio(sample_id: int):
-    """Serve the audio file for a sample (for waveform preview)."""
-    from sqlmodel import Session
-    from samplemind.models import Sample
-    from samplemind.data.db import engine
+    """Serve the audio file for a sample (for waveform preview).
 
-    with Session(engine) as session:
-        sample = session.get(Sample, sample_id)
+    SampleRepository.get_by_id() looks up the integer row id (not the UUID user_id).
+    Returns 404 if the row doesn't exist or the file has been moved/deleted.
+    """
+    sample = SampleRepository.get_by_id(sample_id)
     if not sample:
         abort(404)
     path = Path(sample.path)
@@ -263,20 +267,27 @@ Server-Sent Events let the server push updates to the browser without polling.
 
 import json
 from pathlib import Path
-from flask import Blueprint, request, Response, stream_with_context
+
+from flask import Blueprint, Response, request, stream_with_context
+
 from samplemind.analyzer.audio_analysis import analyze_file
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
-from samplemind.models import SampleCreate
+from samplemind.core.models.sample import SampleCreate
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 import_bp = Blueprint("import_", __name__)
 
 
 def _sse_event(event_type: str, data: dict) -> str:
     """
-    Format an SSE message.
-    Format: "event: TYPE\ndata: JSON\n\n"
-    Double newline ends one message.
+    Format one Server-Sent Events message.
+
+    SSE wire format:
+      event: <TYPE>\\n
+      data: <JSON>\\n
+      \\n       ← blank line terminates the message
+
+    The browser's EventSource API parses this automatically.
     """
     return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
@@ -285,7 +296,10 @@ def _sse_event(event_type: str, data: dict) -> str:
 def import_folder():
     """
     Import endpoint with SSE streaming.
-    Sends progress updates along the way and a done message at the end.
+
+    The client POSTs {"folder": "/abs/path/to/samples"} and keeps the
+    connection open. The server streams one SSE event per file until done.
+    This avoids blocking the browser for large libraries.
     """
     folder = Path(request.json.get("folder", ""))
     if not folder.is_dir():
@@ -294,20 +308,28 @@ def import_folder():
     wav_files = list(folder.glob("**/*.wav"))
 
     def generate():
-        """Generator that streams SSE events."""
-        init_db()
-        repo = SampleRepository()
+        """Generator that yields SSE events — one per WAV file analysed."""
+        # Ensure the database tables exist before the first upsert.
+        # init_orm() is idempotent — safe to call multiple times.
+        init_orm()
         total = len(wav_files)
 
-        # Send start event
+        # Notify the client of the total file count upfront
         yield _sse_event("start", {"total": total})
 
         imported = 0
         for i, wav in enumerate(wav_files, 1):
             try:
                 analysis = analyze_file(str(wav))
-                data = SampleCreate(filename=wav.name, path=str(wav.resolve()), **analysis)
-                sample = repo.upsert(data)
+                sample_data = SampleCreate(
+                    filename=wav.name,
+                    path=str(wav.resolve()),
+                    **analysis,        # bpm, key, mood, energy, instrument
+                )
+                # SampleRepository.upsert() is a static method — no instance needed.
+                # It inserts on first import and updates auto-detected fields on re-import.
+                # Manually tagged fields (genre, tags) are never overwritten.
+                SampleRepository.upsert(sample_data)
                 imported += 1
 
                 # Send progress for each file
@@ -320,7 +342,7 @@ def import_folder():
             except Exception as e:
                 yield _sse_event("error", {"filename": wav.name, "error": str(e)})
 
-        # Send done event
+        # Final event — client closes the EventSource on receipt
         yield _sse_event("done", {"imported": imported, "total": total})
 
     return Response(
@@ -328,7 +350,7 @@ def import_folder():
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # Important: disable Nginx buffering
+            "X-Accel-Buffering": "no",   # Critical: disable Nginx/proxy response buffering
         },
     )
 ```
@@ -488,16 +510,22 @@ document.addEventListener("click", (e) => {
 
 import pytest
 from samplemind.web.app import create_app
-from samplemind.data.db import init_db
+from samplemind.data.orm import init_orm
 
 
 @pytest.fixture
 def client(tmp_path):
-    """Flask test client with in-memory database."""
+    """Flask test client with in-memory database.
+
+    Uses the application factory (create_app) so each test gets a fresh
+    Flask app.  init_orm() creates all SQLModel tables in the ORM engine
+    (which in tests should be redirected to a StaticPool in-memory SQLite
+    via the orm_engine fixture, then call init_orm() to create tables).
+    """
     app = create_app({"TESTING": True})
     with app.test_client() as c:
         with app.app_context():
-            init_db()
+            init_orm()   # creates users + samples tables if they don't exist
         yield c
 
 
@@ -585,12 +613,38 @@ uv add flask-cors
 from flask import Flask
 from flask_cors import CORS
 
+from samplemind.core.config import get_settings
 
-def create_app() -> Flask:
-    app = Flask(__name__)
-    # Allow Tauri WebView origin (tauri://localhost and http://localhost:1420)
-    CORS(app, origins=["tauri://localhost", "http://localhost:1420"])
-    # ... register blueprints
+
+def create_app(config: dict | None = None) -> Flask:
+    """Application factory — creates and configures the Flask app.
+
+    Call this from the serve command and in tests.
+    CORS is configured to allow Tauri WebView and local dev origins from Settings.
+    """
+    app = Flask(__name__, template_folder="templates", static_folder="static")
+
+    settings = get_settings()
+    app.secret_key = settings.FLASK_SECRET_KEY
+    app.config.setdefault("MAX_CONTENT_LENGTH", 500 * 1024 * 1024)  # 500 MB max upload
+
+    if config:
+        app.config.update(config)
+
+    # Allow all origins listed in Settings.CORS_ORIGINS:
+    #   "http://localhost:5174"  — Tauri dev
+    #   "http://localhost:5000"  — Flask dev
+    #   "http://localhost:8000"  — FastAPI dev
+    #   "tauri://localhost"      — Tauri production
+    CORS(app, origins=settings.CORS_ORIGINS)
+
+    # Register blueprints once the CORS middleware is installed
+    from samplemind.web.blueprints.library import library_bp
+    from samplemind.web.blueprints.import_ import import_bp
+
+    app.register_blueprint(library_bp)
+    app.register_blueprint(import_bp)
+
     return app
 ```
 

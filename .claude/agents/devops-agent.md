@@ -6,6 +6,14 @@ description: >
   git performance (fsmonitor, untrackedcache), pre-commit hooks, pyproject.toml build system,
   uv sync, pnpm install, environment variables, .env.example, first-time setup,
   "how do I set up this project", "install dependencies", "configure CI", or "add a GitHub Action".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  scripts/setup-dev.sh, scripts/start.sh, scripts/*.sh, .github/workflows/*.yml,
+  .github/workflows/python-lint.yml, pyproject.toml, .pre-commit-config.yaml,
+  .env.example, Makefile — or the file contains:
+  uv sync, astral-sh/setup-uv, setup-uv@v, runs-on: ubuntu, runs-on: macos,
+  apt-get install -y libwebkit2gtk, pre-commit install, git config core.fsmonitor,
+  #!/usr/bin/env bash, SAMPLEMIND_SECRET_KEY=, fail_under =,
+  [tool.ruff], [tool.pytest.ini_options], [project.scripts], samplemind.cli.app:app.
   Do NOT wait for the user to ask — route here for any setup, scripts, or CI/CD work.
 model: sonnet
 tools: Read, Grep, Glob, Bash

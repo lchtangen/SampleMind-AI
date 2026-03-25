@@ -9,6 +9,13 @@ description: >
   macOS entitlements, sandbox permissions, com.apple.security.* keys,
   Windows COM automation, win32com, FL Studio 21 paths,
   Phase 7 or Phase 8 work, or any question about making SampleMind work inside FL Studio.
+  Also activate automatically when the currently open or reviewed file matches any of:
+  plugin/*.cpp, plugin/*.h, plugin/CMakeLists.txt, plugin/CMakePresets.json,
+  src/samplemind/sidecar/server.py, src/samplemind/sidecar/*.py,
+  scripts/fl-export.py, scripts/fl-*.sh — or the file contains:
+  PluginProcessor, PluginEditor, AudioPluginInstance, juce::, JUCE_DECLARE_,
+  nc -U /tmp/samplemind.sock, osascript, applescript, IAC Driver, python-rtmidi,
+  win32com.client, auval, aufx SmPl, com.apple.security.automation.apple-events.
   Do NOT wait for the user to ask — route here whenever the task touches FL Studio or the JUCE plugin.
 model: sonnet
 tools: Read, Grep, Glob, Bash

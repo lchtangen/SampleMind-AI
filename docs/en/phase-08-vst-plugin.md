@@ -257,9 +257,9 @@ import socket
 import struct
 import argparse
 from pathlib import Path
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
 from samplemind.analyzer.audio_analysis import analyze_file
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 
 def handle_request(data: dict) -> dict:
@@ -270,8 +270,8 @@ def handle_request(data: dict) -> dict:
     action = data.get("action")
 
     if action == "search":
-        repo = SampleRepository()
-        samples = repo.search(
+        # SampleRepository uses static methods — no instance required
+        samples = SampleRepository.search(
             query=data.get("query"),
             energy=data.get("energy"),
             instrument=data.get("instrument"),
@@ -324,7 +324,9 @@ def run_socket_server(socket_path: str):
     if sock_file.exists():
         sock_file.unlink()
 
-    init_db()
+    # init_orm() creates all SQLModel tables if they don't exist yet.
+    # It is idempotent — safe to call every time the sidecar starts.
+    init_orm()
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
         server.bind(socket_path)

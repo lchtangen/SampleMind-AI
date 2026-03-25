@@ -7,6 +7,12 @@ description: >
   CI failures, GitHub Actions ci.yml status, ruff lint errors from CI, clippy errors from CI,
   CI matrix (ubuntu + macos), "tests are failing", "write a test for", "add tests",
   "check if tests pass", "why is CI failing", or any debugging of test output.
+  Also activate automatically when the currently open or reviewed file matches any of:
+  tests/test_*.py, tests/conftest.py, tests/**/*.py, .github/workflows/python-lint.yml,
+  .github/workflows/ci.yml, pyproject.toml (when pytest/coverage sections visible) —
+  or the file contains: import pytest, @pytest.fixture, @pytest.mark, def test_,
+  pytest.raises, tmp_path, monkeypatch, MagicMock, uv run pytest, --cov=samplemind,
+  fail_under, --tb=short, -n auto, xdist, sf.write, np.zeros(22050.
   Do NOT wait for the user to ask — route here whenever the task is about running or fixing tests.
 model: sonnet
 tools: Read, Grep, Glob, Bash

@@ -134,8 +134,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from samplemind.data.repositories.sample_repository import SampleRepository
 from samplemind.packs.manifest import PackManifest, SampleEntry, compute_sha256
-from samplemind.data.repository import SampleRepository
 
 
 def export_pack(
@@ -156,8 +156,9 @@ def export_pack(
 
     Returns the PackManifest object (with SHA-256 checksums populated).
     """
-    repo = SampleRepository()
-    samples = repo.search(
+    # SampleRepository.search() is a static method — no instance needed.
+    # All filter parameters are optional; omitting one means "any value".
+    samples = SampleRepository.search(
         instrument=instrument,
         mood=mood,
         energy=energy,
@@ -230,9 +231,9 @@ import json
 import zipfile
 from pathlib import Path
 
-from samplemind.packs.manifest import PackManifest, compute_sha256
-from samplemind.data.repository import SampleRepository
 from samplemind.analyzer.audio_analysis import analyze_file
+from samplemind.data.repositories.sample_repository import SampleRepository
+from samplemind.packs.manifest import PackManifest, compute_sha256
 
 
 class PackImportError(Exception):
@@ -252,7 +253,7 @@ def import_pack(
     - Validates the manifest format and SHA-256 checksums
     - Extracts WAV files to dest_dir
     - Analyzes and upserts each sample into the database
-    - Idempotent: importing the same pack twice skips duplicates
+    - Idempotent: importing the same pack twice skips duplicates (upsert on path)
 
     Returns: {"imported": N, "skipped": M, "errors": K}
     """
@@ -260,7 +261,6 @@ def import_pack(
         raise PackImportError(f"Pack file not found: {pack_path}")
 
     dest_dir.mkdir(parents=True, exist_ok=True)
-    repo = SampleRepository()
 
     with zipfile.ZipFile(pack_path, "r") as zf:
         # Read the manifest
@@ -284,8 +284,9 @@ def import_pack(
             src_name = f"samples/{entry.filename}"
             dest_path = dest_dir / entry.filename
 
-            # Check if the sample already exists in the DB (idempotency check)
-            existing = repo.get_by_name(entry.filename)
+            # Check if the sample already exists in the DB (idempotency check).
+            # SampleRepository.get_by_name() is a static method on the repository.
+            existing = SampleRepository.get_by_name(entry.filename)
             if existing and dest_path.exists():
                 skipped += 1
                 continue
@@ -328,7 +329,7 @@ def import_pack(
                         "energy": entry.energy,
                     }
 
-            repo.upsert(str(dest_path), **metadata)
+            SampleRepository.upsert(str(dest_path), **metadata)
             imported += 1
 
     return {"imported": imported, "skipped": skipped, "errors": errors}

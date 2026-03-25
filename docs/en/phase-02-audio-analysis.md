@@ -318,76 +318,57 @@ def analyze_batch(folder: Path, max_workers: int = 4) -> list[dict]:
 
 ### conftest.py — shared fixtures
 
+The actual `tests/conftest.py` defines these audio fixtures (never commit real audio files —
+always generate them synthetically with `numpy` and `soundfile`):
+
 ```python
-# filename: tests/conftest.py
+# filename: tests/conftest.py  (audio fixtures — excerpt)
 
 import numpy as np
 import pytest
 import soundfile as sf
-import tempfile
 from pathlib import Path
 
 
 @pytest.fixture
-def silence_wav(tmp_path: Path) -> Path:
-    """Creates a 1-second silent WAV file for testing."""
-    y = np.zeros(22050, dtype=np.float32)
-    path = tmp_path / "silence.wav"
-    sf.write(str(path), y, 22050)
+def silent_wav(tmp_path: Path) -> Path:
+    """1-second silent WAV — tests that analyzer handles zero-energy audio without crashing.
+
+    Expected: energy='low', low_freq_ratio≈0, no meaningful BPM/key estimate.
+    """
+    path = tmp_path / "test.wav"
+    sf.write(str(path), np.zeros(22050, dtype=np.float32), 22050)
     return path
 
 
 @pytest.fixture
-def sine_wav(tmp_path: Path) -> Path:
-    """Creates a 1-second 440 Hz sine wave (pure tone, A4)."""
-    sr = 22050
-    t = np.linspace(0, 1.0, sr, endpoint=False)
-    y = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
-    path = tmp_path / "sine_440.wav"
-    sf.write(str(path), y, sr)
+def kick_wav(tmp_path: Path) -> Path:
+    """Simulated kick: loud 60 Hz sine burst, 0.5 s.
+
+    Characteristics: high amplitude (RMS≈0.64), very low centroid, low ZCR,
+    low flatness, high low_freq_ratio.
+    Expected classifier output: energy='high', instrument='kick', mood='dark'.
+    """
+    t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
+    samples = (0.9 * np.sin(2 * np.pi * 60 * t)).astype(np.float32)
+    path = tmp_path / "kick.wav"
+    sf.write(str(path), samples, 22050)
     return path
 
 
 @pytest.fixture
-def noise_wav(tmp_path: Path) -> Path:
-    """Creates a 0.3-second white noise WAV (simulates hi-hat)."""
-    rng = np.random.default_rng(42)   # Fixed seed for reproducibility
-    y = rng.uniform(-0.3, 0.3, 6615).astype(np.float32)
-    path = tmp_path / "noise.wav"
-    sf.write(str(path), y, 22050)
+def hihat_wav(tmp_path: Path) -> Path:
+    """Simulated hihat: white noise burst, 0.1 s (2205 samples at 22050 Hz).
+
+    Characteristics: high ZCR (noise crosses zero constantly), high spectral
+    centroid (energy spread across all frequencies), high flatness.
+    Expected classifier output: instrument='hihat'.
+    """
+    rng = np.random.default_rng(seed=42)   # fixed seed for reproducibility
+    samples = rng.uniform(-0.3, 0.3, 2205).astype(np.float32)
+    path = tmp_path / "hihat.wav"
+    sf.write(str(path), samples, 22050)
     return path
-
-
-@pytest.fixture
-def sample_features_kick() -> dict:
-    """Feature dict representing a typical kick drum."""
-    return {
-        "rms": 0.10,           # High — powerful kick
-        "centroid_norm": 0.08, # Low — dark/bass-dominated
-        "zcr": 0.03,           # Low — tonal (not noisy)
-        "flatness": 0.02,      # Low — non-noisy (pure bass tone)
-        "rolloff_norm": 0.12,  # Low — energy in bass
-        "onset_mean": 2.5,
-        "onset_max": 6.0,      # High — strong single attack
-        "low_freq_ratio": 0.50,# High — bass-dominated
-        "duration": 0.4,       # Short one-shot
-    }
-
-
-@pytest.fixture
-def sample_features_hihat() -> dict:
-    """Feature dict representing a typical hi-hat."""
-    return {
-        "rms": 0.04,
-        "centroid_norm": 0.40,  # High — bright sound
-        "zcr": 0.15,            # High — noisy
-        "flatness": 0.35,       # High — white-noise-like
-        "rolloff_norm": 0.55,   # High — lots of energy in treble
-        "onset_mean": 3.0,
-        "onset_max": 5.0,
-        "low_freq_ratio": 0.03, # Low — almost no bass
-        "duration": 0.2,        # Very short
-    }
 ```
 
 ### test_classifier.py — unit tests
@@ -462,30 +443,45 @@ class TestClassifyInstrument:
 
 ```python
 # filename: tests/test_audio_analysis.py
+# These tests use the fixtures defined in tests/conftest.py.
 
 import pytest
 from samplemind.analyzer.audio_analysis import analyze_file
 
+# Valid classifier output sets — used in multiple tests below
+VALID_ENERGY    = {"low", "mid", "high"}
+VALID_MOOD      = {"dark", "chill", "aggressive", "euphoric", "melancholic", "neutral"}
+VALID_INSTRUMENT = {"kick", "snare", "hihat", "bass", "pad", "lead", "loop", "sfx", "unknown"}
 
-def test_analyze_sine_wave(sine_wav):
-    """A pure sine wave should return sensible values from full analysis."""
-    result = analyze_file(str(sine_wav))
 
-    # All keys must be present
+def test_analyze_file_sine(kick_wav):
+    """A loud low-frequency sine wave should return sensible values.
+
+    Uses the kick_wav fixture (60 Hz, 0.5 s) which has clear spectral properties.
+    This is the canonical 'does the full pipeline work?' integration test.
+    """
+    result = analyze_file(str(kick_wav))
+
+    # analyze_file() must return exactly these 5 keys
     assert set(result.keys()) == {"bpm", "key", "energy", "mood", "instrument"}
 
-    # Values must be valid types/ranges
+    # BPM must be a positive float (beat_track always returns a guess)
     assert isinstance(result["bpm"], float)
     assert result["bpm"] > 0
 
-    assert result["energy"] in {"low", "mid", "high"}
-    assert result["mood"] in {"dark", "chill", "aggressive", "euphoric", "melancholic", "neutral"}
-    assert result["instrument"] in {"kick","snare","hihat","bass","pad","lead","loop","sfx","unknown"}
+    # Each classifier output must be one of the valid enum strings
+    assert result["energy"]     in VALID_ENERGY
+    assert result["mood"]       in VALID_MOOD
+    assert result["instrument"] in VALID_INSTRUMENT
 
 
-def test_analyze_silence(silence_wav):
-    """Silent audio should return 'low' energy and not crash."""
-    result = analyze_file(str(silence_wav))
+def test_analyze_file_silence(silent_wav):
+    """Silent audio must return 'low' energy and not raise an exception.
+
+    This guards against division-by-zero errors in low_freq_ratio
+    (protected by the 1e-8 epsilon in classifier._features()).
+    """
+    result = analyze_file(str(silent_wav))
     assert result["energy"] == "low"
 
 
@@ -493,11 +489,12 @@ def test_analyze_silence(silence_wav):
 def test_analyze_real_wav(tmp_path):
     """
     Marked with @pytest.mark.slow — skip with: pytest -m 'not slow'
-    Requires writing a realistic WAV file to disk.
+    Writes a 4-second 130 Hz sine wave (C2 — typical bass note) and
+    checks that the instrument classifier picks something reasonable.
     """
     import soundfile as sf
     import numpy as np
-    # Build a more realistic test file (4 seconds, bass-like tone)
+
     sr = 44100
     t = np.linspace(0, 4.0, sr * 4)
     y = (0.3 * np.sin(2 * np.pi * 130 * t)).astype(np.float32)
@@ -505,6 +502,7 @@ def test_analyze_real_wav(tmp_path):
     sf.write(str(path), y, sr)
 
     result = analyze_file(str(path))
+    # A long low-frequency sample should be classified as bass, pad, lead, or loop
     assert result["instrument"] in {"bass", "pad", "lead", "loop", "unknown"}
 ```
 
@@ -690,15 +688,29 @@ uv run pytest tests/ --cov=samplemind --cov-report=term-missing
 uv run pytest tests/ --cov=samplemind --cov-report=html  # htmlcov/index.html
 ```
 
-### Additional Test Fixtures
+### Audio Test Fixtures in conftest.py
 
-Add to `tests/conftest.py`:
+All three audio fixtures below are already defined in `tests/conftest.py` and available to every
+test without any extra imports. Use them directly as function parameters:
 
 ```python
+# tests/conftest.py  (audio fixtures — full definitions)
+
+@pytest.fixture
+def silent_wav(tmp_path: Path) -> Path:
+    """1-second silence at 22050 Hz — baseline zero-energy test."""
+    path = tmp_path / "test.wav"
+    sf.write(str(path), np.zeros(22050, dtype=np.float32), 22050)
+    return path
+
+
 @pytest.fixture
 def kick_wav(tmp_path: Path) -> Path:
-    """Simulated kick: high amplitude, low frequency (60 Hz), 0.5s.
-    Expected: energy=high, instrument=kick, mood=dark.
+    """Simulated kick: high amplitude, 60 Hz sine burst, 0.5 s.
+
+    Why 60 Hz: Nyquist is 11025 Hz at sr=22050. Most kick drum energy lives
+    below 200 Hz. A 60 Hz sine gives a very clear low_freq_ratio > 0.35 so
+    the classifier reliably returns instrument='kick'.
     """
     t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
     samples = (0.9 * np.sin(2 * np.pi * 60 * t)).astype(np.float32)
@@ -709,19 +721,25 @@ def kick_wav(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def hihat_wav(tmp_path: Path) -> Path:
-    """Simulated hihat: white noise, very short (0.1s), low amplitude.
-    Expected: high ZCR, high spectral centroid, instrument=hihat.
+    """Simulated hihat: white noise, 0.1 s (2205 samples), seeded RNG.
+
+    Using a fixed seed (42) keeps the test deterministic across machines and
+    Python versions, so the expected instrument='hihat' assertion is stable.
     """
-    samples = np.random.uniform(-0.3, 0.3, 2205).astype(np.float32)
+    rng = np.random.default_rng(seed=42)
+    samples = rng.uniform(-0.3, 0.3, 2205).astype(np.float32)
     path = tmp_path / "hihat.wav"
     sf.write(str(path), samples, 22050)
     return path
+```
 
+To add a **bass** or **batch** fixture for your own extension tests:
 
+```python
 @pytest.fixture
 def bass_wav(tmp_path: Path) -> Path:
-    """Simulated bass: 80 Hz sine, 2 seconds, medium amplitude.
-    Expected: high low_freq_ratio, instrument=bass.
+    """Simulated bass: 80 Hz sine, 2 s, medium amplitude.
+    Expected: high low_freq_ratio, instrument='bass' or 'pad'.
     """
     t = np.linspace(0, 2.0, int(22050 * 2.0), dtype=np.float32)
     samples = (0.5 * np.sin(2 * np.pi * 80 * t)).astype(np.float32)
@@ -732,9 +750,12 @@ def bass_wav(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def batch_wav_dir(tmp_path: Path) -> Path:
-    """Directory with 5 synthetic WAV files for batch processing tests."""
-    for i in range(5):
-        freq = [60, 80, 200, 1000, 5000][i]
+    """Directory with 5 synthetic WAV files for batch processing tests.
+
+    Frequencies span sub-bass to treble so the 5 files get different
+    classifier labels, making it easy to verify batch result diversity.
+    """
+    for i, freq in enumerate([60, 80, 200, 1000, 5000]):
         t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
         samples = (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float32)
         sf.write(str(tmp_path / f"sample_{i:02d}.wav"), samples, 22050)

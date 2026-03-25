@@ -7,6 +7,13 @@ description: >
   HTTPException, status codes, api/main.py, api/routes/auth.py, /api/v1/health,
   /api/v1/auth/register, /api/v1/auth/login, /api/v1/auth/refresh, /api/v1/auth/me,
   REST API design, response schemas, pagination, or "add an API endpoint".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  src/samplemind/api/main.py, src/samplemind/api/routes/*.py, src/samplemind/api/**/*.py —
+  or the file contains: from fastapi import, APIRouter, @router.get, @router.post,
+  @router.put, @router.delete, Depends(get_current_active_user), create_app(),
+  include_router, TokenResponse, UserPublic, SamplePublic, oauth2_scheme,
+  OAuth2PasswordRequestForm, HTTPException(status_code=, status.HTTP_, lifespan,
+  uvicorn.run, from samplemind.api, import APIRouter.
   Do NOT wait for the user to ask — route here whenever the task touches FastAPI or REST API code.
 model: sonnet
 tools: Read, Grep, Glob, Bash

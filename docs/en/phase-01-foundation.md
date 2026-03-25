@@ -195,26 +195,39 @@ SampleMind-AI/
 # NEW (src-layout — standard for distributable packages)
 SampleMind-AI/
 └── src/
-    └── samplemind/           ← Everything in one package
+    └── samplemind/               ← Everything in one package
         ├── __init__.py
-        ├── __main__.py       ← Enables: python -m samplemind
+        ├── __main__.py           ← Enables: python -m samplemind
+        ├── core/                 ← Shared settings, models, auth (Phase 3+)
+        │   ├── __init__.py
+        │   ├── config.py         ← Settings (DB URL, JWT, CORS) via platformdirs
+        │   ├── auth/             ← JWT, RBAC, password hashing (Phase 3)
+        │   └── models/
+        │       ├── sample.py     ← SQLModel Sample table + SampleCreate/SamplePublic
+        │       └── user.py       ← SQLModel User table + UserCreate/UserPublic
         ├── cli/
         │   ├── __init__.py
-        │   ├── app.py        ← Typer CLI (Phase 4)
-        │   └── commands/
+        │   ├── app.py            ← Typer CLI — 8 commands (Phase 4)
+        │   └── commands/         ← One file per command
         ├── analyzer/
         │   ├── __init__.py
-        │   ├── audio_analysis.py
-        │   └── classifier.py
+        │   ├── audio_analysis.py ← analyze_file() → BPM, key, energy, mood, instrument
+        │   └── classifier.py     ← classify_energy/mood/instrument() rule-based engine
         ├── data/
         │   ├── __init__.py
-        │   └── database.py   → models.py + repository.py (Phase 3)
+        │   ├── orm.py            ← SQLModel engine, init_orm(), get_session() (Phase 3)
+        │   └── repositories/
+        │       ├── sample_repository.py  ← SampleRepository (static methods)
+        │       └── user_repository.py    ← UserRepository (static methods)
+        ├── api/                  ← FastAPI auth server (Phase 3)
+        │   └── routes/
+        │       └── auth.py       ← /api/v1/auth/register, /login, /me, /refresh
         ├── web/
         │   ├── __init__.py
-        │   └── app.py
-        ├── integrations/     ← FL Studio (Phase 7)
-        ├── packs/            ← Sample packs (Phase 9)
-        └── sidecar/          ← Plugin server (Phase 8)
+        │   └── app.py            ← Flask web UI (login, library, import)
+        ├── integrations/         ← FL Studio (Phase 7)
+        ├── packs/                ← Sample packs (Phase 9)
+        └── sidecar/              ← Plugin server (Phase 8)
 ```
 
 ---

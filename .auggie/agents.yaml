@@ -21,6 +21,27 @@ agents:
       - instrument classification, mood, energy, classifier.py
       - audio_analysis.py, soundfile, soxr, fingerprint, duplicate
       - batch analysis, ProcessPoolExecutor, src/analyzer/
+      - analyze_file, classify_energy, classify_instrument, classify_mood
+      - spectral_centroid, zero_crossing_rate, spectral_flatness, onset_strength
+      - rms, centroid_norm, zcr, low_freq_ratio, onset_mean, onset_max
+    trigger_files:
+      - "src/samplemind/analyzer/*.py"
+      - "src/samplemind/analyzer/**/*.py"
+      - "src/analyzer/*.py"
+      - "tests/test_audio_analysis.py"
+      - "tests/test_classifier.py"
+      - "tests/test_fingerprint.py"
+      - "tests/conftest.py"
+    trigger_code_patterns:
+      - "librosa.load"
+      - "np.sqrt(np.mean"
+      - "spectral_centroid"
+      - "classify_energy"
+      - "classify_instrument"
+      - "fingerprint_file"
+      - "sf.write("
+      - "kick_wav"
+      - "hihat_wav"
     domains: [src/samplemind/analyzer/, tests/conftest.py, tests/test_audio_analysis.py]
     default: true
 
@@ -33,6 +54,24 @@ agents:
     trigger_keywords:
       - pytest, tests, failing, coverage, CI, conftest, fixtures
       - markers, xdist, ruff errors, clippy errors, why is CI failing
+      - import pytest, @pytest.fixture, @pytest.mark, def test_
+      - tmp_path, monkeypatch, pytest.raises, MagicMock
+      - --cov=samplemind, fail_under, -n auto, --tb=short
+    trigger_files:
+      - "tests/test_*.py"
+      - "tests/conftest.py"
+      - "tests/**/*.py"
+      - ".github/workflows/python-lint.yml"
+      - ".github/workflows/ci.yml"
+      - "pyproject.toml"
+      - "pytest.ini"
+    trigger_code_patterns:
+      - "import pytest"
+      - "@pytest.fixture"
+      - "@pytest.mark"
+      - "def test_"
+      - "uv run pytest"
+      - "fail_under"
     domains: [tests/, .github/workflows/]
 
   tauri-builder:
@@ -44,7 +83,30 @@ agents:
     trigger_keywords:
       - Tauri, Rust, Svelte, app/, src-tauri, IPC, pnpm, invoke()
       - Universal Binary, signing, notarization, sidecar, release.yml
-      - tauri::command, Cargo.toml, tauri.conf.json
+      - tauri::command, Cargo.toml, tauri.conf.json, $state, $derived, $effect
+      - cargo clippy, pnpm tauri dev, pnpm tauri build
+    trigger_files:
+      - "app/src-tauri/src/*.rs"
+      - "app/src-tauri/src/**/*.rs"
+      - "app/src-tauri/Cargo.toml"
+      - "app/src-tauri/tauri.conf.json"
+      - "app/src-tauri/capabilities/**/*.json"
+      - "app/src-tauri/entitlements.plist"
+      - "app/src/*.svelte"
+      - "app/src/**/*.svelte"
+      - "app/src/*.ts"
+      - "app/src/**/*.ts"
+      - "app/package.json"
+      - ".github/workflows/release.yml"
+    trigger_code_patterns:
+      - "#[tauri::command]"
+      - "use tauri::"
+      - "invoke("
+      - "$state("
+      - "$derived("
+      - "$effect("
+      - "tauri-plugin-"
+      - "tauri::Builder::default()"
     domains: [app/, app/src-tauri/, app/src/]
 
   doc-writer:
@@ -56,6 +118,22 @@ agents:
     trigger_keywords:
       - documentation, docs, phase doc, README, ARCHITECTURE, CONTRIBUTING
       - translate, Norwegian, troubleshooting, write a doc, add to the docs
+    trigger_files:
+      - "docs/en/*.md"
+      - "docs/no/*.md"
+      - "ARCHITECTURE.md"
+      - "CLAUDE.md"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "ROADMAP.md"
+      - ".auggie/README.md"
+      - "docs/**/*.md"
+    trigger_code_patterns:
+      - "## Overview"
+      - "## Architecture"
+      - "## Phase"
+      - "## Usage"
+      - "## Installation"
     domains: [docs/, ARCHITECTURE.md, README.md, CONTRIBUTING.md]
 
   fl-studio-agent:
@@ -67,6 +145,27 @@ agents:
     trigger_keywords:
       - FL Studio, JUCE, VST3, AU, AppleScript, MIDI, IAC Driver
       - sidecar, plugin/, PythonSidecar, IPCSocket, osascript
+      - auval, PluginProcessor, PluginEditor, CMakeLists.txt, win32com
+    trigger_files:
+      - "plugin/Source/*.cpp"
+      - "plugin/Source/*.h"
+      - "plugin/CMakeLists.txt"
+      - "plugin/CMakePresets.json"
+      - "plugin/**/*.cpp"
+      - "plugin/**/*.h"
+      - "src/samplemind/sidecar/server.py"
+      - "src/samplemind/sidecar/*.py"
+      - "scripts/fl-*.sh"
+      - "scripts/fl-export.py"
+    trigger_code_patterns:
+      - "juce::"
+      - "JUCE_DECLARE_"
+      - "AudioProcessor"
+      - "osascript"
+      - "nc -U /tmp/samplemind.sock"
+      - "IAC Driver"
+      - "win32com.client"
+      - "auval"
     domains: [plugin/, src/samplemind/sidecar/]
 
 # ── Phase-specific agents (route when phase number is mentioned) ──────────────
@@ -80,6 +179,13 @@ agents:
     phase: 2
     trigger_keywords:
       - phase 2, pytest audio, WAV fixtures, conftest, classifier threshold
+      - kick_wav, hihat_wav, silent_wav, loop_wav, pad_wav, bass_wav
+      - sf.write(, np.sin(2 * np.pi, @pytest.mark.slow, tmp_path / "test.wav"
+    trigger_files:
+      - "tests/test_audio_analysis.py"
+      - "tests/test_classifier.py"
+      - "tests/test_fingerprint.py"
+      - "tests/conftest.py"
     domains: [tests/, src/samplemind/analyzer/]
 
   phase-03-database:
@@ -91,6 +197,17 @@ agents:
     phase: 3
     trigger_keywords:
       - phase 3, SQLModel, Alembic, ORM, migration, repository pattern
+      - from sqlmodel import, Field(, Relationship(, create_engine
+      - alembic revision, op.add_column, op.drop_column, PRAGMA journal_mode
+    trigger_files:
+      - "src/samplemind/data/orm.py"
+      - "src/samplemind/data/database.py"
+      - "src/samplemind/data/repositories/*.py"
+      - "src/samplemind/core/models/sample.py"
+      - "src/samplemind/core/models/user.py"
+      - "migrations/versions/*.py"
+      - "migrations/env.py"
+      - "alembic.ini"
     domains: [src/samplemind/data/, migrations/]
 
   phase-04-cli:
@@ -102,6 +219,13 @@ agents:
     phase: 4
     trigger_keywords:
       - phase 4, Typer, Rich, CLI, JSON flag, command design
+      - import typer, typer.Typer(), @app.command(), Console(stderr=True)
+      - sys.stdout.write, json.dumps(result), --json, print(json.dumps
+    trigger_files:
+      - "src/samplemind/cli/app.py"
+      - "src/samplemind/cli/commands/*.py"
+      - "src/samplemind/cli/__init__.py"
+      - "src/main.py"
     domains: [src/samplemind/cli/]
 
   phase-05-web:
@@ -113,6 +237,14 @@ agents:
     phase: 5
     trigger_keywords:
       - phase 5, Flask, HTMX, SSE, web UI, API endpoint
+      - from flask import Flask, @app.route, render_template, jsonify
+      - hx-get=, hx-trigger=, hx-target=, text/event-stream, stream_with_context
+    trigger_files:
+      - "src/samplemind/web/app.py"
+      - "src/web/app.py"
+      - "src/samplemind/web/templates/*.html"
+      - "src/samplemind/web/static/app.js"
+      - "src/samplemind/web/static/style.css"
     domains: [src/samplemind/web/, src/web/]
 
   phase-06-desktop:
@@ -124,6 +256,16 @@ agents:
     phase: 6
     trigger_keywords:
       - phase 6, Tauri commands, Svelte 5, Runes, desktop, SearchBar
+      - #[tauri::command], use tauri::, invoke(, $state(, $derived(, $effect(
+    trigger_files:
+      - "app/src-tauri/src/*.rs"
+      - "app/src-tauri/src/**/*.rs"
+      - "app/src-tauri/Cargo.toml"
+      - "app/src-tauri/tauri.conf.json"
+      - "app/src/*.svelte"
+      - "app/src/**/*.svelte"
+      - "app/src/*.ts"
+      - "app/src/**/*.ts"
     domains: [app/]
 
   phase-07-fl-studio:
@@ -135,6 +277,13 @@ agents:
     phase: 7
     trigger_keywords:
       - phase 7, FL Studio automation, clipboard, AppleScript, MIDI handoff
+      - osascript, pbcopy, clip.exe, IAC Driver, win32com.client
+    trigger_files:
+      - "src/samplemind/integrations/fl_studio.py"
+      - "src/samplemind/integrations/*.py"
+      - "scripts/fl-*.sh"
+      - "scripts/fl-export.py"
+      - "src/samplemind/sidecar/server.py"
     domains: [plugin/, src/samplemind/sidecar/]
 
   phase-08-vst-plugin:
@@ -146,6 +295,14 @@ agents:
     phase: 8
     trigger_keywords:
       - phase 8, JUCE plugin, VST3, AU, CMake, auval, PluginProcessor
+      - juce::AudioProcessor, JUCE_DECLARE_, juce_add_plugin, AudioUnit
+    trigger_files:
+      - "plugin/Source/*.cpp"
+      - "plugin/Source/*.h"
+      - "plugin/CMakeLists.txt"
+      - "plugin/CMakePresets.json"
+      - "plugin/**/*.cpp"
+      - "plugin/**/*.h"
     domains: [plugin/]
 
   phase-09-sample-packs:
@@ -157,7 +314,15 @@ agents:
     phase: 9
     trigger_keywords:
       - phase 9, sample pack, metadata, distribution, versioning
-    domains: [src/samplemind/]
+      - smpack, manifest.json, SamplePackManifest, PackVersion, zipfile.ZipFile
+      - pack_slug, pack_version, sha256_checksum, .smpack
+    trigger_files:
+      - "src/samplemind/packs/*.py"
+      - "src/samplemind/packs/__init__.py"
+      - "src/samplemind/packs/manifest.py"
+      - "src/samplemind/packs/builder.py"
+      - "src/samplemind/packs/importer.py"
+    domains: [src/samplemind/packs/]
 
   phase-10-production:
     description: >
@@ -168,6 +333,14 @@ agents:
     phase: 10
     trigger_keywords:
       - phase 10, production, signing, notarization, CI/CD, release, GitHub Actions
+      - xcrun notarytool, xcrun altool, codesign, staple, APPLE_SIGNING_IDENTITY
+      - universal-apple-darwin, PyInstaller, azure/trusted-signing-action
+    trigger_files:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/ci.yml"
+      - "app/src-tauri/entitlements.plist"
+      - "scripts/build-sidecar.sh"
+      - "scripts/notarize.sh"
     domains: [.github/workflows/, app/src-tauri/]
 
 # ── Functional / service agents (added Phase 3–5 realised features) ──────────
@@ -183,6 +356,22 @@ agents:
       - FastAPI, uvicorn, REST API, OpenAPI, /api/docs, /api/v1
       - auth endpoint, Bearer token, router, lifespan, CORS
       - api/main.py, api/routes/, pydantic schema, HTTP status
+      - from fastapi import, APIRouter, @router.get, @router.post
+      - Depends(get_current_active_user), create_app(), include_router
+      - TokenResponse, UserPublic, SamplePublic, oauth2_scheme
+    trigger_files:
+      - "src/samplemind/api/main.py"
+      - "src/samplemind/api/routes/*.py"
+      - "src/samplemind/api/**/*.py"
+    trigger_code_patterns:
+      - "from fastapi import"
+      - "APIRouter"
+      - "@router.get"
+      - "@router.post"
+      - "Depends(get_current_active_user"
+      - "create_app()"
+      - "include_router"
+      - "TokenResponse"
     domains: [src/samplemind/api/, src/samplemind/core/auth/]
     endpoints:
       health: GET /api/v1/health
@@ -204,6 +393,23 @@ agents:
       - Flask, web UI, Jinja2, template, session, web/app.py
       - /api/samples, /api/import, /api/tag, /api/status, audio streaming
       - HTMX, SSE, login page, register page, library view
+      - from flask import, @app.route, render_template, send_file
+      - session["user_id"], flask_cors, hx-get=, hx-trigger=, hx-target=
+    trigger_files:
+      - "src/samplemind/web/app.py"
+      - "src/web/app.py"
+      - "src/samplemind/web/templates/*.html"
+      - "src/samplemind/web/static/*.js"
+      - "src/samplemind/web/static/*.css"
+      - "src/web/templates/*.html"
+    trigger_code_patterns:
+      - "from flask import"
+      - "@app.route"
+      - "render_template("
+      - "send_file("
+      - "session[\"user_id\"]"
+      - "hx-get="
+      - "text/event-stream"
     domains: [src/samplemind/web/, src/web/]
     routes:
       - "GET  /          → library view (login-required)"
@@ -231,17 +437,28 @@ agents:
       - bcrypt, password hash, passlib, RBAC, UserRole, Permission
       - RBACService, api keys, OAuth2, Google OAuth, GitHub OAuth
       - core/auth/, jwt_handler.py, rbac.py, permissions.py
+      - from jose import jwt, CryptContext, pwd_context.hash
+      - create_access_token, decode_token, SAMPLEMIND_SECRET_KEY
+    trigger_files:
+      - "src/samplemind/core/auth/*.py"
+      - "src/samplemind/core/auth/jwt_handler.py"
+      - "src/samplemind/core/auth/rbac.py"
+      - "src/samplemind/core/auth/dependencies.py"
+      - "src/samplemind/core/models/user.py"
+    trigger_code_patterns:
+      - "from jose import jwt"
+      - "CryptContext"
+      - "UserRole"
+      - "Permission"
+      - "RBACService"
+      - "create_access_token"
+      - "SAMPLEMIND_SECRET_KEY"
     domains: [src/samplemind/core/auth/]
     jwt_config:
       algorithm: HS256
       access_expire_minutes: 30
       refresh_expire_days: 7
       secret_key_env: SAMPLEMIND_SECRET_KEY
-    roles:
-      viewer: [audio:read, search:basic]
-      member: [audio:read/write/delete/analyze/batch, search:*, pack:*, api:key_create]
-      owner: member + [api:key_revoke]
-      admin: all permissions
 
   devops-agent:
     description: >
@@ -254,12 +471,27 @@ agents:
       - setup, install, dev environment, WSL2, scripts/, setup-dev.sh, start.sh
       - GitHub Actions, CI/CD, workflow file, pre-commit, git config
       - pyproject.toml, uv sync, pnpm install, environment variables
+      - astral-sh/setup-uv, runs-on: ubuntu, apt-get install libwebkit2gtk
+      - [tool.ruff], [tool.pytest.ini_options], samplemind.cli.app:app
+    trigger_files:
+      - "scripts/setup-dev.sh"
+      - "scripts/start.sh"
+      - "scripts/*.sh"
+      - ".github/workflows/*.yml"
+      - ".github/workflows/python-lint.yml"
+      - "pyproject.toml"
+      - ".pre-commit-config.yaml"
+      - ".env.example"
+      - "Makefile"
+    trigger_code_patterns:
+      - "uv sync"
+      - "astral-sh/setup-uv"
+      - "runs-on: ubuntu"
+      - "pre-commit install"
+      - "#!/usr/bin/env bash"
+      - "[tool.ruff]"
+      - "[tool.pytest.ini_options]"
     domains: [scripts/, .github/, pyproject.toml]
-    quick_start:
-      setup: "bash scripts/setup-dev.sh"
-      web: "bash scripts/start.sh web"
-      desktop: "bash scripts/start.sh desktop"
-      both: "bash scripts/start.sh both"
 
   ml-agent:
     description: >
@@ -272,9 +504,21 @@ agents:
       - ML model, transformers, 8-bit, quantization, offload, HuggingFace
       - model_loader.py, AutoModelForCausalLM, scikit-learn, numba
       - semantic search, embeddings, vector, Phase 12, Phase 13
+      - load_in_8bit=True, offload_folder=, @jit(nopython=True, faiss, chromadb
+    trigger_files:
+      - "src/samplemind/utils/model_loader.py"
+      - "src/samplemind/search/embeddings.py"
+      - "src/samplemind/agent/curator.py"
+    trigger_code_patterns:
+      - "from transformers import"
+      - "AutoModelForCausalLM"
+      - "load_in_8bit=True"
+      - "offload_folder="
+      - "@jit(nopython=True"
+      - "faiss"
+      - "chromadb"
     domains: [src/samplemind/utils/model_loader.py, src/samplemind/analyzer/]
     notes:
       - "Current use: rule-based classifiers (classifier.py) — no heavy ML needed yet"
       - "Phase 12 target: vector embeddings for semantic sample search"
       - "Phase 13 target: AI agent automation for library curation"
-      - "model_loader.py supports: 8-bit quantization, disk offloading, fallback inference"

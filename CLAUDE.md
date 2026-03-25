@@ -409,41 +409,121 @@ System Preferences → Privacy & Security → Accessibility → add the app.
 
 ## AI Agent Routing (2026)
 
-This repo includes specialized phase agents under .claude/agents.
+This repo has **19 specialized agents** in `.claude/agents/` that activate automatically.
+Agents are triggered by three signals — in priority order:
 
-**Routing rules:**
+1. **Open file path** — the file being edited matches an agent's file glob patterns
+2. **Code content** — symbols/imports visible in the active file match an agent's code patterns
+3. **Chat keywords** — what the user types matches an agent's description keywords
 
-1. If user names a phase, route to matching phase-0N agent.
-2. Otherwise route to the most specific domain agent based on touched files and task intent.
+> The full routing table is mirrored in `.auggie/routing.yaml` and `.auggie/agents.yaml`.
 
-**Phase agents:**
+**Routing priority:**
+1. Phase number mentioned → matching `phase-0N` agent
+2. Open file path match → agent that owns that file
+3. Code pattern match → agent that owns that symbol
+4. Chat keyword match → most specific domain agent
 
-| If the task involves... | Use agent |
+---
+
+## File-Based Agent Auto-Routing
+
+Claude Code reads each agent's `description` field and activates the matching agent
+when the open file, visible code, or chat message contains any of its trigger patterns.
+This table is the **canonical reference** — it mirrors `.auggie/routing.yaml` exactly.
+
+### File Path → Agent
+
+| File glob pattern | Auto-activates agent |
 |---|---|
-| phase 2, pytest audio fixtures, conftest, analyzer coverage, WAV test data | `phase-02-audio-testing` |
-| phase 3, SQLModel, Alembic, ORM migration, repository pattern | `phase-03-database` |
-| phase 4, Typer command design, Rich terminal UX, CLI JSON/stderr contract | `phase-04-cli` |
-| phase 5, Flask API work, HTMX updates, SSE progress streams | `phase-05-web` |
-| phase 6, Tauri commands, Rust IPC, Svelte 5 Runes desktop behavior | `phase-06-desktop` |
-| phase 7, FL Studio automation, AppleScript, clipboard/MIDI handoff | `phase-07-fl-studio` |
-| phase 8, JUCE plugin architecture, VST3/AU, plugin-side IPC | `phase-08-vst-plugin` |
-| phase 9, sample pack format, metadata validation, distribution/versioning | `phase-09-sample-packs` |
-| phase 10, production build hardening, CI/CD, signing/notarization | `phase-10-production` |
+| `src/samplemind/analyzer/**/*.py` | `audio-analyzer` |
+| `src/analyzer/**/*.py` | `audio-analyzer` |
+| `tests/test_audio_analysis.py` | `audio-analyzer` |
+| `tests/test_classifier.py` | `audio-analyzer` |
+| `tests/test_fingerprint.py` | `audio-analyzer` |
+| `tests/conftest.py` | `phase-02-audio-testing` |
+| `tests/test_*.py` | `test-runner` |
+| `tests/**/*.py` | `test-runner` |
+| `src/samplemind/api/**/*.py` | `api-agent` |
+| `src/samplemind/core/auth/**/*.py` | `security-agent` |
+| `src/samplemind/core/models/user.py` | `security-agent` |
+| `src/samplemind/web/app.py` | `web-agent` |
+| `src/web/app.py` | `web-agent` |
+| `src/samplemind/web/templates/**/*.html` | `web-agent` |
+| `src/samplemind/web/static/**` | `web-agent` |
+| `src/samplemind/cli/**/*.py` | `phase-04-cli` |
+| `src/main.py` | `phase-04-cli` |
+| `src/samplemind/data/**/*.py` | `phase-03-database` |
+| `src/samplemind/core/models/sample.py` | `phase-03-database` |
+| `migrations/**/*.py` | `phase-03-database` |
+| `alembic.ini` | `phase-03-database` |
+| `app/src-tauri/src/**/*.rs` | `tauri-builder` |
+| `app/src-tauri/Cargo.toml` | `tauri-builder` |
+| `app/src-tauri/tauri.conf.json` | `tauri-builder` |
+| `app/src-tauri/capabilities/**/*.json` | `tauri-builder` |
+| `app/src/**/*.svelte` | `phase-06-desktop` |
+| `app/src/**/*.ts` | `phase-06-desktop` |
+| `app/src-tauri/entitlements.plist` | `phase-10-production` |
+| `plugin/Source/**/*.cpp` | `phase-08-vst-plugin` |
+| `plugin/Source/**/*.h` | `phase-08-vst-plugin` |
+| `plugin/CMakeLists.txt` | `phase-08-vst-plugin` |
+| `src/samplemind/sidecar/**/*.py` | `fl-studio-agent` |
+| `src/samplemind/integrations/**/*.py` | `phase-07-fl-studio` |
+| `src/samplemind/packs/**/*.py` | `phase-09-sample-packs` |
+| `src/samplemind/utils/model_loader.py` | `ml-agent` |
+| `src/samplemind/search/**/*.py` | `ml-agent` |
+| `scripts/**/*.sh` | `devops-agent` |
+| `.github/workflows/*.yml` | `devops-agent` |
+| `.github/workflows/release.yml` | `phase-10-production` |
+| `pyproject.toml` | `devops-agent` |
+| `.pre-commit-config.yaml` | `devops-agent` |
+| `docs/en/**/*.md` | `doc-writer` |
+| `docs/no/**/*.md` | `doc-writer` |
+| `ARCHITECTURE.md`, `README.md`, `CONTRIBUTING.md` | `doc-writer` |
 
-**Cross-cutting agents:**
+### Code Pattern → Agent
 
-| If the task involves... | Use agent |
+| Symbol / import visible in file | Auto-activates agent |
 |---|---|
-| librosa, audio features, classifiers, WAV processing, fingerprinting, batch analysis | `audio-analyzer` |
-| Tauri, Rust, Svelte 5, app/, IPC, build, macOS signing, GitHub Actions | `tauri-builder` |
-| FL Studio, JUCE, VST3, AU, AppleScript, sidecar socket, plugin/ | `fl-studio-agent` |
-| docs/en/, docs/no/, phase docs, ARCHITECTURE.md, CLAUDE.md, README | `doc-writer` |
-| pytest, cargo test, CI failures, test fixtures, coverage, conftest.py | `test-runner` |
+| `librosa.load`, `classify_energy`, `classify_instrument`, `fingerprint_file`, `spectral_centroid` | `audio-analyzer` |
+| `from fastapi import`, `APIRouter`, `@router.get`, `Depends(get_current_active_user` | `api-agent` |
+| `from flask import`, `@app.route`, `render_template(`, `hx-get=`, `text/event-stream` | `web-agent` |
+| `from jose import jwt`, `CryptContext`, `RBACService`, `UserRole`, `SAMPLEMIND_SECRET_KEY` | `security-agent` |
+| `#[tauri::command]`, `use tauri::`, `invoke(` | `tauri-builder` |
+| `$state(`, `$derived(`, `$effect(` | `phase-06-desktop` |
+| `@pytest.fixture`, `def test_`, `import pytest` | `test-runner` |
+| `sf.write(`, `kick_wav`, `hihat_wav`, `np.sin(2 * np.pi` | `phase-02-audio-testing` |
+| `from sqlmodel import`, `PRAGMA journal_mode`, `alembic revision` | `phase-03-database` |
+| `import typer`, `typer.Typer()`, `@app.command()` | `phase-04-cli` |
+| `juce::`, `#include <juce_audio_processors` | `phase-08-vst-plugin` |
+| `from transformers import`, `AutoModelForCausalLM`, `load_in_8bit=True` | `ml-agent` |
+| `osascript`, `IAC Driver`, `win32com.client`, `nc -U /tmp/samplemind.sock` | `fl-studio-agent` |
+| `uv sync`, `astral-sh/setup-uv`, `runs-on: ubuntu`, `#!/usr/bin/env bash` | `devops-agent` |
+| `xcrun notarytool`, `codesign`, `APPLE_SIGNING_IDENTITY`, `universal-apple-darwin` | `phase-10-production` |
 
-**Routing preference:**
+### Chat Keyword → Agent
 
-1. If the request explicitly references a phase number, use the matching phase-0N agent.
-2. Otherwise route to the most specific domain agent for touched files and keywords.
+| Keyword or phrase | Auto-activates agent |
+|---|---|
+| librosa, BPM, WAV, audio analysis, classify, fingerprint, spectral | `audio-analyzer` |
+| pytest, test, failing, coverage, CI, conftest, fixture | `test-runner` |
+| Tauri, Rust, Svelte, build the app, pnpm tauri, cargo | `tauri-builder` |
+| FastAPI, REST API, /api/v1, endpoint, OpenAPI, Bearer token | `api-agent` |
+| Flask, web UI, HTMX, SSE, login page, audio streaming | `web-agent` |
+| JWT, RBAC, permission, role, bcrypt, OAuth2, secure this endpoint | `security-agent` |
+| setup, CI/CD, GitHub Actions, WSL2, environment, install | `devops-agent` |
+| ML model, transformers, HuggingFace, embedding, semantic search | `ml-agent` |
+| document, write a doc, update README, phase doc, ARCHITECTURE | `doc-writer` |
+| FL Studio, JUCE, VST3, AU, sidecar, MIDI, AppleScript | `fl-studio-agent` |
+| Phase 2 | `phase-02-audio-testing` |
+| Phase 3 | `phase-03-database` |
+| Phase 4 | `phase-04-cli` |
+| Phase 5 | `phase-05-web` |
+| Phase 6 | `phase-06-desktop` |
+| Phase 7 | `phase-07-fl-studio` |
+| Phase 8 | `phase-08-vst-plugin` |
+| Phase 9 | `phase-09-sample-packs` |
+| Phase 10 | `phase-10-production` |
 
 ---
 
@@ -527,8 +607,33 @@ SampleRepository.tag("/abs/path/kick.wav", SampleUpdate(genre="trap", tags="808,
 ```
 Phase docs:   docs/en/phase-NN-*.md
 Architecture: ARCHITECTURE.md
+Routing:      .auggie/routing.yaml  → canonical file/code/keyword → agent map
 Memory:       .claude/projects/.../memory/ (auto-loaded by Claude Code)
-Skills:       .claude/commands/*.md  → /check /test /build /analyze /import /search /pack ...
-Agents:       .claude/agents/*.md    → AUTOMATICALLY routed by task content (no manual invocation needed)
-Copilot:      .github/copilot-instructions.md (loaded automatically by GitHub Copilot)
+
+Claude Code agents (19 total — auto-activated by file, code, or keyword):
+  Domain:  audio-analyzer  test-runner  tauri-builder  doc-writer  fl-studio-agent
+           api-agent  web-agent  security-agent  devops-agent  ml-agent
+  Phase:   phase-02-audio-testing  phase-03-database  phase-04-cli
+           phase-05-web  phase-06-desktop  phase-07-fl-studio
+           phase-08-vst-plugin  phase-09-sample-packs  phase-10-production
+
+Claude Code commands (13 total — type /command in chat):
+  /analyze   /import    /search    /check     /test      /build
+  /serve     /start     /list      /tag       /health    /db-inspect
+  /auth      /setup     /debug     /workflow  /pack      /sidecar
+
+Auggie CLI skills (22 total):
+  analyze_audio  batch_import  build  check  coverage  db_inspect  db_migrate
+  fingerprint  health_check  import_samples  lint  list_samples  pack  run_tests
+  search  serve_api  serve_web  setup_dev  sidecar  start  auth  tag
+
+Auggie CLI workflows (7 total):
+  ci-check  new-feature  release  dev-start  debug-classifier
+  add-audio-feature  onboard-dev
+
+GitHub Copilot agents (9 total — @mention in Copilot Chat):
+  @audio-analyzer  @test-runner  @tauri-builder  @fl-studio-agent  @document-creator
+  @api-agent  @web-agent  @security-agent  @devops-agent  @ml-agent
+
+Copilot:  .github/copilot-instructions.md (loaded automatically by GitHub Copilot)
 ```

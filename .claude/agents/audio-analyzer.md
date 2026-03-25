@@ -7,6 +7,14 @@ description: >
   classifier.py, soundfile, soxr, scipy FFT, pytest WAV fixtures, conftest.py audio fixtures,
   audio fingerprinting, duplicate detection, batch analysis, spectral_bandwidth, ProcessPoolExecutor,
   Phase 2 work, or questions like "why is this sample classified as X" or "add a new audio feature".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  src/samplemind/analyzer/audio_analysis.py, src/samplemind/analyzer/classifier.py,
+  src/samplemind/analyzer/fingerprint.py, src/analyzer/audio_analysis.py,
+  src/analyzer/classifier.py, tests/test_audio_analysis.py, tests/test_classifier.py,
+  tests/conftest.py — or the file contains: librosa.load, spectral_centroid, zero_crossing_rate,
+  spectral_flatness, onset_strength, classify_energy, classify_instrument, classify_mood,
+  fingerprint_file, analyze_file, np.sqrt(np.mean, ProcessPoolExecutor, soundfile.write,
+  sf.write, @pytest.mark.slow, kick_wav, hihat_wav, silent_wav, rms, centroid_norm, zcr.
   Do NOT wait for the user to ask — route here whenever the task touches audio processing code.
 model: sonnet
 tools: Read, Grep, Glob, Bash

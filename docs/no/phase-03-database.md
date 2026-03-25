@@ -179,8 +179,8 @@ Dette gjør det enkelt å bytte ut databasen i tester (f.eks. til in-memory SQLi
 
 from typing import Optional
 from sqlmodel import Session, select
-from samplemind.models import Sample, SampleCreate, SampleUpdate
-from samplemind.data.db import engine, get_session
+from samplemind.core.models.sample import Sample, SampleCreate, SampleUpdate
+from samplemind.data.orm import get_engine, get_session
 
 
 class SampleRepository:
@@ -360,7 +360,7 @@ sqlalchemy.url = sqlite:///%(here)s/../data/dev.db
 ```python
 # filename: alembic/env.py (oppdater target_metadata)
 
-from samplemind.models import Sample      # Importer alle modeller
+from samplemind.core.models.sample import Sample      # Importer alle modeller
 from sqlmodel import SQLModel
 
 # Fortell Alembic hvilke tabeller som skal holdes oppdatert
@@ -421,82 +421,93 @@ def downgrade():
 
 import pytest
 from sqlmodel import create_engine, SQLModel, Session
-from samplemind.models import Sample, SampleCreate, SampleUpdate
-from samplemind.data.repository import SampleRepository
+from sqlalchemy.pool import StaticPool
+
+import samplemind.data.orm as _orm_mod
+from samplemind.core.models.sample import Sample, SampleCreate, SampleUpdate
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 
 @pytest.fixture
-def in_memory_session():
+def orm_engine():
     """
-    Lager en isolert in-memory SQLite-database for hver test.
-    Ingen data lekker mellom tester.
+    In-memory SQLite-motor med alle SQLModel-tabeller opprettet.
+
+    Bytter ut den modul-globale motoren i ``samplemind.data.orm`` for varigheten
+    av testen slik at SampleRepository (som kaller get_session() internt) bruker
+    den isolerte testmotoren og ikke den ekte diskmotoren.
+
+    StaticPool sørger for at alle sesjoner deler én tilkobling — nødvendig for
+    in-memory SQLite (uten det vil hver ny sesjon se en tom database).
     """
-    # sqlite:// (uten filsti) = in-memory database
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    import samplemind.core.models.sample  # noqa: F401 — registrerer Sample i SQLModel.metadata
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     SQLModel.metadata.create_all(engine)
 
-    with Session(engine) as session:
-        yield session  # Lever session til testen
-
-
-@pytest.fixture
-def repo(in_memory_session):
-    """SampleRepository koblet til in-memory testdatabase."""
-    return SampleRepository(session=in_memory_session)
+    original = _orm_mod._engine
+    _orm_mod._engine = engine
+    yield engine
+    _orm_mod._engine = original
 
 
 class TestUpsert:
-    def test_insert_new_sample(self, repo):
+    def test_insert_new_sample(self, orm_engine):
         """Innsetting av ny sample skal lykkes og returnere Sample-objekt."""
         data = SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=128.0)
-        sample = repo.upsert(data)
+        # SampleRepository bruker statiske metoder — ingen instans nødvendig
+        sample = SampleRepository.upsert(data)
 
         assert sample.id is not None
         assert sample.filename == "kick.wav"
         assert sample.bpm == 128.0
 
-    def test_upsert_same_path_updates_bpm(self, repo):
+    def test_upsert_same_path_updates_bpm(self, orm_engine):
         """Re-import av samme sti skal oppdatere BPM, ikke lage duplikat."""
-        repo.upsert(SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=128.0))
-        repo.upsert(SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=140.0))
+        SampleRepository.upsert(SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=128.0))
+        SampleRepository.upsert(SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=140.0))
 
-        # Skal fortsatt bare være én sample
-        assert repo.count() == 1
-        # BPM skal være oppdatert
-        sample = repo.get_by_name("kick")
+        # Skal fortsatt bare være én sample (upsert på path)
+        assert SampleRepository.count() == 1
+        # BPM skal være oppdatert til siste verdi
+        sample = SampleRepository.get_by_name("kick")
         assert sample.bpm == 140.0
 
 
 class TestTag:
-    def test_tag_updates_genre(self, repo):
+    def test_tag_updates_genre(self, orm_engine):
         """Tagging skal oppdatere genre uten å endre andre felt."""
-        repo.upsert(SampleCreate(filename="bass.wav", path="/s/bass.wav", mood="dark"))
+        SampleRepository.upsert(SampleCreate(filename="bass.wav", path="/s/bass.wav", mood="dark"))
 
-        sample = repo.get_by_name("bass")
-        repo.tag(sample.path, SampleUpdate(genre="trap"))
+        sample = SampleRepository.get_by_name("bass")
+        SampleRepository.tag(sample.path, SampleUpdate(genre="trap"))
 
-        updated = repo.get_by_name("bass")
+        updated = SampleRepository.get_by_name("bass")
         assert updated.genre == "trap"
-        assert updated.mood == "dark"   # Uendret
+        assert updated.mood == "dark"   # Uendret — tagging overskriver ikke auto-analyse
 
 
 class TestSearch:
-    def test_search_by_energy(self, repo):
+    def test_search_by_energy(self, orm_engine):
         """Søk etter energi-filter skal returnere kun matchende samples."""
-        repo.upsert(SampleCreate(filename="kick.wav", path="/s/kick.wav", energy="high"))
-        repo.upsert(SampleCreate(filename="pad.wav", path="/s/pad.wav", energy="low"))
+        SampleRepository.upsert(SampleCreate(filename="kick.wav", path="/s/kick.wav", energy="high"))
+        SampleRepository.upsert(SampleCreate(filename="pad.wav", path="/s/pad.wav", energy="low"))
 
-        results = repo.search(energy="high")
+        results = SampleRepository.search(energy="high")
         assert len(results) == 1
         assert results[0].filename == "kick.wav"
 
-    def test_search_bpm_range(self, repo):
+    def test_search_bpm_range(self, orm_engine):
         """BPM-range-filter skal returnere samples innenfor området."""
-        repo.upsert(SampleCreate(filename="a.wav", path="/s/a.wav", bpm=120.0))
-        repo.upsert(SampleCreate(filename="b.wav", path="/s/b.wav", bpm=140.0))
-        repo.upsert(SampleCreate(filename="c.wav", path="/s/c.wav", bpm=160.0))
+        SampleRepository.upsert(SampleCreate(filename="a.wav", path="/s/a.wav", bpm=120.0))
+        SampleRepository.upsert(SampleCreate(filename="b.wav", path="/s/b.wav", bpm=140.0))
+        SampleRepository.upsert(SampleCreate(filename="c.wav", path="/s/c.wav", bpm=160.0))
 
-        results = repo.search(bpm_min=130.0, bpm_max=150.0)
+        results = SampleRepository.search(bpm_min=130.0, bpm_max=150.0)
         assert len(results) == 1
         assert results[0].filename == "b.wav"
 ```
@@ -524,7 +535,7 @@ data_dir = Path(platformdirs.user_data_dir("samplemind", "samplemind"))
 - `src/data/database.py` kan slettes etter at `repository.py` er implementert og testet
 - Eksisterende `~/.samplemind/library.db` kan beholdes — Alembic kan migrere den
 - Alle importstier som brukte `from data.database import ...` oppdateres til
-  `from samplemind.data.repository import SampleRepository`
+  `from samplemind.data.repositories.sample_repository import SampleRepository`
 
 ---
 
@@ -542,9 +553,9 @@ $ uv run alembic upgrade head
 
 # Sjekk at tabellen eksisterer
 $ python -c "
-from samplemind.data.db import engine
+from samplemind.data.orm import get_engine
 from sqlalchemy import inspect
-print(inspect(engine).get_table_names())
+print(inspect(get_engine()).get_table_names())
 "
 ```
 

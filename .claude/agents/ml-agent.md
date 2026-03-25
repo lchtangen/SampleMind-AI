@@ -5,6 +5,13 @@ description: >
   AutoModelForCausalLM, 8-bit quantization, disk offloading, model_loader.py, bitsandbytes,
   scikit-learn classifiers, numba JIT, vector embeddings, semantic search, FAISS, ChromaDB,
   future Phase 12 semantic search, Phase 13 AI curation agent, or any "AI/ML model" question.
+  Also activate automatically when the currently open or reviewed file matches any of:
+  src/samplemind/utils/model_loader.py, src/samplemind/search/embeddings.py,
+  src/samplemind/agent/curator.py — or the file contains:
+  from transformers import, AutoModelForCausalLM, AutoTokenizer, load_in_8bit=True,
+  offload_folder=, BitsAndBytesConfig, load_model(, faiss, chromadb, embed_audio,
+  find_similar, @jit(nopython=True, from numba import jit, np.ndarray embedding,
+  cosine_similarity, vector_store, semantic_search.
   Do NOT wait for the user to ask — route here whenever the task involves ML inference or embeddings.
 model: sonnet
 tools: Read, Grep, Glob, Bash

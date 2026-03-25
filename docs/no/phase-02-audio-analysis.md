@@ -329,32 +329,37 @@ from pathlib import Path
 
 
 @pytest.fixture
-def silence_wav(tmp_path: Path) -> Path:
-    """Lager en 1-sekunds stille WAV-fil for testing."""
-    y = np.zeros(22050, dtype=np.float32)
-    path = tmp_path / "silence.wav"
-    sf.write(str(path), y, 22050)
+def silent_wav(tmp_path: Path) -> Path:
+    """1 sekund stille WAV — tester at analysatoren håndterer null-energi lyd uten å krasje."""
+    path = tmp_path / "test.wav"
+    sf.write(str(path), np.zeros(22050, dtype=np.float32), 22050)
     return path
 
 
 @pytest.fixture
-def sine_wav(tmp_path: Path) -> Path:
-    """Lager en 1-sekunds 440 Hz sinusbølge (ren tone, A4)."""
-    sr = 22050
-    t = np.linspace(0, 1.0, sr, endpoint=False)
-    y = 0.5 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
-    path = tmp_path / "sine_440.wav"
-    sf.write(str(path), y, sr)
+def kick_wav(tmp_path: Path) -> Path:
+    """Simulert kick: høy amplitude, 60 Hz sinusburs, 0.5 s.
+
+    Forventede resultater: energy='high', instrument='kick', mood='dark'.
+    """
+    t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
+    samples = (0.9 * np.sin(2 * np.pi * 60 * t)).astype(np.float32)
+    path = tmp_path / "kick.wav"
+    sf.write(str(path), samples, 22050)
     return path
 
 
 @pytest.fixture
-def noise_wav(tmp_path: Path) -> Path:
-    """Lager en 0.3-sekunds hvit støy WAV (simulerer hihat)."""
-    rng = np.random.default_rng(42)   # Fast seed for reproduserbarhet
-    y = rng.uniform(-0.3, 0.3, 6615).astype(np.float32)
-    path = tmp_path / "noise.wav"
-    sf.write(str(path), y, 22050)
+def hihat_wav(tmp_path: Path) -> Path:
+    """Simulert hihat: hvit støy, 0.1 s (2205 samples), fast seed.
+
+    Fast seed (42) holder testen deterministisk på tvers av maskiner.
+    Forventede resultater: høy ZCR, høy spektral sentroid, instrument='hihat'.
+    """
+    rng = np.random.default_rng(seed=42)
+    samples = rng.uniform(-0.3, 0.3, 2205).astype(np.float32)
+    path = tmp_path / "hihat.wav"
+    sf.write(str(path), samples, 22050)
     return path
 
 
@@ -467,9 +472,9 @@ import pytest
 from samplemind.analyzer.audio_analysis import analyze_file
 
 
-def test_analyze_sine_wave(sine_wav):
-    """En ren sinusbølge skal gi fornuftige verdier fra full analyse."""
-    result = analyze_file(str(sine_wav))
+def test_analyze_file_sine(kick_wav):
+    """En 60 Hz sinusburs (kick_wav) skal gi fornuftige verdier fra full analyse."""
+    result = analyze_file(str(kick_wav))
 
     # Alle nøkler skal finnes
     assert set(result.keys()) == {"bpm", "key", "energy", "mood", "instrument"}
@@ -483,9 +488,9 @@ def test_analyze_sine_wave(sine_wav):
     assert result["instrument"] in {"kick","snare","hihat","bass","pad","lead","loop","sfx","unknown"}
 
 
-def test_analyze_silence(silence_wav):
+def test_analyze_file_silence(silent_wav):
     """Stille lyd skal gi 'low' energi og ikke krasje."""
-    result = analyze_file(str(silence_wav))
+    result = analyze_file(str(silent_wav))
     assert result["energy"] == "low"
 
 

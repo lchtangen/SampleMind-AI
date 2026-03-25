@@ -9,14 +9,14 @@ requires-python = ">=3.13"
 
 dependencies = [
     # ── Audio analysis ────────────────────────────────────────────────────────
-    "librosa==0.11.0",          # BPM, key, spectral features — pinned for reproducibility
+    "librosa==0.11.0", # BPM, key, spectral features — pinned for reproducibility
     "numpy>=2.2",
     "scipy>=1.15",
     "soundfile>=0.13",
-    "soxr>=0.5",                # high-quality resampling (scipy FFT backend)
+    "soxr>=0.5",       # high-quality resampling (scipy FFT backend)
     # ── Machine learning (rule-based classifier + future neural models) ───────
-    "scikit-learn>=1.6",        # RandomForest, KNN — future ML classifier upgrade
-    "numba>=0.61",              # JIT acceleration for librosa internals
+    "scikit-learn>=1.6", # RandomForest, KNN — future ML classifier upgrade
+    "numba>=0.61",       # JIT acceleration for librosa internals
     # ── Vector search (semantic sample retrieval) ─────────────────────────────
     # sqlite-vec: pure-C SQLite extension for float32/int8/binary vectors;
     # zero external dependencies, MIT/Apache-2.0, works wherever SQLite works.
@@ -37,8 +37,8 @@ dependencies = [
     "httpx>=0.28",
     "python-multipart>=0.0.20",
     # ── Database ORM ──────────────────────────────────────────────────────────
-    "sqlmodel>=0.0.21",         # SQLAlchemy 2.0 + Pydantic v2 in one class
-    "alembic>=1.14",            # versioned schema migrations
+    "sqlmodel>=0.0.21", # SQLAlchemy 2.0 + Pydantic v2 in one class
+    "alembic>=1.14",    # versioned schema migrations
     # ── Auth ──────────────────────────────────────────────────────────────────
     "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7",
@@ -60,23 +60,21 @@ dev = [
     "pytest>=9",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6",
-    "pytest-xdist>=3.6",           # parallel test execution (-n auto)
-    "pytest-benchmark>=4.0",       # performance regression tests
-    "hypothesis>=6.0",             # property-based / fuzz testing
+    "pytest-xdist>=3.6",     # parallel test execution (-n auto)
+    "pytest-benchmark>=4.0", # performance regression tests
+    "hypothesis>=6.0",       # property-based / fuzz testing
 
     # Lint / format / type-checking
-    "ruff>=0.15",                  # replaces flake8 + isort + black; v0.15 adds range suppressions
-    "pyright>=1.1.390",            # Rust-based type checker, replaces mypy
+    "ruff>=0.15",       # replaces flake8 + isort + black; v0.15 adds range suppressions
+    "pyright>=1.1.390", # Rust-based type checker, replaces mypy
     "pre-commit>=4",
 
     # Distribution
-    "pyinstaller>=6.10",           # sidecar binary build (Phase 11)
+    "pyinstaller>=6.10", # sidecar binary build (Phase 11)
 ]
 
 # FL Studio MIDI integration (optional — requires system rtmidi)
-midi = [
-    "python-rtmidi>=1.5",
-]
+midi = ["python-rtmidi>=1.5"]
 
 # AI semantic search models — install with: uv sync --extra ai
 # Compatible with Python 3.13 + numpy 2.x.
@@ -86,14 +84,14 @@ midi = [
 #   madmom==0.16.1     → requires Cython, doesn't build on Python 3.13
 #   Recommended conda env for these: python=3.11, numpy=1.26
 ai = [
-    "sentence-transformers>=3.0",  # semantic text embedding for tag/description search
+    "sentence-transformers>=3.0", # semantic text embedding for tag/description search
     # Future: HuggingFace ClapModel via transformers>=4.40 (numpy 2.x compatible)
     # Future: msclap (Microsoft CLAP v2) when numpy 2.x support is released
 ]
 
 # Embedding models — lightweight semantic search (numpy-2.x compatible)
 embeddings = [
-    "sentence-transformers>=3.0",  # semantic tag/description search via text embeddings
+    "sentence-transformers>=3.0", # semantic tag/description search via text embeddings
 ]
 
 [project.scripts]
@@ -120,28 +118,14 @@ markers = [
 ]
 
 # ── Coverage ───────────────────────────────────────────────────────────────────
-[tool.coverage.run]
-source = ["samplemind"]
-omit = ["*/tests/*", "*/__pycache__/*", "*/conftest.py"]
-
-[tool.coverage.report]
-fail_under = 60
-show_missing = true
-exclude_lines = [
-    "pragma: no cover",
-    "if TYPE_CHECKING:",
-    "@overload",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-]
-
-# ── Ruff linting + formatting ──────────────────────────────────────────────────
-[tool.ruff]
-src = ["src"]
-line-length = 100
-target-version = "py313"
 
 [tool.ruff.lint]
+per-file-ignores = {
+    "tests/*" = ["S101", "PTH", "ANN"],
+"src/main.py" = ["PTH", "E"],
+
+}
+
 select = [
     "E",    # pycodestyle errors
     "F",    # pyflakes (undefined names, unused imports)
@@ -159,19 +143,34 @@ select = [
     "G",    # flake8-logging-format (no % or f-string in logger calls)
 ]
 ignore = [
-    "E501",    # line too long — handled by ruff format
-    "SIM108",  # ternary operator — sometimes less readable than if/else
-    "RUF012",  # mutable class var annotation — SQLModel uses ClassVar pattern
-    "B008",    # do not perform function call in default arg — Typer uses this
-    "ANN101",  # missing self type annotation — not required
-    "ANN102",  # missing cls type annotation — not required
-    "S101",    # assert — fine in tests (overridden per-file below)
+    "E501",   # line too long — handled by ruff format
+    "SIM108", # ternary operator — sometimes less readable than if/else
+    "RUF012", # mutable class var annotation — SQLModel uses ClassVar pattern
+    "B008",   # do not perform function call in default arg — Typer uses this
+    "ANN101", # missing self type annotation — not required
+    "ANN102", # missing cls type annotation — not required
+    "S101",   # assert — fine in tests (overridden per-file below)
+]
+"migrations/*" = ["ANN", "S"]
+[tool.ruff.isort]
+"ANN",  # flake8-annotations (enforce type hints on public functions)"S",    # flake8-bandit (security: avoid exec, assert in production, etc.)"PERF", # Perflint (avoid unnecessary list copies, use generators, etc.)"LOG",  # flake8-logging (correct logging API usage)"G",    # flake8-logging-format (no % or f-string in logger calls)
+]
+known-first-party = ["samplemind"]
+force-sort-within-sections = true
+ignore = [
+    "E501",   # line too long — handled by ruff format
+    "SIM108", # ternary operator — sometimes less readable than if/else
+    "RUF012", # mutable class var annotation — SQLModel uses ClassVar pattern
+    "B008",   # do not perform function call in default arg — Typer uses this
+    "ANN101", # missing self type annotation — not required
+    "ANN102", # missing cls type annotation — not required
+    "S101",   # assert — fine in tests (overridden per-file below)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "PTH", "ANN"]   # assert and os.path are fine in tests
-"src/main.py" = ["PTH", "E"]         # legacy file — do not enforce new rules
-"migrations/*" = ["ANN", "S"]        # Alembic migration files
+"tests/*" = ["S101", "PTH", "ANN"] # assert and os.path are fine in tests
+"src/main.py" = ["PTH", "E"]       # legacy file — do not enforce new rules
+"migrations/*" = ["ANN", "S"]      # Alembic migration files
 
 [tool.ruff.lint.isort]
 known-first-party = ["samplemind"]
@@ -182,7 +181,6 @@ quote-style = "double"
 indent-style = "space"
 
 # ── Pyright (type checking) ────────────────────────────────────────────────────
-[tool.pyright]
 pythonVersion = "3.13"
 venvPath = "."
 venv = ".venv"
@@ -191,7 +189,14 @@ reportMissingImports = true
 reportMissingTypeStubs = false
 reportGeneralTypeIssues = true
 reportOptionalMemberAccess = true
-exclude = ["migrations/", "src/main.py", "build/"]
+exclude = [
+    "migrations/",
+    "src/main.py",
+    "build/",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+]
 
 [dependency-groups]
 dev = [

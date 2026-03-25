@@ -6,6 +6,15 @@ description: >
   Permission enum, RBACService, API keys, OAuth2, Google OAuth, GitHub OAuth,
   core/auth/, jwt_handler.py, rbac.py, permissions.py, SAMPLEMIND_SECRET_KEY,
   "add auth to", "secure this endpoint", "check permissions", or "user roles".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  src/samplemind/core/auth/*.py, src/samplemind/core/auth/jwt_handler.py,
+  src/samplemind/core/auth/rbac.py, src/samplemind/core/auth/dependencies.py,
+  src/samplemind/core/models/user.py — or the file contains:
+  from jose import jwt, CryptContext, bcrypt, pwd_context.hash(, pwd_context.verify(,
+  UserRole, Permission, RBACService, has_permission, require_permission,
+  ROLE_PERMISSIONS, create_access_token, decode_token, OAuth2PasswordBearer,
+  Depends(get_current_active_user, get_current_user, SAMPLEMIND_SECRET_KEY,
+  token_hex(32, hashed_password, is_active, access_token_expire.
   Do NOT wait for the user to ask — route here whenever the task touches auth or security.
 model: sonnet
 tools: Read, Grep, Glob, Bash
