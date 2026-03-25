@@ -43,3 +43,16 @@ examples:
   - "uv run samplemind search --bpm-min 120 --bpm-max 140 --mood dark --json"
   - "uv run samplemind search --key 'C min' --json"
 
+trigger_keywords:
+  - search samples, find samples, query, search library, FTS5
+  - search --instrument, search --energy, search --mood, search --bpm
+  - samplemind search, full-text search, filter library
+
+trigger_files:
+  - "src/samplemind/cli/commands/search_cmd.py"
+  - "src/samplemind/data/repositories/sample_repository.py"
+  - "src/samplemind/web/app.py"
+
+related_skills: [list_samples, tag, serve_web]
+related_workflows: [debug-classifier]
+

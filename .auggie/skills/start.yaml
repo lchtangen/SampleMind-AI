@@ -43,6 +43,18 @@ examples:
   - "bash scripts/start.sh web 5001"
   - "bash scripts/start.sh desktop"
   - "bash scripts/start.sh both"
+
+trigger_keywords:
+  - start, start services, quick start, start all, start web, start desktop
+  - pnpm tauri dev, serve, start.sh, boot services, launch
+  - start Flask, start FastAPI, start Tauri, start both
+
+trigger_files:
+  - "scripts/start.sh"
+  - "scripts/setup-dev.sh"
+
+related_skills: [serve_web, serve_api, health_check, sidecar]
+related_workflows: [dev-start]
   - "uv run samplemind serve --port 5000"
   - "uv run samplemind api --reload"
 

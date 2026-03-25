@@ -54,3 +54,17 @@ examples:
   - "uv run alembic current"
   - "uv run python -c 'from samplemind.core.config import get_settings; print(get_settings().database_url)'"
 
+trigger_keywords:
+  - DB inspect, database schema, alembic current, PRAGMA, SQLite stats
+  - table counts, db path, database stats, db-inspect, inspect database
+  - alembic history, alembic version, schema, database URL
+
+trigger_files:
+  - "src/samplemind/data/orm.py"
+  - "src/samplemind/data/database.py"
+  - "migrations/env.py"
+  - "alembic.ini"
+
+related_skills: [db_migrate, health_check]
+related_workflows: [dev-start]
+

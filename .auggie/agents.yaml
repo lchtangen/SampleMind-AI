@@ -44,6 +44,8 @@ agents:
       - "hihat_wav"
     domains: [src/samplemind/analyzer/, tests/conftest.py, tests/test_audio_analysis.py]
     default: true
+    workflows: [debug-classifier, add-audio-feature, ci-check]
+    commands: [/analyze, /import, /list, /search, /tag]
 
   test-runner:
     description: >
@@ -73,6 +75,8 @@ agents:
       - "uv run pytest"
       - "fail_under"
     domains: [tests/, .github/workflows/]
+    workflows: [ci-check, new-feature]
+    commands: [/check, /test]
 
   tauri-builder:
     description: >
@@ -108,6 +112,8 @@ agents:
       - "tauri-plugin-"
       - "tauri::Builder::default()"
     domains: [app/, app/src-tauri/, app/src/]
+    workflows: [ci-check, release]
+    commands: [/build, /check]
 
   doc-writer:
     description: >
@@ -135,6 +141,8 @@ agents:
       - "## Usage"
       - "## Installation"
     domains: [docs/, ARCHITECTURE.md, README.md, CONTRIBUTING.md]
+    workflows: [new-feature]
+    commands: []
 
   fl-studio-agent:
     description: >
@@ -167,6 +175,8 @@ agents:
       - "win32com.client"
       - "auval"
     domains: [plugin/, src/samplemind/sidecar/]
+    workflows: [fl-export, dev-start]
+    commands: [/sidecar]
 
 # ── Phase-specific agents (route when phase number is mentioned) ──────────────
 
@@ -187,6 +197,8 @@ agents:
       - "tests/test_fingerprint.py"
       - "tests/conftest.py"
     domains: [tests/, src/samplemind/analyzer/]
+    workflows: [ci-check, add-audio-feature]
+    commands: [/check, /test]
 
   phase-03-database:
     description: >
@@ -209,6 +221,8 @@ agents:
       - "migrations/env.py"
       - "alembic.ini"
     domains: [src/samplemind/data/, migrations/]
+    workflows: [db-migration, ci-check]
+    commands: [/db-inspect]
 
   phase-04-cli:
     description: >
@@ -227,6 +241,8 @@ agents:
       - "src/samplemind/cli/__init__.py"
       - "src/main.py"
     domains: [src/samplemind/cli/]
+    workflows: [new-feature, ci-check]
+    commands: [/import, /list, /search, /tag, /serve, /analyze]
 
   phase-05-web:
     description: >
@@ -246,6 +262,8 @@ agents:
       - "src/samplemind/web/static/app.js"
       - "src/samplemind/web/static/style.css"
     domains: [src/samplemind/web/, src/web/]
+    workflows: [dev-start, ci-check]
+    commands: [/serve, /health]
 
   phase-06-desktop:
     description: >
@@ -267,6 +285,8 @@ agents:
       - "app/src/*.ts"
       - "app/src/**/*.ts"
     domains: [app/]
+    workflows: [ci-check, release]
+    commands: [/build, /start]
 
   phase-07-fl-studio:
     description: >
@@ -285,6 +305,8 @@ agents:
       - "scripts/fl-export.py"
       - "src/samplemind/sidecar/server.py"
     domains: [plugin/, src/samplemind/sidecar/]
+    workflows: [fl-export]
+    commands: [/sidecar]
 
   phase-08-vst-plugin:
     description: >
@@ -304,6 +326,8 @@ agents:
       - "plugin/**/*.cpp"
       - "plugin/**/*.h"
     domains: [plugin/]
+    workflows: [build-plugin, ci-check]
+    commands: [/build]
 
   phase-09-sample-packs:
     description: >
@@ -323,6 +347,8 @@ agents:
       - "src/samplemind/packs/builder.py"
       - "src/samplemind/packs/importer.py"
     domains: [src/samplemind/packs/]
+    workflows: [pack-create]
+    commands: [/pack]
 
   phase-10-production:
     description: >
@@ -342,6 +368,8 @@ agents:
       - "scripts/build-sidecar.sh"
       - "scripts/notarize.sh"
     domains: [.github/workflows/, app/src-tauri/]
+    workflows: [release, ci-check]
+    commands: [/build, /check]
 
 # ── Functional / service agents (added Phase 3–5 realised features) ──────────
 
@@ -381,6 +409,8 @@ agents:
       refresh: POST /api/v1/auth/refresh
       me: GET /api/v1/auth/me
     run_dev: "uv run samplemind api --reload"
+    workflows: [api-test, dev-start, ci-check]
+    commands: [/serve, /auth, /health, /db-inspect]
 
   web-agent:
     description: >
@@ -424,6 +454,8 @@ agents:
       - "GET  /api/status  → health + stats"
       - "GET  /audio/<id>  → stream WAV file"
     run_dev: "uv run samplemind serve --port 5000"
+    workflows: [dev-start, ci-check]
+    commands: [/serve, /health]
 
   security-agent:
     description: >
@@ -459,6 +491,8 @@ agents:
       access_expire_minutes: 30
       refresh_expire_days: 7
       secret_key_env: SAMPLEMIND_SECRET_KEY
+    workflows: [ci-check]
+    commands: [/auth]
 
   devops-agent:
     description: >
@@ -492,6 +526,8 @@ agents:
       - "[tool.ruff]"
       - "[tool.pytest.ini_options]"
     domains: [scripts/, .github/, pyproject.toml]
+    workflows: [dev-start, onboard-dev, ci-check]
+    commands: [/setup, /start, /health, /check]
 
   ml-agent:
     description: >
@@ -522,3 +558,5 @@ agents:
       - "Current use: rule-based classifiers (classifier.py) — no heavy ML needed yet"
       - "Phase 12 target: vector embeddings for semantic sample search"
       - "Phase 13 target: AI agent automation for library curation"
+    workflows: [add-audio-feature]
+    commands: [/analyze]

@@ -72,3 +72,17 @@ examples:
   - "uv run samplemind pack verify my-pack.smpack"
   - "uv run samplemind pack list my-pack.smpack"
 
+trigger_keywords:
+  - sample pack, .smpack, pack create, pack import, pack verify
+  - smpack, SamplePackManifest, pack list, pack slug, pack version
+  - distribute samples, package samples, export pack
+
+trigger_files:
+  - "src/samplemind/packs/manifest.py"
+  - "src/samplemind/packs/builder.py"
+  - "src/samplemind/packs/importer.py"
+  - "src/samplemind/cli/commands/pack_cmd.py"
+
+related_skills: [list_samples, search, tag]
+related_workflows: [ci-check]
+

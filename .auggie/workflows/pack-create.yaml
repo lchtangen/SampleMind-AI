@@ -1,0 +1,119 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflow: pack-create
+# Create, verify, and distribute a .smpack sample pack archive.
+# Agent: phase-09-sample-packs
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: pack-create
+description: >
+  Full workflow for creating a .smpack sample pack: select samples from the
+  library → set metadata → build ZIP archive with manifest.json → verify
+  checksums → distribute.
+agent: phase-09-sample-packs
+trigger_keywords: [sample pack, .smpack, pack create, smpack, distribute samples]
+
+steps:
+  1_select_samples:
+    name: "Select samples for the pack"
+    command: "uv run samplemind list --instrument kick --energy high --json > /tmp/candidates.json"
+    alternatives:
+      by_genre: "uv run samplemind search --genre trap --json"
+      by_mood:  "uv run samplemind search --mood dark --json"
+      by_ids:   "uv run samplemind list --ids 1,2,3,42 --json"
+    filter_checklist:
+      - "All energy values: low/mid/high (NEVER medium)"
+      - "All instrument values: kick/snare/hihat/bass/pad/lead/loop/sfx/unknown"
+      - "All files exist on disk (not broken paths)"
+
+  2_design_manifest:
+    name: "Design the pack manifest"
+    schema: |
+      # src/samplemind/packs/manifest.py
+      class SamplePackManifest(BaseModel):
+          name: str              # "Trap Kicks Vol 1"
+          slug: str              # "trap-kicks-v1"  (URL-safe, hyphens only)
+          version: str           # "1.0.0"          (semver)
+          author: str            # "Your Name"
+          description: str
+          created_at: datetime
+          samplemind_min_version: str   # "0.3.0"
+          samples: list[SampleEntry]
+    slug_rules:
+      - "Lowercase only"
+      - "Hyphens instead of spaces"
+      - "No special characters"
+      - "Unique across all packs"
+
+  3_create_pack:
+    name: "Build the .smpack archive"
+    command: "uv run samplemind pack create '{name}' {slug} --instrument {instrument} --energy {energy}"
+    code: |
+      import zipfile, json, hashlib
+      from pathlib import Path
+      from datetime import datetime, timezone
+
+      def create_pack(name: str, slug: str, samples: list[Path],
+                      output_dir: Path, version: str = "1.0.0", **meta) -> Path:
+          output_path = output_dir / f"{slug}.smpack"
+          entries = []
+          with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+              for sample in samples:
+                  sha256 = hashlib.sha256(sample.read_bytes()).hexdigest()
+                  zf.write(sample, f"samples/{sample.name}")
+                  entries.append({
+                      "filename": sample.name, "sha256": sha256,
+                      **get_sample_metadata(sample),
+                  })
+              manifest = {
+                  "name": name, "slug": slug, "version": version,
+                  "created_at": datetime.now(timezone.utc).isoformat(),
+                  "samples": entries, **meta,
+              }
+              zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+          return output_path
+    output: "{slug}.smpack (ZIP archive with manifest.json + samples/)"
+
+  4_verify_pack:
+    name: "Verify pack integrity"
+    command: "uv run samplemind pack verify {slug}.smpack"
+    checks:
+      - "manifest.json parses as valid SamplePackManifest"
+      - "All samples in manifest exist in ZIP"
+      - "SHA-256 checksums match"
+      - "energy values: only low/mid/high"
+      - "instrument values: only valid enum values"
+    code: |
+      def verify_pack(pack_path: Path) -> tuple[bool, list[str]]:
+          issues = []
+          with zipfile.ZipFile(pack_path, "r") as zf:
+              if "manifest.json" not in zf.namelist():
+                  return False, ["Missing manifest.json"]
+              manifest = json.loads(zf.read("manifest.json"))
+              for entry in manifest.get("samples", []):
+                  if entry.get("energy") == "medium":
+                      issues.append(f"{entry['filename']}: energy='medium' is invalid — use 'mid'")
+                  arc_name = f"samples/{entry['filename']}"
+                  if arc_name not in zf.namelist():
+                      issues.append(f"Missing file in archive: {arc_name}")
+          return len(issues) == 0, issues
+
+  5_test_import:
+    name: "Test importing the pack into a fresh library"
+    command: "uv run samplemind pack import {slug}.smpack --json"
+    expected: |
+      {"imported": <N>, "duplicates": 0, "errors": 0, "pack": "{slug}", "version": "1.0.0"}
+
+  6_distribute:
+    name: "Distribute the pack"
+    options:
+      github_release: "Upload to GitHub Releases as an asset"
+      local:          "Copy to FL Studio Samples/SampleMind/Packs/"
+      checksum:       "sha256sum {slug}.smpack > {slug}.smpack.sha256"
+
+validation_rules:
+  - "slug must be unique — check existing packs before creating"
+  - "version must follow semver: 1.0.0, not v1 or 1.0"
+  - "energy: ONLY 'low', 'mid', 'high' — NEVER 'medium'"
+  - "instrument: ONLY valid enum values from classifier"
+  - "SHA-256 checksum of pack file must match on import"
+

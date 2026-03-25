@@ -59,3 +59,15 @@ examples:
   - "uv run samplemind list --bpm-min 120 --bpm-max 140 --instrument kick"
   - "uv run samplemind list --genre trap --mood dark --json"
 
+trigger_keywords:
+  - list samples, show library, list all, query library, get samples
+  - filter by key, filter by BPM, filter by instrument, filter by energy
+  - samplemind list, list --json, library contents
+
+trigger_files:
+  - "src/samplemind/cli/commands/library.py"
+  - "src/samplemind/data/repositories/sample_repository.py"
+
+related_skills: [search, tag, import_samples]
+related_workflows: [debug-classifier]
+

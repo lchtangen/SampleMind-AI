@@ -64,6 +64,24 @@ class Settings:
         "tauri://localhost",      # Tauri production
     ]
 
+    # ── Audio import ──────────────────────────────────────────────────────────
+    # File extensions recognised as importable audio files.
+    # Used by the import command and web upload validation.
+    SUPPORTED_EXTENSIONS: tuple[str, ...] = (".wav", ".aif", ".aiff", ".flac")
+
+    # Maximum file size in bytes to attempt analysis.
+    # Files larger than this are skipped with a warning to avoid OOM on librosa.
+    # Default: 500 MB.  Override via SAMPLEMIND_MAX_AUDIO_BYTES env var.
+    MAX_AUDIO_FILE_BYTES: int = int(
+        os.getenv("SAMPLEMIND_MAX_AUDIO_BYTES", str(500 * 1024 * 1024))
+    )
+
+    # ── Batch processing ──────────────────────────────────────────────────────
+    # Number of worker processes for parallel batch analysis.
+    # 0 means os.cpu_count() — auto-detected at runtime.
+    # Override via SAMPLEMIND_BATCH_WORKERS env var.
+    BATCH_WORKERS: int = int(os.getenv("SAMPLEMIND_BATCH_WORKERS", "0"))
+
     # ── Environment ───────────────────────────────────────────────────────────
     ENVIRONMENT: str = os.getenv("SAMPLEMIND_ENV", "development")
 

@@ -47,3 +47,15 @@ examples:
   - "uv run uvicorn samplemind.api.main:app --reload"
   - "curl http://localhost:8000/api/v1/health"
 
+trigger_keywords:
+  - serve API, start API, FastAPI, uvicorn, API server, port 8000
+  - samplemind api, api --reload, serve_api, REST API server
+  - /api/docs, /api/v1/health, OpenAPI, Swagger
+
+trigger_files:
+  - "src/samplemind/api/main.py"
+  - "src/samplemind/api/routes/*.py"
+
+related_skills: [health_check, auth, serve_web]
+related_workflows: [dev-start, ci-check]
+

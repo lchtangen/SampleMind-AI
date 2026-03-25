@@ -134,8 +134,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from samplemind.data.repositories.sample_repository import SampleRepository
 from samplemind.packs.manifest import PackManifest, SampleEntry, compute_sha256
-from samplemind.data.repository import SampleRepository
 
 
 def export_pack(
@@ -156,8 +156,8 @@ def export_pack(
 
     Returnerer PackManifest-objektet (med SHA-256-sjekksummer).
     """
-    repo = SampleRepository()
-    samples = repo.search(
+    # SampleRepository bruker statiske metoder — ingen instans nødvendig
+    samples = SampleRepository.search(
         instrument=instrument,
         mood=mood,
         energy=energy,
@@ -230,9 +230,9 @@ import json
 import zipfile
 from pathlib import Path
 
-from samplemind.packs.manifest import PackManifest, compute_sha256
-from samplemind.data.repository import SampleRepository
 from samplemind.analyzer.audio_analysis import analyze_file
+from samplemind.data.repositories.sample_repository import SampleRepository
+from samplemind.packs.manifest import PackManifest, compute_sha256
 
 
 class PackImportError(Exception):
@@ -260,7 +260,6 @@ def import_pack(
         raise PackImportError(f"Fant ikke pakken: {pack_path}")
 
     dest_dir.mkdir(parents=True, exist_ok=True)
-    repo = SampleRepository()
 
     with zipfile.ZipFile(pack_path, "r") as zf:
         # Les manifest
@@ -285,7 +284,7 @@ def import_pack(
             dest_path = dest_dir / entry.filename
 
             # Sjekk om sample allerede eksisterer i DB (idempotent)
-            existing = repo.get_by_name(entry.filename)
+            existing = SampleRepository.get_by_name(entry.filename)
             if existing and dest_path.exists():
                 skipped += 1
                 continue
@@ -328,7 +327,7 @@ def import_pack(
                         "energy": entry.energy,
                     }
 
-            repo.upsert(str(dest_path), **metadata)
+            SampleRepository.upsert(str(dest_path), **metadata)
             imported += 1
 
     return {"imported": imported, "skipped": skipped, "errors": errors}

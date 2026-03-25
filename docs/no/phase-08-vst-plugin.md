@@ -327,9 +327,9 @@ import socket
 import os
 import argparse
 from pathlib import Path
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
 from samplemind.analyzer.audio_analysis import analyze_file
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 
 def handle_request(data: dict) -> dict:
@@ -340,9 +340,8 @@ def handle_request(data: dict) -> dict:
     action = data.get("action")
 
     if action == "search":
-        # Søk i biblioteket
-        repo = SampleRepository()
-        samples = repo.search(
+        # SampleRepository bruker statiske metoder — ingen instans nødvendig
+        samples = SampleRepository.search(
             query=data.get("query"),
             energy=data.get("energy"),
             instrument=data.get("instrument"),
@@ -399,7 +398,8 @@ def run_socket_server(socket_path: str):
     if sock_file.exists():
         sock_file.unlink()
 
-    init_db()
+    # init_orm() oppretter alle SQLModel-tabeller hvis de mangler. Idempotent.
+    init_orm()
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
         server.bind(socket_path)

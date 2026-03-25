@@ -119,13 +119,8 @@ markers = [
 
 # ── Coverage ───────────────────────────────────────────────────────────────────
 
+
 [tool.ruff.lint]
-per-file-ignores = {
-    "tests/*" = ["S101", "PTH", "ANN"],
-"src/main.py" = ["PTH", "E"],
-
-}
-
 select = [
     "E",    # pycodestyle errors
     "F",    # pyflakes (undefined names, unused imports)
@@ -151,36 +146,25 @@ ignore = [
     "ANN102", # missing cls type annotation — not required
     "S101",   # assert — fine in tests (overridden per-file below)
 ]
-"migrations/*" = ["ANN", "S"]
-[tool.ruff.isort]
-"ANN",  # flake8-annotations (enforce type hints on public functions)"S",    # flake8-bandit (security: avoid exec, assert in production, etc.)"PERF", # Perflint (avoid unnecessary list copies, use generators, etc.)"LOG",  # flake8-logging (correct logging API usage)"G",    # flake8-logging-format (no % or f-string in logger calls)
-]
-known-first-party = ["samplemind"]
-force-sort-within-sections = true
-ignore = [
-    "E501",   # line too long — handled by ruff format
-    "SIM108", # ternary operator — sometimes less readable than if/else
-    "RUF012", # mutable class var annotation — SQLModel uses ClassVar pattern
-    "B008",   # do not perform function call in default arg — Typer uses this
-    "ANN101", # missing self type annotation — not required
-    "ANN102", # missing cls type annotation — not required
-    "S101",   # assert — fine in tests (overridden per-file below)
-]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "PTH", "ANN"] # assert and os.path are fine in tests
-"src/main.py" = ["PTH", "E"]       # legacy file — do not enforce new rules
-"migrations/*" = ["ANN", "S"]      # Alembic migration files
+"tests/*" = ["S101", "PTH", "ANN"]
+"src/main.py" = ["PTH", "E"]
+"migrations/*" = ["ANN", "S"]
 
-[tool.ruff.lint.isort]
+[tool.ruff.isort]
 known-first-party = ["samplemind"]
 force-sort-within-sections = true
+
+
+
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
-# ── Pyright (type checking) ────────────────────────────────────────────────────
+
+[tool.pyright]
 pythonVersion = "3.13"
 venvPath = "."
 venv = ".venv"

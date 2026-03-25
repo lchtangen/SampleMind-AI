@@ -216,7 +216,8 @@ Copies the sample path to the clipboard. The user can then paste into FL Studio:
 import sys
 import subprocess
 from pathlib import Path
-from samplemind.models import Sample
+
+from samplemind.core.models.sample import Sample
 
 
 def copy_sample_path(sample: Sample) -> bool:

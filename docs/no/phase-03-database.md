@@ -320,13 +320,13 @@ class SampleRepository:
 
 ## 5. Side om side — gammelt vs nytt
 
-| Operasjon | Gammelt (`database.py`) | Nytt (`repository.py`) |
-|-----------|------------------------|----------------------|
-| Lagre sample | `conn.execute("INSERT INTO samples ...")` | `repo.upsert(SampleCreate(...))` |
-| Oppdater tags | `f"UPDATE samples SET {', '.join(fields)}"` | `repo.tag(path, SampleUpdate(...))` |
+| Operasjon | Gammelt (`database.py`) | Nytt (`sample_repository.py`) |
+|-----------|------------------------|-------------------------------|
+| Lagre sample | `conn.execute("INSERT INTO samples ...")` | `SampleRepository.upsert(SampleCreate(...))` |
+| Oppdater tags | `f"UPDATE samples SET {', '.join(fields)}"` | `SampleRepository.tag(path, SampleUpdate(...))` |
 | Søk | `sql += " AND bpm >= ?"` streng-bygging | `stmt = stmt.where(Sample.bpm >= bpm_min)` |
-| Finn etter navn | `"SELECT * FROM samples WHERE filename LIKE ?"` | `repo.get_by_name("kick")` |
-| Antall | `"SELECT COUNT(*) FROM samples"` | `repo.count()` |
+| Finn etter navn | `"SELECT * FROM samples WHERE filename LIKE ?"` | `SampleRepository.get_by_name("kick")` |
+| Antall | `"SELECT COUNT(*) FROM samples"` | `SampleRepository.count()` |
 | Type-sikkerhet | Ingen — alt er `sqlite3.Row` | Full — `sample.bpm: Optional[float]` |
 | Autocompletion | Ingen i IDE | Fungerer med `sample.` i VS Code |
 

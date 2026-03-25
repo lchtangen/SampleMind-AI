@@ -47,3 +47,16 @@ examples:
   - "curl http://localhost:5000/api/status"
   - "uv run python -c 'from samplemind.data.orm import get_engine; print(get_engine().url)'"
 
+trigger_keywords:
+  - health check, service health, is the API running, is Flask running
+  - health, /api/status, /api/v1/health, sidecar socket, check services
+  - port 8000, port 5000, service down, not responding
+
+trigger_files:
+  - "src/samplemind/api/main.py"
+  - "src/samplemind/web/app.py"
+  - "src/samplemind/sidecar/server.py"
+
+related_skills: [serve_api, serve_web, sidecar, db_inspect]
+related_workflows: [dev-start]
+

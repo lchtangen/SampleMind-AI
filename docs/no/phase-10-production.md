@@ -89,7 +89,7 @@ uv run pyinstaller \
     --onefile \
     --name samplemind-sidecar \
     --hidden-import samplemind.analyzer.audio_analysis \
-    --hidden-import samplemind.data.repository \
+    --hidden-import samplemind.data.repositories.sample_repository \
     --hidden-import soundfile \
     --hidden-import librosa \
     src/samplemind/sidecar/server.py
@@ -114,7 +114,7 @@ a = Analysis(
     datas=[],
     hiddenimports=[
         "samplemind.analyzer.audio_analysis",
-        "samplemind.data.repository",
+        "samplemind.data.repositories.sample_repository",
         "soundfile",
         "librosa",
         "scipy.signal",

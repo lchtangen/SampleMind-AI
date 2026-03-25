@@ -92,35 +92,40 @@ def create_app(config: dict = None) -> Flask:
 ```python
 # filename: src/samplemind/web/blueprints/library.py
 
-from flask import Blueprint, render_template, request, send_file, abort
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
 from pathlib import Path
+
+from flask import Blueprint, abort, render_template, request, send_file
+
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 library_bp = Blueprint("library", __name__)
 
 
 @library_bp.before_app_request
-def setup():
-    init_db()
+def setup() -> None:
+    """Sikrer at alle SQLModel-tabeller eksisterer før første forespørsel.
+
+    init_orm() er idempotent — trygt å kalle ved hver oppstart.
+    """
+    init_orm()
 
 
 @library_bp.route("/")
 def index():
     """Hoved-side — returnerer full HTML ved normal forespørsel."""
-    repo = SampleRepository()
-    samples = repo.search()
-    return render_template("index.html", samples=samples, total=repo.count())
+    # SampleRepository bruker statiske metoder — ingen instans nødvendig
+    samples = SampleRepository.search()
+    return render_template("index.html", samples=samples, total=SampleRepository.count())
 
 
 @library_bp.route("/samples/partial")
 def samples_partial():
     """
     HTMX-partial: returnerer kun tabellen, ikke hele siden.
-    Kalles når søkefiltre endres.
+    Kalles når søkefiltre endres (utløst av hx-get på input-feltene).
     """
-    repo = SampleRepository()
-    samples = repo.search(
+    samples = SampleRepository.search(
         query=request.args.get("q"),
         energy=request.args.get("energy"),
         instrument=request.args.get("instrument"),
@@ -135,13 +140,12 @@ def samples_partial():
 
 @library_bp.route("/audio/<int:sample_id>")
 def audio(sample_id: int):
-    """Serve audio-filen for en sample (for waveform-preview)."""
-    from sqlmodel import Session, select
-    from samplemind.models import Sample
-    from samplemind.data.db import engine
+    """Serve audio-filen for en sample (for waveform-preview).
 
-    with Session(engine) as session:
-        sample = session.get(Sample, sample_id)
+    SampleRepository.get_by_id() slår opp på heltalls-rad-id (ikke UUID user_id).
+    Returnerer 404 hvis raden mangler eller filen er slettet/flyttet.
+    """
+    sample = SampleRepository.get_by_id(sample_id)
     if not sample:
         abort(404)
     path = Path(sample.path)
@@ -270,9 +274,9 @@ import json
 from pathlib import Path
 from flask import Blueprint, request, Response, stream_with_context
 from samplemind.analyzer.audio_analysis import analyze_file
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
-from samplemind.models import SampleCreate
+from samplemind.core.models.sample import SampleCreate
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 import_bp = Blueprint("import_", __name__)
 
@@ -299,12 +303,12 @@ def import_folder():
     wav_files = list(folder.glob("**/*.wav"))
 
     def generate():
-        """Generator som streamer SSE-events."""
-        init_db()
-        repo = SampleRepository()
+        """Generator som streamer SSE-events — én per WAV-fil analysert."""
+        # Sikrer at tabellene finnes før første upsert. init_orm() er idempotent.
+        init_orm()
         total = len(wav_files)
 
-        # Send start-event
+        # Varsle klienten om total filantall på forhånd
         yield _sse_event("start", {"total": total})
 
         imported = 0
@@ -312,7 +316,8 @@ def import_folder():
             try:
                 analysis = analyze_file(str(wav))
                 data = SampleCreate(filename=wav.name, path=str(wav.resolve()), **analysis)
-                sample = repo.upsert(data)
+                # SampleRepository.upsert() er en statisk metode — ingen instans nødvendig
+                SampleRepository.upsert(data)
                 imported += 1
 
                 # Send fremgang for hver fil
@@ -497,16 +502,20 @@ document.addEventListener("click", (e) => {
 
 import pytest
 from samplemind.web.app import create_app
-from samplemind.data.db import init_db
+from samplemind.data.orm import init_orm
 
 
 @pytest.fixture
 def client(tmp_path):
-    """Flask test-klient med in-memory database."""
+    """Flask test-klient med in-memory database.
+
+    init_orm() oppretter alle SQLModel-tabeller i ORM-motoren.
+    I tester bør orm_engine-fixturet brukes for å omdirigere til in-memory SQLite.
+    """
     app = create_app({"TESTING": True})
     with app.test_client() as c:
         with app.app_context():
-            init_db()
+            init_orm()   # oppretter users + samples tabeller hvis de ikke finnes
         yield c
 
 

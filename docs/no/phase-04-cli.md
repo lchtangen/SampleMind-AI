@@ -118,9 +118,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from rich.table import Table
 
 from samplemind.analyzer.audio_analysis import analyze_file
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
-from samplemind.models import SampleCreate
+from samplemind.core.models.sample import SampleCreate
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 # Bruk stderr for status-meldinger, stdout for data (JSON)
 # Dette er kritisk for Tauri IPC — Rust leser stdout, ikke stderr
@@ -146,8 +146,7 @@ def import_cmd(
         console.print("[yellow]Ingen WAV-filer funnet.[/yellow]")
         raise typer.Exit(0)
 
-    init_db()
-    repo = SampleRepository()
+    init_orm()
     results = []
 
     # Rich progress-bar (vises kun når IKKE --json er satt)
@@ -169,7 +168,7 @@ def import_cmd(
                     path=str(wav.resolve()),
                     **analysis,
                 )
-                sample = repo.upsert(data)
+                sample = SampleRepository.upsert(data)
                 results.append({"id": sample.id, "filename": sample.filename, **analysis})
             except Exception as e:
                 console.print(f"[red]Feil: {wav.name} — {e}[/red]")
@@ -221,8 +220,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 console = Console(stderr=True)
 stdout = Console()
@@ -241,9 +240,8 @@ def search_cmd(
     json_output: bool = typer.Option(False, "--json", help="JSON-output"),
 ):
     """Søk i sample-biblioteket med ett eller flere filtre."""
-    init_db()
-    repo = SampleRepository()
-    results = repo.search(
+    init_orm()
+    results = SampleRepository.search(
         query=query, key=key, genre=genre, energy=energy,
         instrument=instrument, bpm_min=bpm_min, bpm_max=bpm_max,
     )
@@ -283,7 +281,7 @@ def search_cmd(
             s.genre or "", s.energy or "", s.mood or "",
         )
     console.print(table)
-    console.print(f"\n{len(results)} resultat(er) | {repo.count()} totalt")
+    console.print(f"\n{len(results)} resultat(er) | {SampleRepository.count()} totalt")
 
 
 def list_cmd(
@@ -306,9 +304,9 @@ def list_cmd(
 from typing import Optional
 import typer
 from rich.console import Console
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
-from samplemind.models import SampleUpdate
+from samplemind.core.models.sample import SampleUpdate
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 console = Console()
 
@@ -322,21 +320,20 @@ def tag_cmd(
     tags: Optional[str] = typer.Option(None, "--tags", help="Kommaseparerte frie tags"),
 ):
     """Tag et sample med sjanger, stemning, energi eller egendefinerte tags."""
-    init_db()
+    init_orm()
 
     if energy and energy not in {"low", "mid", "high"}:
         console.print(f"[red]Ugyldig energi '{energy}'. Velg: low, mid, high[/red]")
         raise typer.Exit(1)
 
-    repo = SampleRepository()
-    sample = repo.get_by_name(name)
+    sample = SampleRepository.get_by_name(name)
 
     if not sample:
         console.print(f"[red]Ingen sample matcher '{name}'. Kjør 'samplemind list' for å se hva som er importert.[/red]")
         raise typer.Exit(1)
 
     update = SampleUpdate(genre=genre, mood=mood, energy=energy, tags=tags)
-    repo.tag(sample.path, update)
+    SampleRepository.tag(sample.path, update)
 
     console.print(f"[green]Tagget:[/green] {sample.filename}")
     if genre:  console.print(f"  Sjanger:  {genre}")
@@ -363,10 +360,10 @@ def serve_cmd(
     debug: bool = typer.Option(False, "--debug", help="Flask debug-modus"),
 ):
     """Start web-UIet på localhost."""
+    from samplemind.data.orm import init_orm
     from samplemind.web.app import create_app
-    from samplemind.data.db import init_db
 
-    init_db()
+    init_orm()
     app = create_app()
 
     console.print(f"[bold green]SampleMind AI Web UI → http://localhost:{port}[/bold green]")

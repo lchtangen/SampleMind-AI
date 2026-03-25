@@ -42,3 +42,16 @@ examples:
   - "uv run samplemind analyze kick.wav --fingerprint --json"
   - "uv run samplemind import samples/ --dedupe --json"
 
+trigger_keywords:
+  - fingerprint, SHA-256, deduplicate, duplicate detection, dedup
+  - fingerprint_file, sha256, 64KB, hashlib, duplicate samples
+  - find duplicates, remove duplicates, same file
+
+trigger_files:
+  - "src/samplemind/analyzer/fingerprint.py"
+  - "src/samplemind/data/repositories/sample_repository.py"
+  - "tests/test_fingerprint.py"
+
+related_skills: [analyze_audio, batch_import, list_samples]
+related_workflows: [add-audio-feature]
+

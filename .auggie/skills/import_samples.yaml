@@ -37,3 +37,15 @@ examples:
   - "uv run samplemind import samples/ --json"
   - "uv run samplemind import ~/Packs/808s/ --workers 0 --json"
 
+trigger_keywords:
+  - import samples, import folder, scan folder, load samples
+  - import, samplemind import, add samples to library, ingest
+  - import_samples, import-samples, workers, parallel import
+
+trigger_files:
+  - "src/samplemind/cli/commands/import_cmd.py"
+  - "src/samplemind/analyzer/audio_analysis.py"
+
+related_skills: [batch_import, analyze_audio, fingerprint, list_samples]
+related_workflows: [add-audio-feature, onboard-dev]
+

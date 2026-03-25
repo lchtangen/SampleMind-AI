@@ -34,3 +34,17 @@ post_setup:
 examples:
   - "bash scripts/setup-dev.sh"
 
+trigger_keywords:
+  - setup, dev environment, first time, install, configure, onboard
+  - setup-dev.sh, setup_dev, fresh install, new machine, WSL2 setup
+  - uv sync, pre-commit install, git config fsmonitor
+
+trigger_files:
+  - "scripts/setup-dev.sh"
+  - "pyproject.toml"
+  - ".pre-commit-config.yaml"
+  - ".env.example"
+
+related_skills: [lint, run_tests, check, health_check]
+related_workflows: [onboard-dev, dev-start]
+

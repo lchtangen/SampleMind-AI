@@ -45,3 +45,18 @@ examples:
   - "cd app && pnpm tauri build --target universal-apple-darwin"
   - "uv run pyinstaller samplemind-server.spec --noconfirm"
 
+trigger_keywords:
+  - Tauri build, pnpm tauri, cargo build, Universal Binary, build the app
+  - pnpm tauri dev, pnpm tauri build, build error, Cargo compile
+  - PyInstaller, sidecar bundle, --target universal-apple-darwin
+  - release build, production build, tauri::Builder
+
+trigger_files:
+  - "app/src-tauri/Cargo.toml"
+  - "app/src-tauri/tauri.conf.json"
+  - "app/package.json"
+  - ".github/workflows/release.yml"
+
+related_skills: [check, lint]
+related_workflows: [ci-check, release]
+

@@ -31,3 +31,16 @@ examples:
   - "uv run python src/samplemind/sidecar/server.py --socket /tmp/samplemind.sock &"
   - "echo '{\"version\": 1, \"action\": \"ping\"}' | nc -U /tmp/samplemind.sock"
 
+trigger_keywords:
+  - sidecar, socket, Unix socket, /tmp/samplemind.sock, nc -U
+  - sidecar server, sidecar not responding, ping sidecar, sidecar IPC
+  - server.py, start sidecar, sidecar socket, JUCE sidecar
+
+trigger_files:
+  - "src/samplemind/sidecar/server.py"
+  - "src/samplemind/sidecar/*.py"
+  - "plugin/Source/PluginProcessor.cpp"
+
+related_skills: [health_check, serve_api]
+related_workflows: [dev-start]
+

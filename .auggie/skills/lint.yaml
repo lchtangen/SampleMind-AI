@@ -30,3 +30,17 @@ examples:
   - "uv run ruff check --fix src/ && uv run ruff format src/"
   - "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
 
+trigger_keywords:
+  - ruff, lint, format, linting, ruff error, clippy, style error
+  - E501 line too long, F401 unused import, ruff check, ruff format
+  - fix linting, fix formatting, code style, cargo clippy
+
+trigger_files:
+  - "src/**/*.py"
+  - "tests/**/*.py"
+  - "pyproject.toml"
+  - "app/src-tauri/src/**/*.rs"
+
+related_skills: [check, run_tests]
+related_workflows: [ci-check]
+

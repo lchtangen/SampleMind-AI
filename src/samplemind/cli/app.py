@@ -4,9 +4,12 @@ from rich.console import Console
 from samplemind import __version__
 from samplemind.cli.commands.analyze import analyze_samples
 from samplemind.cli.commands.api import serve_api
+from samplemind.cli.commands.duplicates import find_library_duplicates
+from samplemind.cli.commands.export import export_samples
 from samplemind.cli.commands.import_ import import_samples
 from samplemind.cli.commands.library import list_samples, search_library
 from samplemind.cli.commands.serve import serve
+from samplemind.cli.commands.stats import print_stats
 from samplemind.cli.commands.tag import tag_samples
 
 console = Console(stderr=True)
@@ -109,3 +112,74 @@ def api_cmd(
 ) -> None:
     """Launch the FastAPI REST API server (auth + JSON endpoints)."""
     serve_api(host=host, port=port, reload=reload)
+
+
+@app.command("duplicates")
+def duplicates_cmd(
+    remove: bool = typer.Option(
+        False,
+        "--remove",
+        help="Delete all but the earliest-imported copy of each duplicate group.",
+    ),
+) -> None:
+    """Detect (and optionally remove) exact duplicate WAV files in the library.
+
+    Duplicate detection uses SHA-256 of the first 64 KB of each file.
+    Without --remove, lists duplicate groups and exits with code 1 if any are found.
+    With --remove, deletes duplicate files from disk and removes their DB records,
+    keeping the copy with the earliest imported_at timestamp.
+    """
+    find_library_duplicates(remove=remove)
+
+
+@app.command("export")
+def export_cmd(
+    target: str | None = typer.Option(
+        None, "--target", "-t",
+        help="Destination folder (default: ./samplemind-export).",
+    ),
+    organize: str | None = typer.Option(
+        None, "--organize",
+        help="Create subfolders by: instrument | mood | genre",
+        metavar="[instrument|mood|genre]",
+    ),
+    energy: str | None = typer.Option(
+        None, "--energy", help="Filter by energy level [low|mid|high]",
+    ),
+    instrument: str | None = typer.Option(
+        None, "--instrument",
+        help="Filter by instrument [kick|snare|hihat|bass|pad|lead|loop|sfx|unknown]",
+    ),
+    mood: str | None = typer.Option(
+        None, "--mood",
+        help="Filter by mood [dark|chill|aggressive|euphoric|melancholic|neutral]",
+    ),
+    bpm_min: float | None = typer.Option(None, "--bpm-min", help="Minimum BPM"),
+    bpm_max: float | None = typer.Option(None, "--bpm-max", help="Maximum BPM"),
+) -> None:
+    """Export filtered samples to a folder with FL Studio-compatible naming.
+
+    Files are renamed to: {stem}_{bpm}bpm_{key}_{energy}.wav
+    Use --organize to group them into subfolders by instrument, mood, or genre.
+    """
+    from pathlib import Path
+
+    export_samples(
+        target=Path(target) if target else None,
+        organize=organize,
+        energy=energy,
+        instrument=instrument,
+        mood=mood,
+        bpm_min=bpm_min,
+        bpm_max=bpm_max,
+    )
+
+
+@app.command("stats")
+def stats_cmd() -> None:
+    """Print a Rich summary of library statistics.
+
+    Shows total count, BPM distribution (min/max/mean/median), and
+    breakdowns by energy level, instrument type, and mood.
+    """
+    print_stats()

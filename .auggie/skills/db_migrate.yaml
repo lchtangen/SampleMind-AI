@@ -35,3 +35,18 @@ examples:
   - "uv run alembic current"
   - "uv run alembic history"
 
+trigger_keywords:
+  - alembic, migration, db migrate, schema change, add column, add table
+  - alembic revision, autogenerate, upgrade head, downgrade, alembic history
+  - SQLModel migration, ORM migration, database column
+
+trigger_files:
+  - "migrations/versions/*.py"
+  - "migrations/env.py"
+  - "alembic.ini"
+  - "src/samplemind/data/orm.py"
+  - "src/samplemind/core/models/sample.py"
+
+related_skills: [db_inspect, run_tests]
+related_workflows: [ci-check]
+

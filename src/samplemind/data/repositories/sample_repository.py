@@ -163,3 +163,28 @@ class SampleRepository:
         """Return all samples ordered by import date descending."""
         return SampleRepository.search()
 
+    # ── Delete ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def delete_by_path(path: str) -> bool:
+        """Delete a sample row by exact file path.
+
+        Used by the ``duplicates --remove`` command to remove the DB record
+        for a duplicate file after the file itself has been unlinked from disk.
+
+        Args:
+            path: Absolute file path matching Sample.path exactly.
+
+        Returns:
+            True if a row was found and deleted; False if no row matched.
+        """
+        with get_session() as session:
+            sample = session.exec(
+                select(Sample).where(Sample.path == path)
+            ).first()
+            if sample is None:
+                return False
+            session.delete(sample)
+            # commit is handled by get_session()'s context manager
+            return True
+

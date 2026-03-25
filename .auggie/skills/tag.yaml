@@ -44,3 +44,15 @@ examples:
   - "uv run samplemind tag hihat_open --energy low --genre house"
   - "uv run samplemind tag pad_c_minor --mood melancholic --genre lofi"
 
+trigger_keywords:
+  - tag, label, annotate, update metadata, set genre, set mood, set energy
+  - samplemind tag, tag sample, re-tag, override classification
+  - --genre, --mood, --energy, --tags, --instrument, tag a sample
+
+trigger_files:
+  - "src/samplemind/cli/commands/tag_cmd.py"
+  - "src/samplemind/data/repositories/sample_repository.py"
+
+related_skills: [list_samples, search]
+related_workflows: [debug-classifier]
+

@@ -1,11 +1,100 @@
+# ══════════════════════════════════════════════════════════════════════════════
 # Skill: batch_import
+# Import an entire folder of WAV/AIFF files into the SampleMind library.
+# Uses ProcessPoolExecutor for parallel analysis.
+# ══════════════════════════════════════════════════════════════════════════════
+
 name: batch_import
-description: Import and analyze a batch of audio samples in parallel.
-agent: analyzer
-command: uv run samplemind import {folder} --workers 4
+description: >
+  Recursively scan a folder for WAV/AIFF files, analyze each with librosa,
+  store results in the SQLite database. Deduplicates by SHA-256 fingerprint.
+  Outputs progress JSON stream followed by a summary JSON object.
+agent: audio-analyzer
+command: "uv run samplemind import {folder} --workers {workers} --json"
+
 inputs:
-  - folder: Path to folder of audio files
+  folder:
+    type: string
+    required: true
+    description: "Path to folder containing WAV/AIFF files (recursive)"
+  workers:
+    type: int
+    required: false
+    default: 0
+    description: "Parallel workers. 0 = auto (cpu_count). Max recommended: cpu_count."
+  dry_run:
+    type: bool
+    required: false
+    default: false
+    description: "Scan and count files without writing to DB"
+
 outputs:
-  - result: Import summary (count, errors)
+  format: json_stream_then_summary
+  progress_event:
+    current:   { type: int,    example: 42 }
+    total:     { type: int,    example: 200 }
+    file:      { type: string, example: "kick_808.wav" }
+    status:    { type: string, enum: [ok, duplicate, error] }
+  summary:
+    imported:    { type: int,    example: 187 }
+    duplicates:  { type: int,    example: 11 }
+    errors:      { type: int,    example: 2 }
+    elapsed_secs:{ type: float,  example: 34.2 }
+    workers_used:{ type: int,    example: 8 }
+
+deduplication:
+  method: "SHA-256 of first 64 KB of each file"
+  behavior: "Skip file silently if sha256 already exists in library"
+  code: |
+    def fingerprint_file(path: Path) -> str:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read(65536)).hexdigest()
+
+performance_guide:
+  workers_0:   "auto — uses cpu_count (recommended)"
+  workers_1:   "single-threaded — use for debugging"
+  workers_4:   "good for SSD with 4+ cores"
+  workers_8:   "good for NVMe with 8+ cores; diminishing returns beyond"
+  bottleneck:  "CPU-bound (librosa FFT). I/O is rarely the limit."
+  typical_speed: "~5–15 files/sec per worker on modern hardware"
+
 examples:
-  - uv run samplemind import samples/ --workers 4
+  - description: "Import entire Samples folder with auto workers"
+    command: "uv run samplemind import ~/Music/Samples/ --json"
+    note: "Workers defaults to cpu_count"
+
+  - description: "Import with explicit 4 workers"
+    command: "uv run samplemind import ~/Music/Samples/ --workers 4 --json"
+
+  - description: "Dry run — count files without importing"
+    command: "uv run samplemind import ~/Music/Samples/ --dry-run --json"
+
+  - description: "Import and watch progress via HTMX SSE"
+    note: "Flask: GET /api/import/progress?folder=<path> (SSE stream)"
+
+  - description: "Import via Tauri command (Rust)"
+    code: |
+      let output = Command::new("samplemind")
+          .args(["import", &path, "--json"])
+          .output().map_err(|e| e.to_string())?;
+      let summary: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+ipc_contract:
+  stdout: "JSON progress events + final summary (machine-readable)"
+  stderr: "Human-readable progress text (Rich progress bar)"
+  warning: "NEVER mix human text with JSON on stdout — breaks Tauri IPC"
+
+trigger_keywords:
+  - import, batch import, folder import, scan folder
+  - import samples, ProcessPoolExecutor, parallel analysis
+  - workers, cpu_count, import_samples, batch_import
+  - duplicate detection, fingerprint, deduplication
+
+trigger_files:
+  - "src/samplemind/cli/commands/import_cmd.py"
+  - "src/samplemind/analyzer/audio_analysis.py"
+  - "src/samplemind/data/repositories/sample_repository.py"
+
+related_skills: [analyze_audio, fingerprint, list_samples]
+related_workflows: [add-audio-feature, onboard-dev]
+

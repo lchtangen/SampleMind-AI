@@ -1,12 +1,125 @@
+# ══════════════════════════════════════════════════════════════════════════════
 # Skill: run_tests
+# Run the Python and Rust test suites with coverage and CI-matching flags.
+# ══════════════════════════════════════════════════════════════════════════════
+
 name: run_tests
-description: Run all Python and Rust tests with coverage and report results.
+description: >
+  Run pytest (Python) and cargo test (Rust) with CI-matching configuration.
+  Supports fast/slow/full modes, parallel execution, and coverage reports.
+  Returns test results and coverage summary as JSON.
 agent: test-runner
-command: uv run pytest --cov=samplemind && cargo test --manifest-path app/src-tauri/Cargo.toml
-inputs: []
+command: "uv run pytest {path} {flags} --tb=short -v"
+
+modes:
+  fast:
+    command: "uv run pytest tests/ -m 'not slow' -n auto --tb=short -q"
+    description: "Skip slow tests (>1s). CI-safe. Runs in parallel."
+  all:
+    command: "uv run pytest tests/ -v --tb=short -n auto"
+    description: "All tests including slow audio analysis tests."
+  single:
+    command: "uv run pytest {test_id} -v --tb=long -s"
+    description: "Single test or file. -s shows print() output."
+  coverage:
+    command: "uv run pytest tests/ --cov=samplemind --cov-report=term-missing --cov-fail-under=60 -q"
+    description: "With coverage. Fails if overall coverage < 60%."
+  rust:
+    command: "cargo test --manifest-path app/src-tauri/Cargo.toml"
+    description: "Rust test suite for Tauri backend."
+  full:
+    commands:
+      - "uv run ruff check src/ tests/"
+      - "uv run pytest tests/ --cov=samplemind --cov-fail-under=60 -q"
+      - "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+      - "cargo test --manifest-path app/src-tauri/Cargo.toml"
+    description: "Full CI suite: lint + Python tests + Rust lint + Rust tests"
+
+inputs:
+  path:
+    type: string
+    required: false
+    default: "tests/"
+    description: "Test path, file, or test ID (e.g. tests/test_classifier.py::test_energy)"
+  mode:
+    type: string
+    required: false
+    default: "fast"
+    enum: [fast, all, single, coverage, rust, full]
+  flags:
+    type: string
+    required: false
+    description: "Additional pytest flags (e.g. --no-header, -x, --lf)"
+
 outputs:
-  - pytest: Python test results
-  - cargo: Rust test results
+  format: terminal_and_json
+  fields:
+    passed:      { type: int,   example: 47 }
+    failed:      { type: int,   example: 2 }
+    skipped:     { type: int,   example: 3 }
+    errors:      { type: int,   example: 0 }
+    duration_s:  { type: float, example: 12.4 }
+    coverage_pct:{ type: float, example: 67.3, note: "only in coverage mode" }
+
+markers:
+  slow:   "@pytest.mark.slow   — tests > 1s (audio analysis) — skipped in fast mode"
+  macos:  "@pytest.mark.macos  — requires macOS (AppleScript, AU validation)"
+  juce:   "@pytest.mark.juce   — requires JUCE plugin to be built"
+
+coverage_targets:
+  overall:              "≥ 60% (CI-enforced with --cov-fail-under=60)"
+  samplemind.analyzer:  "≥ 80% (aspirational)"
+  samplemind.analyzer.classifier: "≥ 90% (aspirational)"
+  samplemind.cli:       "≥ 70% (aspirational)"
+
+ci_matrix:
+  ubuntu-latest:   "ruff + all tests + coverage ≥ 60%"
+  windows-latest:  "fast tests only (not slow, not macos)"
+  macos-14:        "fast tests only (not slow)"
+  rust-ubuntu:     "cargo clippy + cargo test"
+
+fixture_rules:
+  - "Never commit real audio files (WAV, AIFF, MP3) — generate synthetically"
+  - "All WAV fixtures use numpy + soundfile in tests/conftest.py"
+  - "Fixtures use tmp_path — never write to repo directories"
+  - "New audio features require a corresponding new WAV fixture + test"
+
+common_failures:
+  coverage_below_threshold: "Add tests for uncovered branches in the failing module"
+  import_error:             "uv sync --extra dev"
+  missing_fixture:          "Add to tests/conftest.py"
+  wrong_audio_value:        "Check classifier_thresholds in analyze_audio skill"
+  rust_clippy_failure:      "Fix warning (never suppress without comment)"
+
 examples:
-  - uv run pytest --cov=samplemind
-  - cargo test --manifest-path app/src-tauri/Cargo.toml
+  - description: "Fast CI-matching run"
+    command: "uv run pytest tests/ -m 'not slow' -n auto --tb=short -q"
+
+  - description: "Single failing test with full output"
+    command: "uv run pytest tests/test_classifier.py::test_classify_energy_high -v --tb=long -s"
+
+  - description: "Coverage report for analyzer module"
+    command: "uv run pytest tests/ --cov=samplemind.analyzer --cov-report=term-missing"
+
+  - description: "Full CI locally"
+    commands:
+      - "uv run ruff check src/ tests/"
+      - "uv run pytest tests/ --cov=samplemind --cov-fail-under=60 -q -n auto"
+      - "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+
+trigger_keywords:
+  - pytest, test, tests, failing test, coverage, CI, conftest
+  - fixture, marker, xdist, parallel tests, slow test
+  - run tests, why is CI failing, test is broken, write a test
+  - import pytest, @pytest.fixture, @pytest.mark, def test_
+
+trigger_files:
+  - "tests/test_*.py"
+  - "tests/conftest.py"
+  - "tests/**/*.py"
+  - ".github/workflows/python-lint.yml"
+  - "pyproject.toml"
+
+related_skills: [lint, coverage, check]
+related_workflows: [ci-check, new-feature, add-audio-feature]
+

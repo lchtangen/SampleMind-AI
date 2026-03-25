@@ -54,3 +54,19 @@ examples:
   - "curl -X POST http://localhost:8000/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"user@example.com\",\"username\":\"user\",\"password\":\"SecurePass1\"}'"
   - "curl http://localhost:8000/api/v1/health"
 
+trigger_keywords:
+  - JWT, token, auth, register, login, refresh, RBAC, UserRole, Permission
+  - bcrypt, password, RBACService, OAuth2, secret key, access_token, Bearer
+  - api/auth, jwt_handler, auth/register, auth/login, auth/me, auth/refresh
+  - create_access_token, decode_token, SAMPLEMIND_SECRET_KEY
+
+trigger_files:
+  - "src/samplemind/core/auth/jwt_handler.py"
+  - "src/samplemind/core/auth/rbac.py"
+  - "src/samplemind/core/auth/dependencies.py"
+  - "src/samplemind/api/routes/auth.py"
+  - "src/samplemind/core/models/user.py"
+
+related_skills: [serve_api, health_check]
+related_workflows: [dev-start, ci-check]
+

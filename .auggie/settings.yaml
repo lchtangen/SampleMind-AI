@@ -241,7 +241,188 @@ auggie_files:
   workflows:
     - ci-check, new-feature, release
     - dev-start, debug-classifier, add-audio-feature, onboard-dev
+    - db-migration, build-plugin, fl-export, pack-create, api-test
   environments: [dev, prod]
   hooks: [pre-commit]
   tools: [vscode, terminal, debug]
   prompts: [debug-audio, code-review, api-design]
+
+# ── Complete agent routing table (canonical reference) ────────────────────────
+# Priority: 1=file_patterns  2=code_patterns  3=chat_keywords  4=phase_number
+# Full routing logic lives in .auggie/routing.yaml
+routing:
+  config_file: .auggie/routing.yaml
+  strategy: first_match
+
+  # One-line summary per agent (details in routing.yaml):
+  agents:
+    audio-analyzer:
+      files: ["src/samplemind/analyzer/**/*.py", "tests/test_audio_analysis.py", "tests/test_classifier.py"]
+      code:  ["librosa.load", "classify_energy", "fingerprint_file", "sf.write("]
+      chat:  ["librosa", "BPM", "classify", "instrument", "mood", "energy", "WAV"]
+      skills: [analyze_audio, batch_import, fingerprint, coverage]
+      workflows: [debug-classifier, add-audio-feature, ci-check]
+      commands: [/analyze, /import, /list, /search, /tag]
+      model: sonnet
+
+    test-runner:
+      files: ["tests/test_*.py", "tests/conftest.py", ".github/workflows/python-lint.yml"]
+      code:  ["import pytest", "@pytest.fixture", "def test_", "fail_under"]
+      chat:  ["pytest", "test", "failing", "coverage", "CI", "fixture"]
+      skills: [run_tests, coverage, lint, check]
+      workflows: [ci-check, new-feature]
+      commands: [/check, /test]
+      model: sonnet
+
+    tauri-builder:
+      files: ["app/src-tauri/src/**/*.rs", "app/src/**/*.svelte", "app/src-tauri/Cargo.toml"]
+      code:  ["#[tauri::command]", "use tauri::", "invoke(", "pnpm tauri"]
+      chat:  ["Tauri", "Rust", "Svelte", "build the app", "cargo"]
+      skills: [build, check, lint]
+      workflows: [ci-check, release]
+      commands: [/build, /check]
+      model: sonnet
+
+    api-agent:
+      files: ["src/samplemind/api/**/*.py"]
+      code:  ["from fastapi import", "APIRouter", "@router.get", "Depends(get_current_active_user"]
+      chat:  ["FastAPI", "REST API", "endpoint", "/api/v1", "Bearer token"]
+      skills: [serve_api, auth, health_check]
+      workflows: [api-test, dev-start, ci-check]
+      commands: [/serve, /auth, /health, /db-inspect]
+      model: sonnet
+
+    web-agent:
+      files: ["src/samplemind/web/app.py", "src/web/app.py", "src/samplemind/web/templates/**"]
+      code:  ["from flask import", "@app.route", "hx-get=", "session[\"user_id\"]"]
+      chat:  ["Flask", "web UI", "HTMX", "SSE", "login page"]
+      skills: [serve_web, health_check]
+      workflows: [dev-start, ci-check]
+      commands: [/serve, /health]
+      model: sonnet
+
+    security-agent:
+      files: ["src/samplemind/core/auth/**/*.py", "src/samplemind/core/models/user.py"]
+      code:  ["from jose import jwt", "CryptContext", "RBACService", "SAMPLEMIND_SECRET_KEY"]
+      chat:  ["JWT", "RBAC", "permission", "role", "bcrypt", "OAuth2"]
+      skills: [auth]
+      workflows: [ci-check]
+      commands: [/auth]
+      model: sonnet
+
+    devops-agent:
+      files: ["scripts/**/*.sh", ".github/workflows/*.yml", "pyproject.toml", ".env.example"]
+      code:  ["uv sync", "astral-sh/setup-uv", "#!/usr/bin/env bash", "[tool.ruff]"]
+      chat:  ["setup", "CI/CD", "GitHub Actions", "WSL2", "environment"]
+      skills: [setup_dev, start, check, lint]
+      workflows: [dev-start, onboard-dev, ci-check]
+      commands: [/setup, /start, /health, /check]
+      model: sonnet
+
+    ml-agent:
+      files: ["src/samplemind/utils/model_loader.py", "src/samplemind/search/**/*.py"]
+      code:  ["from transformers import", "AutoModelForCausalLM", "load_in_8bit=True"]
+      chat:  ["ML model", "transformers", "HuggingFace", "embedding", "semantic search"]
+      skills: [analyze_audio]
+      workflows: [add-audio-feature]
+      commands: [/analyze]
+      model: sonnet
+
+    doc-writer:
+      files: ["docs/en/**/*.md", "docs/no/**/*.md", "ARCHITECTURE.md", "README.md"]
+      code:  ["## Overview", "## Architecture", "## Phase"]
+      chat:  ["document", "write a doc", "update README", "phase doc"]
+      skills: []
+      workflows: [new-feature]
+      commands: []
+      model: haiku
+
+    fl-studio-agent:
+      files: ["plugin/**/*.cpp", "plugin/**/*.h", "src/samplemind/sidecar/**/*.py"]
+      code:  ["juce::", "osascript", "nc -U /tmp/samplemind.sock"]
+      chat:  ["FL Studio", "JUCE", "VST3", "AU", "sidecar", "MIDI"]
+      skills: [sidecar]
+      workflows: [fl-export, dev-start]
+      commands: [/sidecar]
+      model: sonnet
+
+    phase-02-audio-testing:
+      files: ["tests/conftest.py", "tests/test_audio_analysis.py", "tests/test_classifier.py"]
+      code:  ["sf.write(", "kick_wav", "hihat_wav", "@pytest.mark.slow"]
+      chat:  ["Phase 2", "WAV fixture", "conftest", "classifier threshold"]
+      skills: [run_tests, analyze_audio, coverage]
+      workflows: [ci-check, add-audio-feature]
+      commands: [/check, /test]
+      model: sonnet
+
+    phase-03-database:
+      files: ["src/samplemind/data/**/*.py", "migrations/**/*.py", "alembic.ini"]
+      code:  ["from sqlmodel import", "PRAGMA journal_mode", "alembic revision"]
+      chat:  ["Phase 3", "SQLModel", "Alembic", "migration", "ORM"]
+      skills: [db_migrate, db_inspect]
+      workflows: [db-migration, ci-check]
+      commands: [/db-inspect]
+      model: sonnet
+
+    phase-04-cli:
+      files: ["src/samplemind/cli/**/*.py", "src/main.py"]
+      code:  ["import typer", "typer.Typer()", "@app.command()", "Console(stderr=True)"]
+      chat:  ["Phase 4", "Typer", "Rich", "CLI", "--json flag"]
+      skills: [check]
+      workflows: [new-feature, ci-check]
+      commands: [/import, /list, /search, /tag, /serve, /analyze]
+      model: sonnet
+
+    phase-05-web:
+      files: ["src/samplemind/web/app.py", "src/samplemind/web/templates/**/*.html"]
+      code:  ["@app.route", "hx-get=", "text/event-stream"]
+      chat:  ["Phase 5", "Flask", "HTMX", "SSE", "web feature"]
+      skills: []
+      workflows: [dev-start, ci-check]
+      commands: [/serve, /health]
+      model: sonnet
+
+    phase-06-desktop:
+      files: ["app/src/**/*.svelte", "app/src/**/*.ts", "app/src-tauri/src/**/*.rs"]
+      code:  ["$state(", "$derived(", "$effect(", "#[tauri::command]"]
+      chat:  ["Phase 6", "Tauri desktop", "Svelte 5", "Runes", "SearchBar"]
+      skills: [build]
+      workflows: [ci-check, release]
+      commands: [/build, /start]
+      model: sonnet
+
+    phase-07-fl-studio:
+      files: ["src/samplemind/integrations/**/*.py", "src/samplemind/sidecar/**/*.py"]
+      code:  ["osascript", "pbcopy", "IAC Driver", "win32com.client"]
+      chat:  ["Phase 7", "FL Studio automation", "clipboard", "AppleScript"]
+      skills: [sidecar]
+      workflows: [fl-export]
+      commands: [/sidecar]
+      model: sonnet
+
+    phase-08-vst-plugin:
+      files: ["plugin/Source/**/*.cpp", "plugin/Source/**/*.h", "plugin/CMakeLists.txt"]
+      code:  ["juce::AudioProcessor", "JUCE_DECLARE_", "juce_add_plugin("]
+      chat:  ["Phase 8", "JUCE plugin", "VST3", "AU", "auval", "CMake"]
+      skills: []
+      workflows: [build-plugin, ci-check]
+      commands: [/build]
+      model: sonnet
+
+    phase-09-sample-packs:
+      files: ["src/samplemind/packs/**/*.py"]
+      code:  ["SamplePackManifest", "zipfile.ZipFile", "sha256_checksum", ".smpack"]
+      chat:  ["Phase 9", "sample pack", ".smpack", "pack create"]
+      skills: []
+      workflows: [pack-create]
+      commands: [/pack]
+      model: sonnet
+
+    phase-10-production:
+      files: [".github/workflows/release.yml", "app/src-tauri/entitlements.plist"]
+      code:  ["xcrun notarytool", "codesign", "APPLE_SIGNING_IDENTITY"]
+      chat:  ["Phase 10", "production", "signing", "notarization", "release"]
+      skills: [build, check]
+      workflows: [release, ci-check]
+      commands: [/build, /check]
+      model: opus     # high-stakes → most capable model

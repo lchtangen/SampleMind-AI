@@ -45,3 +45,16 @@ examples:
   - "uv run ruff check src/ && uv run pytest tests/ -v && cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
   - "uv run pytest tests/ --cov=samplemind --cov-report=term-missing"
 
+trigger_keywords:
+  - CI check, run CI, full check, ruff + pytest, lint and test
+  - ci-check, quality check, pre-commit, before push, check everything
+  - coverage, clippy, ruff, all checks
+
+trigger_files:
+  - ".github/workflows/python-lint.yml"
+  - "pyproject.toml"
+  - ".pre-commit-config.yaml"
+
+related_skills: [lint, run_tests, coverage, build]
+related_workflows: [ci-check]
+

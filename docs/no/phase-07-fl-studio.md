@@ -111,8 +111,8 @@ Det enkleste: skriv samples til en mappe FL Studio kan lese direkte.
 
 import shutil
 from pathlib import Path
-from samplemind.data.repository import SampleRepository
-from samplemind.models import Sample
+from samplemind.core.models.sample import Sample
+from samplemind.data.repositories.sample_repository import SampleRepository
 from samplemind.integrations.paths import get_fl_studio_samples_dir
 
 
@@ -186,7 +186,7 @@ CLI-kommando for eksport:
 import typer
 from pathlib import Path
 from rich.console import Console
-from samplemind.data.repository import SampleRepository
+from samplemind.data.repositories.sample_repository import SampleRepository
 from samplemind.integrations.filesystem import export_to_fl_studio
 
 console = Console()
@@ -199,8 +199,7 @@ def export_cmd(
     energy: str = typer.Option(None, "--energy", help="Filtrer etter energinivå"),
 ):
     """Eksporter samples til FL Studio sin sample-browser."""
-    repo = SampleRepository()
-    samples = repo.search(energy=energy)
+    samples = SampleRepository.search(energy=energy)
 
     if not samples:
         console.print("[yellow]Ingen samples å eksportere.[/yellow]")
@@ -226,7 +225,7 @@ Kopierer sample-stien til utklippstavlen. Brukeren kan deretter lime inn i FL St
 import sys
 import subprocess
 from pathlib import Path
-from samplemind.models import Sample
+from samplemind.core.models.sample import Sample
 
 
 def copy_sample_path(sample: Sample) -> bool:
@@ -403,7 +402,8 @@ Virtuell MIDI lar SampleMind sende BPM og toneart til FL Studio som MIDI-melding
 # Krev: uv add python-rtmidi
 
 import rtmidi
-from samplemind.models import Sample
+
+from samplemind.core.models.sample import Sample
 
 
 # MIDI CC-numre vi bruker for å sende metadata
@@ -498,7 +498,7 @@ FL Studio's browser søker etter filnavn, så konsekvente navn er viktig:
 ```python
 # filename: src/samplemind/integrations/naming.py
 
-from samplemind.models import Sample
+from samplemind.core.models.sample import Sample
 
 
 def make_fl_filename(sample: Sample) -> str:

@@ -34,3 +34,16 @@ examples:
   - "uv run pytest tests/ --cov=samplemind --cov-report=html --cov-fail-under=60"
   - "uv run pytest tests/test_classifier.py --cov=samplemind.analyzer.classifier --cov-report=term-missing"
 
+trigger_keywords:
+  - coverage, test coverage, coverage report, cov-report, fail_under, 60%
+  - coverage threshold, missing coverage, uncovered, add coverage
+  - --cov=samplemind, cov-fail-under, branch coverage
+
+trigger_files:
+  - "tests/test_*.py"
+  - "tests/conftest.py"
+  - "pyproject.toml"
+
+related_skills: [run_tests, lint, check]
+related_workflows: [ci-check, new-feature]
+
