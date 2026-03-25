@@ -59,22 +59,25 @@ and JUCE VST3/AU plugin — all reading the same database.
 
 | Component | Current | Target |
 |---|---|---|
-| Package manager | uv + pyproject.toml | (live) |
-| Python version | 3.13 | (live) |
-| Package layout | src/samplemind/ | (live) |
-| CLI | Typer (src/samplemind/cli/app.py) | (live) |
-| Database | sqlite3 (src/samplemind/data/database.py) | SQLModel + Alembic (planned) |
-| Lint/format | ruff | (live) |
-| Frontend | Svelte 5 Runes + Vite | (live) |
-| Tests | pytest + soundfile fixtures | (live) |
-| CI | ci.yml (uv+ruff+pytest+clippy) | (live) |
-| Plugin | JUCE 8 VST3/AU | (planned) |
+| Package manager | uv + pyproject.toml | ✅ live |
+| Python version | 3.13 | ✅ live |
+| Package layout | src/samplemind/ | ✅ live |
+| CLI | Typer (src/samplemind/cli/app.py) — 8 commands | ✅ live |
+| Database | SQLModel + Alembic (data/orm.py + migrations/) | ✅ live |
+| Auth | JWT + RBAC (core/auth/ + api/routes/auth.py) | ✅ live |
+| Repositories | SampleRepository + UserRepository | ✅ live |
+| Lint/format | ruff ≥0.15 | ✅ live |
+| Type checking | pyright ≥1.1.390 | ✅ live |
+| Tests | pytest ≥9 + hypothesis + soundfile fixtures (33 tests) | ✅ live |
+| CI | ruff + pyright + pytest + alembic check + clippy | ✅ live |
+| Frontend | Svelte 5 Runes + Vite | 📋 Phase 7 |
+| Plugin | JUCE 8 VST3/AU | 📋 Phase 9 |
 
 **Important:**
 
-- **Legacy and new code paths coexist.**
-- **src/main.py** (legacy argparse CLI) is still required for Tauri dev mode. Do not break this entrypoint unless you also update app/src-tauri/src/main.rs.
-- **Migration must be incremental and non-breaking.**
+- **Legacy database.py still exists** in `src/samplemind/data/database.py` but is no longer used by any CLI command or web route. It is kept only for reference during the Phase 5 cleanup. Do not add new code that imports from it.
+- **src/main.py** (legacy argparse entry point) is still required for Tauri dev mode. Do not remove it unless you also update `app/src-tauri/src/main.rs`.
+- The active runtime uses `init_orm()` (not `init_db()`), `SampleRepository` (not `save_sample()` / `search_samples()`), and `get_session()` (not `_connect()`).
 
 ---
 
@@ -110,24 +113,35 @@ cd app && pnpm tauri build --target universal-apple-darwin
 ### Common Commands
 
 ```bash
-# --- Python (legacy — still needed for Tauri dev mode) ---
-source .venv/bin/activate
-python src/main.py list
-python src/web/app.py              # Flask at http://localhost:5000
+# --- Python (uv — use for all work) ---
+uv sync --dev                      # install all deps + dev tools into .venv
+uv run alembic upgrade head        # apply all schema migrations (required before first run)
+uv run samplemind --help           # show all 8 commands
 
-# --- Python (uv — use for all new work) ---
-uv sync                            # install deps
-uv run samplemind list
-uv run samplemind serve
-uv run pytest tests/ -v
-uv run pytest tests/test_audio_analysis.py::test_bpm -v  # single test
-uv run ruff check src/
-uv run ruff format src/
+uv run samplemind import ~/Music/  # import + analyze WAV files
+uv run samplemind list             # list library in a Rich table
+uv run samplemind search --query "dark" --energy high  # filter search
+uv run samplemind tag "kick_128" --genre trap          # manual tag
+uv run samplemind serve            # Flask web UI at http://localhost:5000
+uv run samplemind api              # FastAPI auth server at http://localhost:8000/docs
+
+uv run pytest tests/ -v                                          # run all 33 tests
+uv run pytest tests/ -v -m "not slow"                           # fast tests only
+uv run pytest tests/test_audio_analysis.py::test_bpm -v         # single test
+uv run ruff check src/ tests/                                    # lint
+uv run ruff format src/ tests/                                   # format
+uv run pyright src/                                              # type-check
+uv run alembic check                                             # verify no migration drift
+
+# --- Python (legacy entry point — do not use for new work) ---
+# src/main.py is the legacy argparse CLI still used by Tauri dev mode.
+# Do not break it; do not add features to it.
+python src/main.py list            # legacy only
 
 # --- Tauri desktop app ---
 cd app && pnpm install
-pnpm tauri dev                     # dev mode (HMR)
-pnpm tauri build                   # production
+pnpm tauri dev                     # dev mode (spawns Flask on port 5174)
+pnpm tauri build                   # production bundle
 
 # --- Rust ---
 cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings
@@ -175,14 +189,23 @@ from samplemind.analyzer.audio_analysis import analyze_file
 - Avoid `sys.path.insert` hacks in new code.
 - Exception: If touching legacy files that already rely on legacy import patterns, do not rewrite unrelated import architecture unless requested.
 
-**Audio analysis canonical pattern:**
+**Audio analysis canonical pattern** (matches `src/samplemind/analyzer/audio_analysis.py`):
 
 ```python
-y, sr = librosa.load(path, sr=22050, mono=True)   # always explicit sr
-rms = float(np.mean(librosa.feature.rms(y=y)))
-centroid = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
-zcr = float(np.mean(librosa.feature.zero_crossing_rate(y=y)))
+y, sr = librosa.load(path)                              # default sr=22050, soxr_hq resampling
+rms = float(np.sqrt(np.mean(y ** 2)))                   # NOT librosa.feature.rms()
+centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
+centroid_norm = float(centroid.mean()) / (sr / 2)       # normalized to 0–1
+zcr = float(librosa.feature.zero_crossing_rate(y).mean())
 ```
+
+**Classifier output values** (exact strings stored in DB — never use alternatives):
+
+| Field | Valid values |
+|-------|-------------|
+| `energy` | `"low"` `"mid"` `"high"` — ⚠️ **never `"medium"`** |
+| `mood` | `"dark"` `"chill"` `"aggressive"` `"euphoric"` `"melancholic"` `"neutral"` |
+| `instrument` | `"loop"` `"hihat"` `"kick"` `"snare"` `"bass"` `"pad"` `"lead"` `"sfx"` `"unknown"` |
 
 **Audio fingerprinting** (SHA-256 of first 64 KB — for deduplication):
 
@@ -253,7 +276,8 @@ cargo test --manifest-path app/src-tauri/Cargo.toml
 @pytest.mark.juce    # requires JUCE plugin to be built
 ```
 
-**Coverage targets:** analyzer 80%+, classifier 90%+, CLI 70%+.
+**Coverage minimum (CI-enforced):** 60% overall (`fail_under = 60` in pyproject.toml).
+**Coverage aspirational targets:** analyzer 80%+, classifier 90%+, CLI 70%+.
 
 **WAV fixtures** — never commit real audio files:
 
@@ -286,15 +310,43 @@ def hihat_wav(tmp_path: Path) -> Path:
     return path
 ```
 
-**DB fixtures** — always use in-memory SQLite:
+**DB fixtures** — always use in-memory SQLite via the `orm_engine` fixture, not sqlite3 directly.
+The following fixtures are already defined in `tests/conftest.py`:
 
 ```python
-@pytest.fixture
-def session():
-    engine = create_engine("sqlite://")  # in-memory, no file
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as s:
-        yield s
+# orm_engine — shared in-memory SQLite engine with all SQLModel tables created.
+# Uses StaticPool so all threads see the same in-memory database (required for FastAPI tests).
+@pytest.fixture(name="orm_engine")
+def orm_engine_fixture():
+    engine = create_engine(
+        "sqlite://",                          # no file — pure in-memory
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,                 # one shared connection across all threads
+    )
+    # Import models first so SQLModel.metadata knows about all tables
+    import samplemind.core.models.user    # noqa: F401 — registers User table
+    import samplemind.core.models.sample  # noqa: F401 — registers Sample table
+    SQLModel.metadata.create_all(engine)  # creates users + samples tables
+    yield engine
+    SQLModel.metadata.drop_all(engine)    # clean up after each test
+
+# test_user — a seeded User row created via UserRepository.
+# The password is "testpassword123" — use verify_password() to check it.
+@pytest.fixture(name="test_user")
+def test_user_fixture(orm_engine):
+    import samplemind.data.orm as orm_module
+    orm_module._engine = orm_engine       # redirect get_session() to in-memory engine
+    from samplemind.core.models.user import UserCreate, UserRole
+    from samplemind.data.repositories.user_repository import UserRepository
+    user_data = UserCreate(email="test@example.com", password="testpassword123", role=UserRole.owner)
+    return UserRepository.create(user_data)
+
+# access_token — valid JWT bearer token string for the test_user.
+# Pass in Authorization header: {"Authorization": f"Bearer {access_token}"}
+@pytest.fixture(name="access_token")
+def access_token_fixture(test_user):
+    from samplemind.core.auth.jwt_handler import create_access_token
+    return create_access_token({"sub": str(test_user.id), "role": test_user.role})
 ```
 
 ---
@@ -397,24 +449,51 @@ This repo includes specialized phase agents under .claude/agents.
 
 ## Database Rules
 
-**Current runtime:** sqlite3 implementation is active.
-**Target:** SQLModel + Alembic migration path is planned and partially scaffolded in docs.
+**Current runtime:** SQLModel + Alembic — fully live as of Phase 4 (v0.2.0).
+The legacy `data/database.py` (sqlite3) is no longer used by any command or web route.
 
-Guideline:
+Guidelines:
 
-- Current DB file: `~/.samplemind/library.db`
-  (platformdirs target: `~/Library/Application Support/SampleMind/samplemind.db` on macOS).
-- For incremental features in current runtime paths, keep sqlite3 compatibility.
-- For explicit Phase 3 migration tasks, prefer SQLModel + Alembic and migrate end-to-end.
-- New database features (WAL mode, FTS5, backup): implement in `src/samplemind/data/database.py`
+- **DB file location:** determined by `get_settings().database_url` which uses `platformdirs`: `~/Library/Application Support/SampleMind/samplemind.db` on macOS; `%LOCALAPPDATA%\SampleMind\samplemind.db` on Windows.
+- **Never use raw sqlite3** for new code. Use `SampleRepository` or `UserRepository` which call `get_session()` internally.
+- **Never import from `data/database.py`** in new code. Remove import sites as they are encountered.
+- **Schema changes require a migration**: create a new file in `migrations/versions/` and run `uv run alembic upgrade head`. CI runs `alembic check` to catch drift.
+- **FTS5 virtual table**: not yet added — planned for Phase 5. Current search uses `WHERE ... LIKE` via SQLModel.
 
-**PRAGMA settings** (apply on connection open for performance):
+**WAL + PRAGMA settings** are applied automatically on every new connection via a SQLAlchemy event listener in `data/orm.py`. You do not need to set them manually:
 
-```sql
-PRAGMA journal_mode=WAL;
-PRAGMA cache_size = -64000;
-PRAGMA synchronous = NORMAL;
-PRAGMA temp_store = MEMORY;
+```python
+# src/samplemind/data/orm.py — applied to every new SQLite connection
+def _apply_sqlite_pragmas(dbapi_conn, _connection_record) -> None:
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")       # concurrent readers during writes
+    cursor.execute("PRAGMA cache_size=-64000")      # 64 MB page cache (negative = KB)
+    cursor.execute("PRAGMA synchronous=NORMAL")     # safe + fast (not FULL)
+    cursor.execute("PRAGMA temp_store=MEMORY")      # in-RAM temp tables and indexes
+    cursor.execute("PRAGMA mmap_size=268435456")    # 256 MB memory-mapped I/O
+    cursor.close()
+```
+
+**Using SampleRepository in new code:**
+
+```python
+# Always use the repository; never open a raw sqlite3 connection in CLI/web/API code.
+from samplemind.core.models.sample import SampleCreate, SampleUpdate
+from samplemind.data.repositories.sample_repository import SampleRepository
+from samplemind.data.orm import init_orm
+
+# Call init_orm() once at startup (idempotent — safe to call multiple times).
+# It imports all models and calls SQLModel.metadata.create_all(engine).
+init_orm()
+
+# Insert or update a sample (auto-detected fields only; genre/tags never overwritten):
+sample = SampleRepository.upsert(SampleCreate(filename="kick.wav", path="/abs/path/kick.wav", bpm=128.0))
+
+# Search by any combination of filters (all parameters are optional):
+results = SampleRepository.search(query="dark", energy="high", instrument="kick")
+
+# Update user-defined tags (only non-None fields are written):
+SampleRepository.tag("/abs/path/kick.wav", SampleUpdate(genre="trap", tags="808,heavy"))
 ```
 
 ---

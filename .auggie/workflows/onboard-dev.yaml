@@ -1,0 +1,112 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflow: onboard-dev
+# Purpose: First-time developer setup from zero. Gets any new contributor
+#          to a fully working dev environment in one workflow run.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: onboard-dev
+description: >
+  Complete first-time developer onboarding: clone notes, env setup,
+  tool verification, DB init, test run, and tour of the codebase.
+agent: devops-agent
+trigger: manual    # auggie workflow onboard-dev
+
+steps:
+  - id: wsl2_warning
+    name: "WSL2 path check (Linux only)"
+    condition: "uname -s | grep Linux"
+    check: "pwd | grep -qv /mnt/c"
+    on_fail: |
+      ❌ Your project is on NTFS (/mnt/c/) — this is 5–10× slower.
+      Move it: cp -r /mnt/c/path/to/SampleMind-AI ~/dev/projects/
+      Then re-run this workflow from ~/dev/projects/SampleMind-AI/
+
+  - id: install_uv
+    name: "Install uv (Python package manager)"
+    check: "uv --version"
+    install: "curl -LsSf https://astral.sh/uv/install.sh | sh"
+    note: "uv is the ONLY Python package manager used in this project. Never pip install."
+
+  - id: python_setup
+    name: "Create venv and install all dependencies"
+    command: "uv sync --extra dev"
+    creates: ".venv/bin/python (Python 3.13)"
+
+  - id: verify_imports
+    name: "Verify critical imports"
+    commands:
+      - "uv run python -c 'import samplemind; print(\"samplemind OK\")'"
+      - "uv run python -c 'import librosa; print(f\"librosa {librosa.__version__} OK\")'"
+      - "uv run python -c 'import soundfile; print(\"soundfile OK\")'"
+      - "uv run python -c 'import typer; print(\"typer OK\")'"
+
+  - id: db_init
+    name: "Initialize database"
+    commands:
+      - "uv run alembic upgrade head"
+      - "uv run python -c 'from samplemind.data.database import init_db; init_db(); print(\"DB ready\")'"
+    note: "Creates ~/.samplemind/library.db (legacy) + SQLModel tables"
+
+  - id: run_tests
+    name: "Run test suite"
+    command: "uv run pytest tests/ -m 'not slow' -v --tb=short"
+    on_pass: "✅ Tests pass — environment is working"
+    on_fail: "Check import errors first. Run: uv run pytest tests/ -v --tb=long"
+
+  - id: install_hooks
+    name: "Install pre-commit hooks"
+    command: "uv run pre-commit install"
+    note: "Runs ruff + fast tests on every git commit"
+
+  - id: git_perf
+    name: "Configure git performance (WSL2)"
+    commands:
+      - "git config core.fsmonitor true"
+      - "git config core.untrackedcache true"
+
+  - id: optional_tools
+    name: "Check optional tools (Tauri desktop)"
+    optional: true
+    checks:
+      - command: "node --version"
+        install_hint: "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -"
+      - command: "pnpm --version"
+        install_hint: "npm install -g pnpm"
+      - command: "cargo --version"
+        install_hint: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+    skip_message: "Optional tools not found — Tauri desktop unavailable until installed"
+
+  - id: first_run
+    name: "Smoke test — run the CLI"
+    commands:
+      - "uv run samplemind --help"
+      - "uv run samplemind list --json"
+
+  - id: codebase_tour
+    name: "Codebase tour"
+    pointers:
+      audio_analysis: "src/samplemind/analyzer/audio_analysis.py"
+      classifier: "src/samplemind/analyzer/classifier.py"
+      cli_commands: "src/samplemind/cli/commands/*.py"
+      api: "src/samplemind/api/main.py + routes/auth.py"
+      flask_web: "src/samplemind/web/app.py"
+      database: "src/samplemind/data/database.py + repositories/"
+      auth: "src/samplemind/core/auth/"
+      models: "src/samplemind/core/models/sample.py + user.py"
+      tests: "tests/conftest.py + test_*.py"
+      phase_docs: "docs/en/phase-01-foundation.md → phase-10-production.md"
+      architecture: "ARCHITECTURE.md"
+      roadmap: "ROADMAP.md"
+
+reporting:
+  on_pass: |
+    ✅ Onboarding complete!
+
+    Quick start:
+      uv run samplemind serve         # Flask at http://localhost:5000
+      uv run samplemind api --reload  # FastAPI at http://localhost:8000/api/docs
+      uv run pytest tests/ -v         # run tests
+      uv run ruff check src/          # lint
+
+    Read: docs/en/phase-01-foundation.md to understand the architecture.
+

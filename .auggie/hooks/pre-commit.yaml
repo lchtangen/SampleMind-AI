@@ -1,0 +1,72 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Auggie CLI — Pre-commit Hook Configuration
+# These hooks run automatically before git commit.
+# Install: uv run pre-commit install
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: pre-commit
+description: >
+  Automated checks that run before every git commit.
+  Catches lint, format, and safety issues early.
+
+install:
+  command: "uv run pre-commit install"
+  config_file: .pre-commit-config.yaml    # project root pre-commit config
+
+# Hooks executed in order:
+hooks:
+  - id: ruff-lint
+    name: "ruff lint"
+    command: "uv run ruff check src/ tests/ --fix"
+    stages: [commit]
+    fail_fast: false
+
+  - id: ruff-format
+    name: "ruff format"
+    command: "uv run ruff format src/ tests/"
+    stages: [commit]
+    fail_fast: false
+
+  - id: no-real-audio
+    name: "Block real audio files"
+    pattern: '\.(wav|aif|aiff|mp3|flac|ogg)$'
+    action: block
+    message: "❌ Real audio files must not be committed. Use synthetic fixtures."
+    stages: [commit]
+
+  - id: no-env-files
+    name: "Block .env files"
+    pattern: '\.env(\..+)?$'
+    action: block
+    message: "❌ .env files must not be committed. Use env vars."
+    stages: [commit]
+
+  - id: no-credentials
+    name: "Block credential patterns"
+    patterns:
+      - 'ANTHROPIC_API_KEY\s*=\s*sk-'
+      - 'sk-ant-[a-zA-Z0-9]+'
+      - 'APPLE_PASSWORD\s*='
+    action: block
+    message: "❌ Credentials detected. Use environment variables."
+    stages: [commit]
+
+  - id: pytest-fast
+    name: "Fast test suite (not slow)"
+    command: "uv run pytest tests/ -m 'not slow' -q --tb=short"
+    stages: [commit]
+    fail_fast: true
+    # skip with: git commit --no-verify
+
+  - id: clippy-check
+    name: "Rust clippy (on Rust changes)"
+    command: "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+    stages: [commit]
+    only_if_changed: ["app/src-tauri/src/**/*.rs", "app/src-tauri/Cargo.toml"]
+
+manual_hooks:
+  # Run these manually before PRs / releases:
+  full_ci: "auggie workflow ci-check"
+  coverage: "uv run pytest tests/ --cov=samplemind --cov-report=term-missing"
+  pre_release: "auggie workflow release"
+

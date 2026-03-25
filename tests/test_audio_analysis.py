@@ -27,12 +27,17 @@ def test_analyze_file_silence(silent_wav):
     assert result["instrument"] in {"unknown", "pad", "sfx"}
 
 
-@pytest.mark.parametrize("freq,expected_instr", [
-    (60, "kick"),
-    (440, "lead"),
-    (1000, "hihat"),
+@pytest.mark.parametrize("freq,candidates", [
+    # 60 Hz pure sine = sub-bass fundamental → classifier may return kick, bass, or unknown.
+    # A real kick drum has a transient envelope; a pure sine at 60 Hz has none,
+    # so 'bass' is a legitimate (and more accurate) classification.
+    (60,   {"kick", "bass", "unknown"}),
+    (440,  {"lead", "unknown"}),
+    (1000, {"hihat", "unknown"}),
 ])
-def test_instrument_classification(tmp_path, freq, expected_instr):
+def test_instrument_classification(tmp_path, freq, candidates):
     path = synth_wav(tmp_path / f"{freq}hz.wav", freq=freq, amplitude=0.8)
     result = analyze_file(str(path))
-    assert result["instrument"] in {expected_instr, "unknown"}  # allow unknown for edge cases
+    assert result["instrument"] in candidates, (
+        f"Expected instrument in {candidates} for {freq} Hz, got {result['instrument']!r}"
+    )

@@ -1,0 +1,48 @@
+name: start
+description: >
+  Quick-start SampleMind services in different modes: Flask web UI, Tauri
+  desktop app in dev mode, or both simultaneously. Uses scripts/start.sh.
+agent: devops-agent
+commands:
+  web: "bash scripts/start.sh web {port}"
+  desktop: "bash scripts/start.sh desktop"
+  both: "bash scripts/start.sh both"
+  api: "uv run samplemind api --reload"
+  all: "uv run samplemind api --reload & uv run samplemind serve & bash scripts/start.sh desktop"
+inputs:
+  - name: mode
+    type: enum
+    values: [web, desktop, both, api, all]
+    description: Which services to start
+    default: web
+  - name: port
+    type: int
+    description: Flask web UI port (web mode only)
+    default: 5000
+service_ports:
+  flask_web: 5000          # uv run samplemind serve
+  flask_tauri_dev: 5174    # Tauri dev mode connects here
+  fastapi: 8000            # uv run samplemind api
+  tauri_dev_vite: 1420     # Vite HMR server (pnpm dev in app/)
+service_urls:
+  flask: "http://localhost:5000"
+  fastapi: "http://localhost:8000"
+  fastapi_docs: "http://localhost:8000/api/docs"
+  tauri: "Window opens automatically"
+output_mode_notes:
+  web: "Flask at http://localhost:5000 — open browser to library"
+  desktop: "Tauri window opens — HMR enabled for Svelte changes"
+  both: "Flask (5000) + Tauri dev — Flask proxied through Tauri"
+  api: "FastAPI at http://localhost:8000/api/docs with auto-reload"
+background_process:
+  web: true      # Flask runs in background
+  desktop: true  # Tauri dev runs in foreground (Ctrl+C to stop)
+  api: false     # FastAPI runs in foreground with uvicorn
+examples:
+  - "bash scripts/start.sh web"
+  - "bash scripts/start.sh web 5001"
+  - "bash scripts/start.sh desktop"
+  - "bash scripts/start.sh both"
+  - "uv run samplemind serve --port 5000"
+  - "uv run samplemind api --reload"
+

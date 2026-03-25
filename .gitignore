@@ -1,21 +1,56 @@
-# Python
+# ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 venv/
 .venv/
+.python-version
+*.egg-info/
+.eggs/
 
-# VS Code
-.vscode/
+# ── Rust / Cargo ─────────────────────────────────────────────────────────────
+app/src-tauri/target/
+plugin/build/
 
-# OS junk
-.DS_Store
+# ── Node / pnpm ──────────────────────────────────────────────────────────────
+node_modules/
+app/node_modules/
+.pnpm-store/
 
-# PyInstaller
+# ── Build outputs ─────────────────────────────────────────────────────────────
 build/
 dist/
 *.spec.bak
 
-# Tauri release bundles and compiled sidecar binaries (too large for git)
-app/src-tauri/target/
+# ── Tauri sidecar binaries (large, platform-specific) ─────────────────────────
 app/src-tauri/binaries/samplemind-server
 app/src-tauri/binaries/samplemind-server-*
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+*.xcworkspace/
+DerivedData/
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Test / lint caches ────────────────────────────────────────────────────────
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── Temp / lock junk ──────────────────────────────────────────────────────────
+*.lock.swp
+.~lock.*

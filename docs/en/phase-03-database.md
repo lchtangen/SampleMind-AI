@@ -15,11 +15,12 @@
 
 ## Goal State
 
-- `src/samplemind/models.py` with `Sample` SQLModel class
-- `src/samplemind/repository.py` with `SampleRepository` class
-- Alembic configured for schema migrations
-- In-memory SQLite in pytest for isolated tests
-- Existing `database.py` can be deleted
+- `src/samplemind/core/models/sample.py` with `Sample`, `SampleCreate`, `SampleUpdate`, `SamplePublic` SQLModel classes
+- `src/samplemind/data/repositories/sample_repository.py` with `SampleRepository` (static-method pattern)
+- `src/samplemind/data/orm.py` with `get_engine()`, `init_orm()`, `get_session()` context manager, WAL PRAGMAs
+- `migrations/versions/0002_create_samples_table.py` — Alembic migration for the `samples` table
+- In-memory SQLite via the `orm_engine` conftest fixture for isolated tests
+- `data/database.py` superseded — no longer imported by any CLI command or web route
 
 ---
 
@@ -50,47 +51,80 @@ SQLModel
 ## 2. The Sample Model
 
 ```python
-# filename: src/samplemind/models.py
+# filename: src/samplemind/core/models/sample.py
+#
+# This module is imported by:
+#   data/orm.py — for SQLModel.metadata.create_all()
+#   data/repositories/sample_repository.py — for upsert/search/tag
+#   cli/commands/import_.py — for SampleCreate
+#   cli/commands/library.py — for Sample (type annotations)
+#   cli/commands/tag.py — for SampleUpdate
+#   web/app.py — for SampleCreate and SampleUpdate
 
+from __future__ import annotations
+
+from datetime import UTC, datetime
 from typing import Optional
-from datetime import datetime
-from sqlmodel import SQLModel, Field
+
+from sqlmodel import Field, SQLModel
+
+
+def _now() -> datetime:
+    """Return the current UTC time. Used as default_factory to avoid the
+    deprecated datetime.utcnow() (removed in Python 3.14)."""
+    return datetime.now(UTC)
+
+
+# ── ORM table ──────────────────────────────────────────────────────────────────
 
 
 class Sample(SQLModel, table=True):
     """
-    Represents one sample in the library.
+    Represents one audio sample in the library.
 
-    table=True: SQLModel creates a database table for this class.
-    Without table=True the class is used only for validation (Pydantic mode).
+    table=True: SQLModel creates a 'samples' database table for this class.
+    Without table=True the class would be Pydantic-only (no DB table).
+
+    Note: __tablename__ = "samples" (explicit plural) avoids SQLModel's default
+    which would use the lowercase class name "sample" (singular).
     """
+
+    __tablename__ = "samples"  # explicit plural — matches Alembic migration
 
     # Primary key — auto-incremented by SQLite
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # File info — path is unique (same file cannot be imported twice)
-    filename: str = Field(index=True)                    # Indexed for fast search
-    path: str = Field(unique=True)                       # Unique constraint
+    # File identity — path is unique (same file cannot be imported twice)
+    filename: str = Field(index=True)   # indexed for fast LIKE search
+    path: str = Field(unique=True)      # UNIQUE constraint prevents duplicate imports
 
-    # Auto-detected fields (from analyzer)
-    bpm: Optional[float] = Field(default=None)           # None = not yet analysed
-    key: Optional[str] = Field(default=None)             # "C maj", "F# min", etc.
-    mood: Optional[str] = Field(default=None)            # "dark", "chill", etc.
-    energy: Optional[str] = Field(default=None)          # "low", "mid", "high"
-    instrument: Optional[str] = Field(default=None)      # "kick", "snare", etc.
+    # Auto-detected fields (from the librosa analysis pipeline)
+    # These are overwritten on every re-import — the analyzer decides their values.
+    bpm: Optional[float] = Field(default=None)        # beats per minute
+    key: Optional[str] = Field(default=None)          # e.g. "C maj", "F# min"
+    mood: Optional[str] = Field(default=None)         # dark/chill/aggressive/euphoric/melancholic/neutral
+    energy: Optional[str] = Field(default=None)       # low/mid/high
+    instrument: Optional[str] = Field(default=None)   # kick/snare/hihat/bass/pad/lead/loop/sfx/unknown
 
-    # Manually tagged fields (from user)
-    genre: Optional[str] = Field(default=None)           # "trap", "lofi", etc.
-    tags: Optional[str] = Field(default=None)            # Comma-separated free tags
+    # Manually tagged fields (from user input)
+    # These are NEVER overwritten on re-import — SampleRepository.upsert() skips them.
+    genre: Optional[str] = Field(default=None)        # e.g. "trap", "lofi", "house"
+    tags: Optional[str] = Field(default=None)         # comma-separated free-form tags
 
-    # Timestamp — set automatically on insert
-    imported_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    # Timestamp — set once on first insert; never updated on re-import
+    imported_at: Optional[datetime] = Field(default_factory=_now)
+
+
+# ── Pydantic request schemas ───────────────────────────────────────────────────
 
 
 class SampleCreate(SQLModel):
     """
-    Pydantic model for creating a new sample (without id and imported_at).
-    Used in API calls and CLI to validate input before saving.
+    Schema for creating or upserting a sample during import.
+
+    Only auto-detected fields are included — manually tagged fields (genre, tags)
+    are intentionally absent so upsert() cannot accidentally overwrite them.
+    Used by: cli/commands/import_.py, web/app.py (drag-and-drop import)
     """
     filename: str
     path: str
@@ -103,13 +137,35 @@ class SampleCreate(SQLModel):
 
 class SampleUpdate(SQLModel):
     """
-    Pydantic model for updating tags (all fields optional).
-    Used by the tagger command and web API.
+    Schema for updating manual user tags on an existing sample.
+    All fields are optional — only non-None fields are written by repo.tag().
+    Used by: cli/commands/tag.py, web/app.py (POST /api/tag)
     """
     genre: Optional[str] = None
+    mood: Optional[str] = None    # user can override the analyzer's mood
+    energy: Optional[str] = None  # user can override the analyzer's energy
+    tags: Optional[str] = None    # comma-separated free-form tags
+
+
+class SamplePublic(SQLModel):
+    """
+    Safe public representation of a sample for API responses and JSON output.
+    Derived from an ORM instance via model_config from_attributes=True.
+    Used by: api/routes/*.py, cli --json output serialization
+    """
+    id: Optional[int] = None
+    filename: str
+    path: str
+    bpm: Optional[float] = None
+    key: Optional[str] = None
     mood: Optional[str] = None
     energy: Optional[str] = None
+    instrument: Optional[str] = None
+    genre: Optional[str] = None
     tags: Optional[str] = None
+    imported_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}  # allows SamplePublic.model_validate(orm_instance)
 ```
 
 ---
@@ -117,54 +173,119 @@ class SampleUpdate(SQLModel):
 ## 3. Database Connection and Engine
 
 ```python
-# filename: src/samplemind/data/db.py
+# filename: src/samplemind/data/orm.py
+#
+# This module is the single source of truth for the SQLAlchemy engine.
+# All repositories (SampleRepository, UserRepository) call get_session()
+# from here — nothing else in the codebase creates its own engine.
 
-from pathlib import Path
-from sqlmodel import create_engine, SQLModel, Session
-import platformdirs
+from __future__ import annotations
+
+from collections.abc import Generator
+from contextlib import contextmanager
+
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+from sqlmodel import Session, SQLModel, create_engine
+
+# Module-level engine — lazily created on first call to get_engine().
+# Tests can replace this with: import samplemind.data.orm as m; m._engine = test_engine
+_engine: Engine | None = None
 
 
-def _get_db_path() -> Path:
+def _apply_sqlite_pragmas(dbapi_conn, _connection_record) -> None:  # noqa: ANN001
     """
-    Find the correct database path based on platform.
+    Apply performance and reliability PRAGMAs to every new SQLite connection.
 
-    macOS:   ~/Library/Application Support/samplemind/library.db
-    Linux:   ~/.local/share/samplemind/library.db
-    Windows: C:\\Users\\User\\AppData\\Local\\samplemind\\library.db
+    Registered as a SQLAlchemy 'connect' event listener so it runs automatically
+    on every new connection — the caller never has to remember to set these.
 
-    platformdirs handles all of this automatically per XDG standards.
+    WAL mode:        concurrent reads during writes (CLI + web can run simultaneously)
+    cache_size:      64 MB page cache (negative value = kilobytes)
+    synchronous:     NORMAL — crash-safe without the overhead of FULL
+    temp_store:      in-RAM temp tables and indexes (faster sorts and joins)
+    mmap_size:       256 MB memory-mapped I/O (faster sequential reads on SSDs)
     """
-    data_dir = Path(platformdirs.user_data_dir("samplemind", "samplemind"))
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir / "library.db"
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA cache_size=-64000")    # negative = kilobytes → 64 MB
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute("PRAGMA mmap_size=268435456")  # 256 MB
+    cursor.close()
 
 
-# Global engine object — created once on import
-# connect_args={"check_same_thread": False} allows use from Flask threads
-engine = create_engine(
-    f"sqlite:///{_get_db_path()}",
-    connect_args={"check_same_thread": False},
-    echo=False,  # Set to True for SQL debug logging
-)
-
-
-def init_db():
+def get_engine() -> Engine:
     """
-    Create all tables if they don't exist.
-    Call this at app startup (Flask and CLI).
+    Return the shared SQLAlchemy engine, creating it lazily on first call.
+
+    The database URL comes from Settings.database_url which uses platformdirs:
+      macOS:   ~/Library/Application Support/SampleMind/samplemind.db
+      Linux:   ~/.local/share/SampleMind/samplemind.db
+      Windows: %LOCALAPPDATA%\\SampleMind\\samplemind.db
+
+    Tests override _engine directly:
+        import samplemind.data.orm as orm_module
+        orm_module._engine = in_memory_engine
     """
+    global _engine  # noqa: PLW0603
+    if _engine is None:
+        from samplemind.core.config import get_settings
+
+        db_url = get_settings().database_url
+        _engine = create_engine(
+            db_url,
+            connect_args={"check_same_thread": False},  # needed for Flask threads
+            echo=False,   # set to True temporarily to log all SQL for debugging
+        )
+        # Register PRAGMA handler — fires on every new connection, not just the first
+        event.listen(_engine, "connect", _apply_sqlite_pragmas)
+    return _engine
+
+
+def init_orm() -> None:
+    """
+    Create all SQLModel tables if they do not already exist.
+
+    Both model modules must be imported before create_all() so SQLModel.metadata
+    knows about every table. This is safe to call multiple times — create_all is
+    idempotent (it skips tables that already exist).
+
+    Call this once at startup in every entry point:
+        CLI commands:  call init_orm() before the first repository operation
+        Flask:         call in the before_request hook
+        FastAPI:       call in the lifespan context manager
+    """
+    # Import models to register their table definitions in SQLModel.metadata
+    import samplemind.core.models.user    # noqa: F401 — registers User table
+    import samplemind.core.models.sample  # noqa: F401 — registers Sample table
+
+    engine = get_engine()
     SQLModel.metadata.create_all(engine)
 
 
-def get_session() -> Session:
+@contextmanager
+def get_session() -> Generator[Session, None, None]:
     """
-    Context manager for database sessions.
+    Yield a SQLModel session that auto-commits on success and rolls back on error.
 
-    Usage:
+    expire_on_commit=False: keeps ORM attributes populated after commit so callers
+    can safely access fields (e.g. sample.id) on the returned object without
+    opening another session. Without this, accessing any field after commit raises
+    DetachedInstanceError.
+
+    Usage (in repositories — callers should not need get_session directly):
         with get_session() as session:
-            sample = session.get(Sample, 1)
+            session.add(sample)
+        # sample.id is accessible here because of expire_on_commit=False
     """
-    return Session(engine)
+    with Session(get_engine(), expire_on_commit=False) as session:
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
 ```
 
 ---
@@ -175,69 +296,94 @@ The Repository pattern wraps all database operations in one class. This makes it
 substitute the database in tests (e.g. with in-memory SQLite).
 
 ```python
-# filename: src/samplemind/data/repository.py
+# filename: src/samplemind/data/repositories/sample_repository.py
+#
+# All database access for samples goes through this class.
+# No raw SQL strings anywhere in this file — everything uses SQLModel's
+# type-safe select() API.
+#
+# Design: static methods (not instance methods) so callers never need to
+# construct or inject a SampleRepository instance. Each method opens and
+# closes its own session via the get_session() context manager in orm.py.
+# Tests redirect the engine by monkey-patching orm._engine before calling.
+
+from __future__ import annotations
 
 from typing import Optional
-from sqlmodel import Session, select
-from samplemind.models import Sample, SampleCreate, SampleUpdate
-from samplemind.data.db import get_session
+
+from sqlmodel import func, select
+
+from samplemind.core.models.sample import Sample, SampleCreate, SampleUpdate
+from samplemind.data.orm import get_session
 
 
 class SampleRepository:
     """
-    All database access for samples goes through this class.
-    No SQL strings outside this file.
+    Static-method repository — all sample CRUD in one place.
+    No SQL strings, no sqlite3, no raw connections.
+    Replaces: data/database.py (save_sample, search_samples, tag_sample, etc.)
     """
-
-    def __init__(self, session: Optional[Session] = None):
-        # Allow injection of a test session (in-memory SQLite)
-        self._session = session
-
-    def _get_session(self) -> Session:
-        return self._session or get_session()
 
     # ── Create / Upsert ──────────────────────────────────────────────────────
 
-    def upsert(self, data: SampleCreate) -> Sample:
+    @staticmethod
+    def upsert(data: SampleCreate) -> Sample:
         """
         Insert a new sample, or update auto-detected fields if the path already
-        exists. Manually tagged fields (genre, tags) are not touched.
+        exists in the database. Manually tagged fields (genre, tags) are NEVER
+        touched on re-import — only the analyzer-produced fields are overwritten.
 
-        Replaces: database.py::save_sample() with raw INSERT ... ON CONFLICT
+        Replaces: database.py::save_sample() which used raw INSERT OR REPLACE
+        and would wipe user tags on every re-import.
+
+        Returns the Sample ORM object with its id populated (expire_on_commit=False
+        in get_session() ensures id is accessible after the context manager exits).
         """
-        with self._get_session() as session:
-            # Check if the path already exists
+        with get_session() as session:
+            # Check whether this file path has been imported before
             existing = session.exec(
                 select(Sample).where(Sample.path == data.path)
             ).first()
 
             if existing:
-                # Update only auto-detected fields — preserve manual tags
+                # Path known — overwrite only auto-detected fields; leave genre/tags alone
+                existing.filename = data.filename   # filename may have changed (renamed)
                 existing.bpm = data.bpm
                 existing.key = data.key
                 existing.mood = data.mood
                 existing.energy = data.energy
                 existing.instrument = data.instrument
                 session.add(existing)
-                session.commit()
-                session.refresh(existing)
+                # session.commit() + rollback on error handled by get_session()
                 return existing
             else:
-                # Insert new sample
-                sample = Sample.model_validate(data)
+                # New path — create a full record
+                sample = Sample(
+                    filename=data.filename,
+                    path=data.path,
+                    bpm=data.bpm,
+                    key=data.key,
+                    mood=data.mood,
+                    energy=data.energy,
+                    instrument=data.instrument,
+                )
                 session.add(sample)
-                session.commit()
-                session.refresh(sample)
+                session.flush()   # flushes to DB so sample.id is assigned
                 return sample
 
     # ── Update Tags ───────────────────────────────────────────────────────────
 
-    def tag(self, path: str, update: SampleUpdate) -> Optional[Sample]:
+    @staticmethod
+    def tag(path: str, update: SampleUpdate) -> Optional[Sample]:
         """
-        Update manual tags for a sample.
-        Replaces: database.py::tag_sample()
+        Apply manual user tags to a sample identified by its absolute path.
+        Only non-None fields in update are written — so passing SampleUpdate(genre="trap")
+        will not clear an existing mood value.
+
+        Returns the updated Sample on success, None if the path is not found.
+        Replaces: database.py::tag_sample() which built UPDATE SQL strings by hand.
         """
-        with self._get_session() as session:
+        with get_session() as session:
             sample = session.exec(
                 select(Sample).where(Sample.path == path)
             ).first()
@@ -245,20 +391,17 @@ class SampleRepository:
             if not sample:
                 return None
 
-            # Update only fields that are explicitly provided (not None)
-            update_data = update.model_dump(exclude_none=True)
-            for field, value in update_data.items():
+            # model_dump(exclude_none=True) gives only the fields the caller supplied
+            for field, value in update.model_dump(exclude_none=True).items():
                 setattr(sample, field, value)
 
             session.add(sample)
-            session.commit()
-            session.refresh(sample)
             return sample
 
     # ── Search ────────────────────────────────────────────────────────────────
 
+    @staticmethod
     def search(
-        self,
         query: Optional[str] = None,
         bpm_min: Optional[float] = None,
         bpm_max: Optional[float] = None,
@@ -268,267 +411,420 @@ class SampleRepository:
         instrument: Optional[str] = None,
     ) -> list[Sample]:
         """
-        Search with combined filters. All filters are optional.
-        Replaces: database.py::search_samples() with raw SQL string building.
+        Search with any combination of filters. All parameters are optional.
+        An empty call (no arguments) returns all samples ordered by import date.
+
+        Current implementation: LIKE-based text search.
+        Phase 5 target: replace with FTS5 virtual table for sub-50ms queries
+        on libraries of 10,000+ samples.
+
+        Replaces: database.py::search_samples() + get_all_samples()
         """
-        with self._get_session() as session:
+        with get_session() as session:
             stmt = select(Sample)
 
-            # Full-text search on filename and tags
+            # Text search across filename and free-form tags
             if query:
                 stmt = stmt.where(
                     Sample.filename.contains(query) | Sample.tags.contains(query)
                 )
 
-            # Numeric filters
+            # Numeric range filter
             if bpm_min is not None:
                 stmt = stmt.where(Sample.bpm >= bpm_min)
             if bpm_max is not None:
                 stmt = stmt.where(Sample.bpm <= bpm_max)
 
-            # Text filters (LIKE search for flexibility)
+            # Exact-match or LIKE filters for categorical fields
             if key:
                 stmt = stmt.where(Sample.key.contains(key))
             if genre:
                 stmt = stmt.where(Sample.genre.contains(genre))
             if energy:
-                stmt = stmt.where(Sample.energy == energy)
+                stmt = stmt.where(Sample.energy == energy)   # exact: "low"/"mid"/"high"
             if instrument:
                 stmt = stmt.where(Sample.instrument.contains(instrument))
 
             stmt = stmt.order_by(Sample.imported_at.desc())
-            return session.exec(stmt).all()
+            return list(session.exec(stmt).all())
 
-    def get_by_name(self, name: str) -> Optional[Sample]:
-        """Find sample by partial filename match. Replaces: get_sample_by_name()."""
-        with self._get_session() as session:
+    # ── Lookup helpers ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_by_name(name: str) -> Optional[Sample]:
+        """
+        Find the first sample whose filename contains `name` (case-insensitive LIKE).
+        Used by the CLI `tag` command to resolve a partial name to a full record.
+        Replaces: database.py::get_sample_by_name()
+        """
+        with get_session() as session:
             return session.exec(
                 select(Sample).where(Sample.filename.contains(name)).limit(1)
             ).first()
 
-    def count(self) -> int:
-        """Number of samples in the library."""
-        with self._get_session() as session:
-            return len(session.exec(select(Sample)).all())
+    @staticmethod
+    def get_by_path(path: str) -> Optional[Sample]:
+        """
+        Find a sample by its exact absolute path. Returns None if not found.
+        Used internally to check for duplicates before upsert.
+        """
+        with get_session() as session:
+            return session.exec(
+                select(Sample).where(Sample.path == path)
+            ).first()
 
-    def get_all(self) -> list[Sample]:
-        """Get all samples — used by export functionality."""
-        return self.search()
+    @staticmethod
+    def get_by_id(sample_id: int) -> Optional[Sample]:
+        """
+        Find a sample by its primary key. Used by the audio streaming route
+        in the Flask app (/audio/<id>) to resolve a row before send_file().
+        """
+        with get_session() as session:
+            return session.get(Sample, sample_id)
+
+    @staticmethod
+    def count() -> int:
+        """
+        Return the total number of samples in the library.
+        Uses a COUNT(*) aggregate — faster than fetching all rows.
+        Replaces: database.py::count_samples()
+        """
+        with get_session() as session:
+            result = session.exec(select(func.count()).select_from(Sample)).one()
+            return result or 0
+
+    @staticmethod
+    def get_all() -> list[Sample]:
+        """Return every sample ordered by import date. Convenience wrapper around search()."""
+        return SampleRepository.search()
 ```
 
 ---
 
 ## 5. Side by Side — Old vs New
 
-| Operation | Old (`database.py`) | New (`repository.py`) |
-|-----------|--------------------|-----------------------|
-| Save sample | `conn.execute("INSERT INTO samples ...")` | `repo.upsert(SampleCreate(...))` |
-| Update tags | `f"UPDATE samples SET {', '.join(fields)}"` | `repo.tag(path, SampleUpdate(...))` |
-| Search | `sql += " AND bpm >= ?"` string building | `stmt = stmt.where(Sample.bpm >= bpm_min)` |
-| Find by name | `"SELECT * FROM samples WHERE filename LIKE ?"` | `repo.get_by_name("kick")` |
-| Count | `"SELECT COUNT(*) FROM samples"` | `repo.count()` |
-| Type safety | None — all `sqlite3.Row` | Full — `sample.bpm: Optional[float]` |
-| IDE autocomplete | None | Works with `sample.` in VS Code |
+| Operation | Old (`database.py`) | New (`sample_repository.py`) |
+|-----------|--------------------|-----------------------------|
+| Save sample | `conn.execute("INSERT INTO samples ...")` | `SampleRepository.upsert(SampleCreate(...))` |
+| Update tags | `f"UPDATE samples SET {', '.join(fields)}"` | `SampleRepository.tag(path, SampleUpdate(...))` |
+| Search | `sql += " AND bpm >= ?"` string building | `SampleRepository.search(bpm_min=130, energy="high")` |
+| Find by name | `"SELECT * FROM samples WHERE filename LIKE ?"` | `SampleRepository.get_by_name("kick")` |
+| Find by ID | `"SELECT * FROM samples WHERE id = ?"` | `SampleRepository.get_by_id(sample_id)` |
+| Find by path | `"SELECT * FROM samples WHERE path = ?"` | `SampleRepository.get_by_path(abs_path)` |
+| Count | `"SELECT COUNT(*) FROM samples"` | `SampleRepository.count()` |
+| Get all | `"SELECT * FROM samples ORDER BY imported_at DESC"` | `SampleRepository.get_all()` |
+| Type safety | None — all `sqlite3.Row` dicts | Full — `sample.bpm: Optional[float]` |
+| IDE autocomplete | None | Works with `sample.` in VS Code / Pylance |
+| Re-import safety | Wipes genre/tags on every import | `upsert()` never touches genre or tags |
+| Import path | `from samplemind.data.database import save_sample` | `from samplemind.data.repositories.sample_repository import SampleRepository` |
 
 ---
 
 ## 6. Alembic — Schema Migrations
 
-Alembic tracks schema changes over time, replacing the current `_migrate()` hack that can fail
-on complex changes.
+Alembic provides reversible, version-controlled schema changes so we never have to
+manually edit the database or write brittle ALTER TABLE scripts.
 
-### Setup
+### Current State — Already Configured
+
+Alembic is fully set up and both baseline migrations are applied. `alembic.ini` and
+the `migrations/` directory already exist in the repository root — do not run
+`alembic init`.
+
+```
+migrations/
+├── env.py                              ← imports all models; render_as_batch=True for SQLite
+├── script.py.mako                      ← migration file template
+└── versions/
+    ├── 0001_create_users_table.py      ← users schema baseline (Phase 3 auth)
+    └── 0002_create_samples_table.py    ← samples schema + ix_samples_filename index (Phase 4)
+```
+
+### Applying Migrations
 
 ```bash
-# Install Alembic (add to pyproject.toml under dependencies)
-$ uv add alembic
+# Apply all pending migrations (creates users + samples tables if they do not exist):
+uv run alembic upgrade head
 
-# Initialise Alembic in the project
-$ uv run alembic init alembic
+# Roll back one step (drops the samples table — runs 0002 downgrade):
+uv run alembic downgrade -1
+
+# Show the currently applied revision:
+uv run alembic current
+
+# Show full revision history and which are applied:
+uv run alembic history --verbose
+
+# Verify no unapplied migrations exist (used in CI — fails if models drift):
+uv run alembic check
 ```
 
-```ini
-# filename: alembic.ini (update sqlalchemy.url)
-[alembic]
-script_location = alembic
-
-# Point to SQLite database (same path as in db.py)
-# %(here)s = the directory where alembic.ini resides
-sqlalchemy.url = sqlite:///%(here)s/../data/dev.db
-```
+### Migration 0001 — Users Table
 
 ```python
-# filename: alembic/env.py (update target_metadata)
+# filename: migrations/versions/0001_create_users_table.py
+# Created for Phase 3 — Authentication & Authorization
 
-from samplemind.models import Sample      # Import all models
-from sqlmodel import SQLModel
+revision: str = "0001"
+down_revision = None   # first migration in the chain
 
-# Tell Alembic which tables to track
-target_metadata = SQLModel.metadata
-```
-
-### First Migration
-
-```bash
-# Auto-generate migration file from model definitions
-$ uv run alembic revision --autogenerate -m "initial_schema"
-
-# Run the migration (creates the table)
-$ uv run alembic upgrade head
-
-# View history
-$ uv run alembic history
-```
-
-Generated migration file (example):
-
-```python
-# filename: alembic/versions/0001_initial_schema.py
-
-"""initial_schema
-
-Revision ID: 0001
-"""
-from alembic import op
-import sqlalchemy as sa
-
-def upgrade():
+def upgrade() -> None:
     op.create_table(
-        "sample",                              # SQLModel uses classname in lowercase
-        sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("filename", sa.String, nullable=False, index=True),
-        sa.Column("path", sa.String, nullable=False, unique=True),
-        sa.Column("bpm", sa.Float, nullable=True),
-        sa.Column("key", sa.String, nullable=True),
-        sa.Column("mood", sa.String, nullable=True),
-        sa.Column("energy", sa.String, nullable=True),
-        sa.Column("instrument", sa.String, nullable=True),
-        sa.Column("genre", sa.String, nullable=True),
-        sa.Column("tags", sa.String, nullable=True),
-        sa.Column("imported_at", sa.DateTime, nullable=True),
+        "users",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("email", sa.String(), nullable=False),
+        sa.Column("hashed_password", sa.String(), nullable=False),
+        sa.Column("role", sa.String(), nullable=False),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("email"),
     )
+    op.create_index(op.f("ix_users_email"), "users", ["email"], unique=True)
 
-def downgrade():
-    op.drop_table("sample")
+def downgrade() -> None:
+    op.drop_index(op.f("ix_users_email"), table_name="users")
+    op.drop_table("users")
+```
+
+### Migration 0002 — Samples Table
+
+```python
+# filename: migrations/versions/0002_create_samples_table.py
+# Created for Phase 4 — Database & Data Layer
+#
+# If the samples table already exists from the legacy database.py init_db() call,
+# mark this migration as applied without running it:
+#   uv run alembic stamp 0002
+# The existing table is schema-compatible — Alembic just takes ownership.
+
+revision: str = "0002"
+down_revision = "0001"   # samples depends on users existing first
+
+def upgrade() -> None:
+    op.create_table(
+        "samples",        # __tablename__ = "samples" (plural, set explicitly on Sample)
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("filename", sa.String(), nullable=False),
+        sa.Column("path", sa.String(), nullable=False),
+        sa.Column("bpm", sa.Float(), nullable=True),
+        sa.Column("key", sa.String(), nullable=True),
+        sa.Column("mood", sa.String(), nullable=True),
+        sa.Column("energy", sa.String(), nullable=True),
+        sa.Column("instrument", sa.String(), nullable=True),
+        sa.Column("genre", sa.String(), nullable=True),
+        sa.Column("tags", sa.String(), nullable=True),
+        sa.Column("imported_at", sa.DateTime(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("path"),
+    )
+    # Named index — Alembic can drop it by name on downgrade
+    op.create_index(op.f("ix_samples_filename"), "samples", ["filename"], unique=False)
+
+def downgrade() -> None:
+    op.drop_index(op.f("ix_samples_filename"), table_name="samples")
+    op.drop_table("samples")
+```
+
+### Creating a New Migration (Future Schema Changes)
+
+```bash
+# After editing the SQLModel class, auto-generate a migration:
+uv run alembic revision --autogenerate -m "add fingerprint column to samples"
+
+# Always review the generated file in migrations/versions/ before applying.
+# Auto-generate is not perfect — SQLite column type changes may be missed.
+
+# Apply the new migration:
+uv run alembic upgrade head
 ```
 
 ---
 
 ## 7. Testing with In-Memory SQLite
 
+SampleRepository uses static methods that call `get_session()` internally.
+Tests redirect the shared engine by monkey-patching `orm_module._engine` before
+calling any repository method. The `orm_engine` fixture in `tests/conftest.py`
+already provides this — use it rather than writing new engine setup code.
+
 ```python
 # filename: tests/test_repository.py
+# Run with: uv run pytest tests/test_repository.py -v
 
 import pytest
-from sqlmodel import create_engine, SQLModel, Session
-from samplemind.models import Sample, SampleCreate, SampleUpdate
-from samplemind.data.repository import SampleRepository
+from sqlalchemy.pool import StaticPool
+from sqlmodel import SQLModel, create_engine
+
+import samplemind.data.orm as orm_module
+from samplemind.core.models.sample import SampleCreate, SampleUpdate
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 
-@pytest.fixture
-def in_memory_session():
+@pytest.fixture(autouse=True)
+def _patch_engine():
     """
-    Creates an isolated in-memory SQLite database for each test.
-    No data leaks between tests.
+    Redirect all get_session() calls to a fresh in-memory SQLite engine.
+
+    autouse=True means every test in this file gets an isolated DB automatically.
+    StaticPool ensures all threads (including SQLModel's) see the same connection,
+    which is required because SQLite in-memory databases are connection-scoped.
     """
-    # sqlite:// (no file path) = in-memory database
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite://",                            # no file — pure in-memory
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,                   # single shared connection
+    )
+    # Import models to register tables in SQLModel.metadata before create_all
+    import samplemind.core.models.sample  # noqa: F401
+    import samplemind.core.models.user    # noqa: F401
     SQLModel.metadata.create_all(engine)
 
-    with Session(engine) as session:
-        yield session  # Provide session to the test
-
-
-@pytest.fixture
-def repo(in_memory_session):
-    """SampleRepository connected to in-memory test database."""
-    return SampleRepository(session=in_memory_session)
+    # Redirect the module-level _engine so get_engine() returns this engine
+    original = orm_module._engine
+    orm_module._engine = engine
+    yield
+    orm_module._engine = original   # restore after each test (important for test isolation)
+    SQLModel.metadata.drop_all(engine)
 
 
 class TestUpsert:
-    def test_insert_new_sample(self, repo):
-        """Inserting a new sample should succeed and return a Sample object."""
+    def test_insert_new_sample(self):
+        """Inserting a new sample populates id and returns the Sample ORM object."""
         data = SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=128.0)
-        sample = repo.upsert(data)
+        sample = SampleRepository.upsert(data)
 
-        assert sample.id is not None
+        assert sample.id is not None        # id assigned by SQLite autoincrement
         assert sample.filename == "kick.wav"
         assert sample.bpm == 128.0
+        assert sample.genre is None         # not set by SampleCreate — should stay None
 
-    def test_upsert_same_path_updates_bpm(self, repo):
-        """Re-importing the same path should update BPM, not create a duplicate."""
-        repo.upsert(SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=128.0))
-        repo.upsert(SampleCreate(filename="kick.wav", path="/samples/kick.wav", bpm=140.0))
+    def test_upsert_same_path_updates_bpm(self):
+        """Re-importing the same path updates auto-detected fields but keeps user tags."""
+        SampleRepository.upsert(SampleCreate(filename="kick.wav", path="/s/kick.wav", bpm=128.0))
 
-        # Should still be only one sample
-        assert repo.count() == 1
-        # BPM should be updated
-        sample = repo.get_by_name("kick")
-        assert sample.bpm == 140.0
+        # Simulate the user tagging after the first import
+        SampleRepository.tag("/s/kick.wav", SampleUpdate(genre="trap"))
+
+        # Re-import with new BPM (e.g. after re-analysis)
+        SampleRepository.upsert(SampleCreate(filename="kick.wav", path="/s/kick.wav", bpm=140.0))
+
+        assert SampleRepository.count() == 1        # no duplicate created
+        sample = SampleRepository.get_by_name("kick")
+        assert sample.bpm == 140.0                  # auto-detected field updated
+        assert sample.genre == "trap"               # user tag preserved — upsert never clears it
+
+    def test_upsert_returns_sample_with_id_after_session_closes(self):
+        """expire_on_commit=False in get_session() ensures id is accessible after commit."""
+        sample = SampleRepository.upsert(
+            SampleCreate(filename="pad.wav", path="/s/pad.wav")
+        )
+        # Accessing .id here would raise DetachedInstanceError WITHOUT expire_on_commit=False
+        assert isinstance(sample.id, int)
 
 
 class TestTag:
-    def test_tag_updates_genre(self, repo):
-        """Tagging should update genre without changing other fields."""
-        repo.upsert(SampleCreate(filename="bass.wav", path="/s/bass.wav", mood="dark"))
+    def test_tag_updates_genre_without_changing_mood(self):
+        """tag() with only genre set should not clear an existing mood value."""
+        SampleRepository.upsert(
+            SampleCreate(filename="bass.wav", path="/s/bass.wav", mood="dark")
+        )
+        SampleRepository.tag("/s/bass.wav", SampleUpdate(genre="trap"))
 
-        sample = repo.get_by_name("bass")
-        repo.tag(sample.path, SampleUpdate(genre="trap"))
-
-        updated = repo.get_by_name("bass")
+        updated = SampleRepository.get_by_name("bass")
         assert updated.genre == "trap"
-        assert updated.mood == "dark"   # Unchanged
+        assert updated.mood == "dark"    # mood was set by analyzer — tag() must not clear it
+
+    def test_tag_returns_none_for_unknown_path(self):
+        """tag() on a path that does not exist should return None, not raise."""
+        result = SampleRepository.tag("/no/such/file.wav", SampleUpdate(genre="trap"))
+        assert result is None
 
 
 class TestSearch:
-    def test_search_by_energy(self, repo):
-        """Searching by energy filter should return only matching samples."""
-        repo.upsert(SampleCreate(filename="kick.wav", path="/s/kick.wav", energy="high"))
-        repo.upsert(SampleCreate(filename="pad.wav", path="/s/pad.wav", energy="low"))
+    def test_search_by_energy_returns_only_matching(self):
+        """Energy filter should exclude samples with a different energy value."""
+        SampleRepository.upsert(SampleCreate(filename="kick.wav", path="/s/kick.wav", energy="high"))
+        SampleRepository.upsert(SampleCreate(filename="pad.wav",  path="/s/pad.wav",  energy="low"))
 
-        results = repo.search(energy="high")
+        results = SampleRepository.search(energy="high")
         assert len(results) == 1
         assert results[0].filename == "kick.wav"
 
-    def test_search_bpm_range(self, repo):
-        """BPM range filter should return samples within the range."""
-        repo.upsert(SampleCreate(filename="a.wav", path="/s/a.wav", bpm=120.0))
-        repo.upsert(SampleCreate(filename="b.wav", path="/s/b.wav", bpm=140.0))
-        repo.upsert(SampleCreate(filename="c.wav", path="/s/c.wav", bpm=160.0))
+    def test_search_bpm_range(self):
+        """BPM range filter should return only samples within [bpm_min, bpm_max]."""
+        SampleRepository.upsert(SampleCreate(filename="a.wav", path="/s/a.wav", bpm=120.0))
+        SampleRepository.upsert(SampleCreate(filename="b.wav", path="/s/b.wav", bpm=140.0))
+        SampleRepository.upsert(SampleCreate(filename="c.wav", path="/s/c.wav", bpm=160.0))
 
-        results = repo.search(bpm_min=130.0, bpm_max=150.0)
+        results = SampleRepository.search(bpm_min=130.0, bpm_max=150.0)
         assert len(results) == 1
         assert results[0].filename == "b.wav"
+
+    def test_search_no_filters_returns_all_ordered_by_import_date(self):
+        """Calling search() with no arguments should return all samples, newest first."""
+        SampleRepository.upsert(SampleCreate(filename="a.wav", path="/s/a.wav"))
+        SampleRepository.upsert(SampleCreate(filename="b.wav", path="/s/b.wav"))
+
+        results = SampleRepository.search()
+        assert len(results) == 2
+        # Ordered by imported_at DESC — b was inserted after a, so b is first
+        assert results[0].filename == "b.wav"
+
+    def test_search_query_matches_filename(self):
+        """Text query should match substrings in filename."""
+        SampleRepository.upsert(SampleCreate(filename="dark_kick_128.wav", path="/s/dk.wav"))
+        SampleRepository.upsert(SampleCreate(filename="bright_pad.wav",    path="/s/bp.wav"))
+
+        results = SampleRepository.search(query="kick")
+        assert len(results) == 1
+        assert "kick" in results[0].filename
 ```
 
 ---
 
 ## Migration Notes
 
-- `src/data/database.py` can be deleted after `repository.py` is implemented and tested
-- Existing `~/.samplemind/library.db` can be kept — Alembic can migrate it
-- All import paths using `from data.database import ...` update to
-  `from samplemind.data.repository import SampleRepository`
+- `src/samplemind/data/database.py` is superseded by `data/orm.py` + the repositories.
+  It is kept in the repository for reference during cleanup but is not imported by any
+  CLI command or web route. Remove it as part of Phase 5 cleanup.
+- Existing production databases (`~/.samplemind/library.db` or the platformdirs path)
+  can be kept — run `uv run alembic stamp 0002` if the tables already exist, then
+  `uv run alembic upgrade head` for any future migrations.
+- All import paths using `from samplemind.data.database import ...` should be replaced
+  with `from samplemind.data.repositories.sample_repository import SampleRepository`.
+- The `orm_engine` pytest fixture (in `tests/conftest.py`) is the canonical way to
+  provide an isolated in-memory database to tests. Do not create ad-hoc engines in
+  individual test files.
 
 ---
 
 ## Testing Checklist
 
 ```bash
-# Run repository tests
-$ uv run pytest tests/test_repository.py -v
+# Run all tests (33 passing — includes repository + auth + audio + CLI + web):
+uv run pytest tests/ -v
 
-# Confirm Alembic can connect
-$ uv run alembic current
+# Run only repository-related tests:
+uv run pytest tests/test_repository.py -v
 
-# Run all migrations
-$ uv run alembic upgrade head
+# Confirm Alembic can connect and shows the current revision (0002):
+uv run alembic current
 
-# Check that the table exists
-$ python -c "
-from samplemind.data.db import engine
+# Apply all migrations to the real database:
+uv run alembic upgrade head
+
+# Verify no unapplied migrations exist (fails if models have drifted from migrations):
+uv run alembic check
+
+# Inspect the tables that SQLModel registered (should include 'users' and 'samples'):
+uv run python -c "
+import samplemind.core.models.user    # noqa — registers User
+import samplemind.core.models.sample  # noqa — registers Sample
+from samplemind.data.orm import get_engine
 from sqlalchemy import inspect
-print(inspect(engine).get_table_names())
+print(inspect(get_engine()).get_table_names())
+# Expected: ['alembic_version', 'samples', 'users']
 "
 ```
 
@@ -543,11 +839,16 @@ print(inspect(engine).get_table_names())
 $ uv run alembic stamp head
 ```
 
-**Error: `ImportError: cannot import name 'Sample'`**
+**Error: `ImportError: cannot import name 'Sample' from 'samplemind.models'`**
 ```bash
-# Check models.py is in the correct folder:
-$ ls src/samplemind/models.py
-# and that pyproject.toml points to src/
+# The Sample class moved to the core.models package in Phase 4.
+# Update the import:
+#   Old: from samplemind.models import Sample, SampleCreate
+#   New: from samplemind.core.models.sample import Sample, SampleCreate
+#
+# Verify the file exists:
+ls src/samplemind/core/models/sample.py
+# and that pyproject.toml has: packages = [{include = "samplemind", from = "src"}]
 ```
 
 **Error: Losing data on re-import**
@@ -562,97 +863,147 @@ Make sure you use SampleUpdate for manual tagging, not SampleCreate.
 
 ### WAL Mode
 
-Enable Write-Ahead Logging for better concurrency (reads don't block writes):
+WAL mode and all performance PRAGMAs are already enabled automatically on every new
+connection via a SQLAlchemy event listener registered in `data/orm.py`. You do not
+need to set them manually anywhere else in the codebase.
 
 ```python
-# src/samplemind/data/database.py — add to connection setup
-import sqlite3
+# filename: src/samplemind/data/orm.py (already implemented)
 
-def get_connection(db_path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    # Enable WAL mode — survives app restart (persistent setting)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA cache_size = -64000")  # 64MB cache
-    conn.execute("PRAGMA synchronous = NORMAL")  # safe + fast
-    conn.execute("PRAGMA temp_store = MEMORY")
-    conn.execute("PRAGMA mmap_size = 268435456")  # 256MB memory-mapped I/O
-    return conn
+from sqlalchemy import event
+
+def _apply_sqlite_pragmas(dbapi_conn, _connection_record) -> None:
+    """
+    Fires on every new SQLite connection opened by the shared engine.
+    Registered once in get_engine() via: event.listen(_engine, "connect", _apply_sqlite_pragmas)
+
+    WAL mode:    reads never block writes — the CLI and Flask can run at the same time.
+    cache_size:  64 MB page cache (negative value = kilobytes).
+    synchronous: NORMAL — data is safe after a crash; faster than FULL (no fsync per commit).
+    temp_store:  in-RAM temp tables — faster ORDER BY and GROUP BY on large result sets.
+    mmap_size:   256 MB memory-mapped I/O — sequential reads on SSDs are faster.
+    """
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA cache_size=-64000")    # negative = kilobytes → 64 MB
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute("PRAGMA mmap_size=268435456")  # 256 MB
+    cursor.close()
+
+# Registered in get_engine() — fires on every new connection, not just the first:
+# event.listen(_engine, "connect", _apply_sqlite_pragmas)
 ```
 
 WAL mode benefits:
-- Concurrent reads during writes (desktop app + CLI can run simultaneously)
-- Faster writes (no fsync on every transaction)
-- Automatic checkpointing back to main database file
+- Concurrent reads during writes — desktop app + CLI can run simultaneously
+- Faster writes — no fsync on every transaction (only at WAL checkpoint)
+- Automatic checkpointing back to the main database file
+- SQLite-native — no extra dependencies, no server process
 
 ### FTS5 Full-Text Search
 
-Add a virtual table for sub-50ms text search across filename, tags, and classifications:
+**Status: Planned for Phase 5.** The current `SampleRepository.search()` implementation
+uses SQLModel `LIKE` expressions which perform a full table scan. For libraries beyond
+~5,000 samples, an FTS5 virtual table provides sub-50ms ranked full-text search across
+filename, tags, and classification fields.
+
+The FTS5 table will be added via an Alembic migration (0003) and a corresponding trigger
+set in a future phase. The Alembic migration will look like:
 
 ```sql
--- Create FTS5 virtual table (run once in migration):
+-- Alembic upgrade() body for 0003_add_fts5_table.py:
+
+-- Content table FTS5 virtual table — stays in sync with `samples` via triggers
 CREATE VIRTUAL TABLE IF NOT EXISTS samples_fts USING fts5(
     filename,
     tags,
     instrument,
     mood,
-    content='samples',
+    content='samples',   -- read-through to the `samples` table
     content_rowid='id'
 );
 
--- Populate from existing samples:
+-- Backfill from existing rows:
 INSERT INTO samples_fts(rowid, filename, tags, instrument, mood)
 SELECT id, filename, tags, instrument, mood FROM samples;
 
--- Keep in sync with triggers:
+-- INSERT trigger — fires after every SampleRepository.upsert() INSERT path:
 CREATE TRIGGER samples_ai AFTER INSERT ON samples BEGIN
     INSERT INTO samples_fts(rowid, filename, tags, instrument, mood)
     VALUES (new.id, new.filename, new.tags, new.instrument, new.mood);
 END;
 
+-- DELETE trigger — required for FTS5 content tables to stay consistent:
 CREATE TRIGGER samples_ad AFTER DELETE ON samples BEGIN
     INSERT INTO samples_fts(samples_fts, rowid, filename, tags, instrument, mood)
     VALUES ('delete', old.id, old.filename, old.tags, old.instrument, old.mood);
 END;
 ```
 
-FTS5 search query:
+Once the FTS5 table exists, `SampleRepository.search()` will call it via a raw SQL
+expression through SQLAlchemy's `text()` function rather than LIKE:
+
 ```python
-def search_fts(conn: sqlite3.Connection, query: str) -> list[dict]:
-    cur = conn.execute(
+# Phase 5 target implementation of the query path inside SampleRepository.search()
+from sqlalchemy import text
+
+# Replace the current LIKE chain with a ranked FTS5 MATCH:
+if query:
+    fts_stmt = text(
         """SELECT s.* FROM samples s
            JOIN samples_fts fts ON s.id = fts.rowid
-           WHERE samples_fts MATCH ?
-           ORDER BY rank""",
-        (query,)
+           WHERE samples_fts MATCH :q
+           ORDER BY rank"""   # rank is a built-in FTS5 relevance score (lower = better)
     )
-    return [dict(row) for row in cur.fetchall()]
+    with get_session() as session:
+        rows = session.exec(fts_stmt, {"q": query}).all()
+        return [Sample.model_validate(dict(r)) for r in rows]
 ```
 
 ### `backup_db()` Function
 
-Safe hot backup using SQLite's built-in backup API (works while the database is in use):
+Safe hot backup using SQLite's built-in backup API (works while the database is in use).
+This reaches one layer below SQLModel to get the raw `sqlite3.Connection` from the
+SQLAlchemy engine — it is the only place in the codebase where raw sqlite3 is used directly,
+and only because the backup API is a `sqlite3`-level feature with no SQLAlchemy equivalent.
 
 ```python
+# src/samplemind/cli/commands/backup.py  (planned — Phase 5)
+
 import sqlite3
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+from samplemind.data.orm import get_engine
 
 
-def backup_db(src_path: Path, dest_path: Path | None = None) -> Path:
-    """Create a hot backup of the SQLite database.
+def backup_db(dest_path: Path | None = None) -> Path:
+    """Create a hot backup of the live SQLite database.
 
-    Uses SQLite's backup API — safe while the database is open and in use.
-    Creates dest_path if not provided (timestamped backup in same directory).
+    Uses SQLite's built-in backup API — safe while the database is open and being written.
+    If dest_path is not provided, a timestamped filename is created in the same directory.
+
+    Args:
+        dest_path: explicit destination path, or None for auto-timestamped path.
+
+    Returns:
+        The path where the backup was written.
     """
+    # Resolve the source path from the engine URL
+    db_url = str(get_engine().url)              # "sqlite:////abs/path/to/samplemind.db"
+    src_path = Path(db_url.replace("sqlite:///", ""))
+
     if dest_path is None:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         dest_path = src_path.parent / f"{src_path.stem}_backup_{ts}.db"
 
+    # Open raw sqlite3 connections — bypass SQLAlchemy for the backup API
     src = sqlite3.connect(str(src_path))
     dst = sqlite3.connect(str(dest_path))
     try:
-        src.backup(dst, pages=100)  # copy 100 pages at a time (non-blocking)
+        # pages=100: copy 100 pages per iteration — non-blocking, allows concurrent reads
+        src.backup(dst, pages=100)
     finally:
         src.close()
         dst.close()
@@ -660,10 +1011,13 @@ def backup_db(src_path: Path, dest_path: Path | None = None) -> Path:
     return dest_path
 ```
 
-CLI command:
+CLI command (Phase 5 target):
 ```bash
-uv run samplemind backup                   # backup to timestamped file
-uv run samplemind backup --dest ~/backup/library.db  # backup to specific path
+# Backup to an auto-timestamped file next to the database:
+uv run samplemind backup
+
+# Backup to a specific path:
+uv run samplemind backup --dest ~/Backups/library.db
 ```
 
 ### Alembic CI Step
@@ -690,20 +1044,29 @@ This catches:
 
 ### PRAGMA Performance Settings Reference
 
+All PRAGMAs below are already applied automatically by `_apply_sqlite_pragmas()` in
+`data/orm.py`. This table documents what each setting does and why it was chosen.
+
 ```sql
--- Full set of recommended PRAGMAs for SampleMind:
-PRAGMA journal_mode=WAL;          -- concurrent reads, faster writes
-PRAGMA cache_size = -64000;       -- 64MB page cache (negative = kilobytes)
-PRAGMA synchronous = NORMAL;      -- safe + fast (not FULL which is slow)
-PRAGMA temp_store = MEMORY;       -- temp tables/indexes in RAM
-PRAGMA mmap_size = 268435456;     -- 256MB memory-mapped I/O
-PRAGMA optimize;                  -- run query planner analysis (on close)
+-- Applied to every new SQLite connection by the SQLAlchemy event listener:
+PRAGMA journal_mode=WAL;          -- Write-Ahead Log: concurrent reads during writes
+PRAGMA cache_size=-64000;         -- 64 MB page cache (negative value = kilobytes)
+PRAGMA synchronous=NORMAL;        -- crash-safe without the overhead of FULL (no fsync per commit)
+PRAGMA temp_store=MEMORY;         -- sort/join temp tables stay in RAM, not in a temp file
+PRAGMA mmap_size=268435456;       -- 256 MB memory-mapped I/O for faster sequential reads
 ```
 
-Run `PRAGMA optimize` on database close (not open) for best effect:
+`PRAGMA optimize` (query planner statistics) is best run on database close rather than
+open. It is not currently in `_apply_sqlite_pragmas()` but can be added to a future
+graceful-shutdown hook in the CLI or FastAPI lifespan:
+
 ```python
-def close_connection(conn: sqlite3.Connection) -> None:
-    conn.execute("PRAGMA optimize")
-    conn.close()
+# Future: add to a shutdown hook, not to the connect event
+from samplemind.data.orm import get_engine
+
+def run_optimize_on_shutdown() -> None:
+    """Run PRAGMA optimize to update query planner statistics on app exit."""
+    with get_engine().connect() as conn:
+        conn.exec_driver_sql("PRAGMA optimize")
 ```
 

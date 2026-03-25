@@ -1,0 +1,95 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflow: add-audio-feature
+# Purpose: Guided implementation of a new audio feature (e.g. spectral_bandwidth).
+#          Ensures the feature is added consistently across the full stack.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: add-audio-feature
+description: >
+  Add a new extracted audio feature through the complete stack: analysis,
+  classifier, DB schema, CLI output, tests, and docs.
+agent: audio-analyzer
+
+steps:
+  - id: design
+    name: "Design the feature"
+    questions:
+      - "What librosa call computes it?"
+      - "Should it be normalized (0–1 range)?"
+      - "Which classifiers will use it? (energy/mood/instrument)"
+      - "What's the name in the internal _features() dict?"
+    reference: "See existing features in src/samplemind/analyzer/audio_analysis.py"
+    pattern: |
+      # Example: spectral_bandwidth
+      bandwidth = float(np.mean(librosa.feature.spectral_bandwidth(y=y, sr=sr)))
+      bandwidth_norm = bandwidth / (sr / 2)   # normalize to 0–1
+
+  - id: add_to_analysis
+    name: "Add to audio_analysis.py"
+    file: src/samplemind/analyzer/audio_analysis.py
+    action: >
+      Add the feature extraction after existing features in analyze_file().
+      Return it in the features dict alongside rms, centroid_norm, zcr, etc.
+
+  - id: add_to_classifier
+    name: "Add to classifier.py (if used in classification)"
+    file: src/samplemind/analyzer/classifier.py
+    action: >
+      Add the feature to _features() extraction.
+      Update relevant classify_*() functions to use the new feature.
+      Document the threshold decision in a comment.
+
+  - id: add_db_column
+    name: "Add to Sample model + migration"
+    files:
+      - src/samplemind/core/models/sample.py
+      - migrations/versions/
+    action: >
+      Add Optional[float] field to Sample SQLModel class.
+      Add to SampleCreate and SamplePublic schemas.
+      Generate migration: uv run alembic revision --autogenerate -m "add_{feature}_column"
+      Apply: uv run alembic upgrade head
+
+  - id: add_to_repository
+    name: "Add to SampleRepository.upsert()"
+    file: src/samplemind/data/repositories/sample_repository.py
+    action: >
+      Include new field in the upsert() method's existing= update block.
+
+  - id: add_test_fixture
+    name: "Create pytest fixture and test"
+    file: tests/conftest.py + tests/test_audio_analysis.py
+    pattern: |
+      @pytest.fixture
+      def wide_bandwidth_wav(tmp_path: Path) -> Path:
+          """Wide spectral bandwidth: white noise, 1 second."""
+          samples = np.random.uniform(-0.5, 0.5, 22050).astype(np.float32)
+          path = tmp_path / "wide_bandwidth.wav"
+          sf.write(str(path), samples, 22050)
+          return path
+
+      def test_spectral_bandwidth(wide_bandwidth_wav):
+          result = analyze_file(str(wide_bandwidth_wav))
+          assert "bandwidth_norm" in result
+          assert 0.0 < result["bandwidth_norm"] < 1.0
+
+  - id: run_tests
+    name: "Run tests and check coverage"
+    commands:
+      - "uv run pytest tests/test_audio_analysis.py -v"
+      - "uv run pytest tests/ --cov=samplemind.analyzer --cov-report=term-missing"
+    targets: "analyzer: ≥80%, classifier: ≥90%"
+
+  - id: lint
+    name: "Lint and format"
+    command: "uv run ruff check --fix src/ && uv run ruff format src/"
+
+  - id: doc_note
+    name: "Note documentation update needed"
+    action: >
+      Remind user to update docs/en/phase-02-audio-analysis.md with:
+      - New feature name and librosa call
+      - Normalization approach
+      - Classifier usage (if any)
+      - Test fixture design rationale
+

@@ -1,0 +1,36 @@
+name: setup_dev
+description: >
+  Run the full development environment setup script. Installs uv, syncs Python
+  deps, verifies imports, runs linter, runs tests, configures git, and checks
+  optional Node/Rust/pnpm toolchain. WSL2-aware with path safety checks.
+agent: devops-agent
+command: "bash scripts/setup-dev.sh"
+inputs: []
+outputs:
+  - python_version: Python version in .venv
+  - test_result: pytest pass/fail summary
+  - tools_installed: [uv, node, pnpm, cargo]
+  - pre_commit: Whether hooks were installed
+steps_performed:
+  1: Detect platform (WSL2 / macOS / Linux) and warn if on /mnt/c/
+  2: Install uv if missing
+  3: uv sync --extra dev (Python 3.13 + all dev dependencies)
+  4: Verify core imports (samplemind, librosa, soundfile, typer)
+  5: uv run ruff check src/ (lint check)
+  6: uv run pytest tests/ -x --tb=short -q (test run)
+  7: git config core.fsmonitor=true, core.untrackedcache=true (WSL2 performance)
+  8: uv run pre-commit install (hook setup)
+  9: Check node, pnpm, cargo (optional — for Tauri desktop app)
+wsl2_safety:
+  checks:
+    - Detects if cwd is /mnt/c/ and errors out with helpful message
+    - Prints platform-specific notes for macOS vs WSL2
+  recommended_location: /home/ubuntu/dev/projects/SampleMind-AI/
+  avoid: /mnt/c/ (NTFS — 5-10× slower than ext4)
+post_setup:
+  - "uv run samplemind --help"
+  - "uv run samplemind serve    # Flask at http://localhost:5000"
+  - "cd app && pnpm install && pnpm tauri dev    # (if node+pnpm+cargo installed)"
+examples:
+  - "bash scripts/setup-dev.sh"
+

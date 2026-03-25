@@ -1,0 +1,36 @@
+name: coverage
+description: >
+  Run pytest with coverage reporting. Shows per-module coverage, highlights
+  uncovered lines, and validates against project thresholds.
+agent: test-runner
+command: "uv run pytest tests/ --cov=samplemind --cov-report=term-missing --cov-fail-under={threshold} -q"
+inputs:
+  - name: threshold
+    type: int
+    description: Minimum coverage % to pass
+    default: 60
+  - name: module
+    type: string
+    description: Specific module to measure (e.g. samplemind.analyzer)
+    required: false
+  - name: html
+    type: flag
+    description: Generate HTML coverage report in htmlcov/
+    default: false
+outputs:
+  - overall_pct: Overall coverage percentage
+  - per_module: Coverage per module
+  - missing_lines: Files and line numbers lacking coverage
+  - passed: Whether threshold was met
+targets:
+  analyzer: 80
+  classifier: 90
+  cli: 70
+  data: 75
+  overall: 60
+examples:
+  - "uv run pytest tests/ --cov=samplemind --cov-report=term-missing"
+  - "uv run pytest tests/ --cov=samplemind.analyzer --cov-report=term-missing"
+  - "uv run pytest tests/ --cov=samplemind --cov-report=html --cov-fail-under=60"
+  - "uv run pytest tests/test_classifier.py --cov=samplemind.analyzer.classifier --cov-report=term-missing"
+

@@ -25,20 +25,56 @@ You specialize in:
 - `tests/conftest.py` — WAV file fixtures using soundfile + numpy
 - Phase 2 documentation: `docs/en/phase-02-audio-analysis.md`
 
-## The 8 Audio Features
+## The 9 Classifier Features
 
-You know these features, their librosa calls, and their threshold values:
+Internal feature dict keys (from `classifier.py → _features()`):
 
-| Feature | librosa call | Threshold context |
-|---------|-------------|------------------|
-| rms | `librosa.feature.rms()` | energy: >0.06=high, >0.015=medium, else=low |
-| spectral_centroid | `librosa.feature.spectral_centroid()` | normalized to Nyquist |
-| zero_crossing_rate | `librosa.feature.zero_crossing_rate()` | hihats≈0.35, kicks≈0.03 |
-| spectral_flatness | `librosa.feature.spectral_flatness()` | 0=sine, 1=white noise |
-| spectral_rolloff | `librosa.feature.spectral_rolloff(roll_percent=0.85)` | 85% energy freq |
-| onset_mean/max | `librosa.onset.onset_strength()` | rhythmic attack |
-| low_freq_ratio | STFT below 300 Hz | bass presence |
-| duration | `librosa.get_duration()` | seconds |
+| Internal key | librosa / numpy call | Classifier use |
+|---|---|---|
+| `rms` | `np.sqrt(np.mean(y**2))` | energy: <0.015=low, <0.06=mid, ≥0.06=high |
+| `centroid_norm` | `spectral_centroid().mean() / (sr/2)` | mood, instrument (0–1, normalized) |
+| `zcr` | `zero_crossing_rate(y).mean()` | hihat: >0.1; kick: <0.08; aggressive mood: >0.08 |
+| `flatness` | `spectral_flatness(y).mean()` | hihat: >0.2; kick/snare: >0.05; sfx: >0.1 |
+| `rolloff_norm` | `spectral_rolloff(roll_percent=0.85).mean() / (sr/2)` | hihat: >0.3 |
+| `onset_mean` | `onset_strength(y, sr).mean()` | loop: >0.8; pad: <1.5; aggressive: >3.0 |
+| `onset_max` | `onset_strength(y, sr).max()` | kick: >4.0; snare: >3.0 |
+| `low_freq_ratio` | STFT energy below 300 Hz / total | kick: >0.35; bass: >0.3; snare: <0.35 |
+| `duration` | `len(y) / sr` | loop: >2.0; kick/snare/hihat: <0.8–1.0 |
+
+## Classifier Output Values
+
+### Energy — `classify_energy(f)`
+```
+rms < 0.015   → "low"   (quiet pads, atmospheric sounds)
+rms < 0.060   → "mid"   (normal melodic samples, snares)
+rms ≥ 0.060   → "high"  (drums, strong bass hits)
+```
+⚠️ The value is `"mid"` — NOT `"medium"`. This is what the code returns and what the DB stores.
+
+### Mood — `classify_mood(f, key)` — 6 possible values
+```
+zcr>0.08 AND onset_mean>3.0 AND centroid>0.15  → "aggressive"
+centroid<0.12 AND minor_key                    → "dark"
+minor_key AND rms<0.03 AND onset_mean<1.5      → "melancholic"
+centroid<0.15 AND rms<0.05 AND onset_mean<2.0  → "chill"
+major_key AND centroid>0.12 AND rms>0.02       → "euphoric"
+(none of above)                                → "neutral"
+```
+Valid values: `"dark"` `"chill"` `"aggressive"` `"euphoric"` `"melancholic"` `"neutral"`
+
+### Instrument — `classify_instrument(f)` — 9 possible values
+```
+dur>2.0 AND onset_mean>0.8                           → "loop"
+flat>0.2 AND zcr>0.1 AND rolloff>0.3 AND dur<1.0     → "hihat"
+lfr>0.35 AND onset_max>4.0 AND dur<0.8 AND zcr<0.08  → "kick"
+onset_max>3.0 AND flat>0.05 AND dur<0.8 AND lfr<0.35 → "snare"
+lfr>0.3 AND flat<0.05 AND dur>0.3                    → "bass"
+dur>1.5 AND onset_mean<1.5 AND centroid>0.08          → "pad"
+centroid>0.15 AND flat<0.1 AND dur<3.0               → "lead"
+flat>0.1                                              → "sfx"
+(none of above)                                       → "unknown"
+```
+Valid values: `"loop"` `"hihat"` `"kick"` `"snare"` `"bass"` `"pad"` `"lead"` `"sfx"` `"unknown"`
 
 ## Future Feature: spectral_bandwidth
 

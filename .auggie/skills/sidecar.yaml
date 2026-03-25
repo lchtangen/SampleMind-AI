@@ -1,0 +1,33 @@
+name: sidecar
+description: >
+  Manage the Python sidecar server used by the JUCE plugin and Tauri IPC.
+  Communicates over a Unix domain socket at /tmp/samplemind.sock.
+agent: fl-studio-agent
+commands:
+  start: "uv run python src/samplemind/sidecar/server.py --socket {socket}"
+  start_bg: "uv run python src/samplemind/sidecar/server.py --socket {socket} &"
+  stop: "pkill -f samplemind/sidecar/server.py"
+  status: "ls -la {socket} 2>/dev/null && echo 'socket exists' || echo 'socket not found'"
+  test: "echo '{\"version\": 1, \"action\": \"ping\"}' | nc -U {socket}"
+inputs:
+  - name: socket
+    type: string
+    description: Unix domain socket path
+    default: /tmp/samplemind.sock
+outputs:
+  - pid: Process ID of the running sidecar
+  - socket_path: Active socket path
+  - response: Ping response JSON
+ipc_protocol:
+  version: 1
+  envelope: '{"version": 1, "action": "<action>", "payload": {...}}'
+  actions: [ping, analyze, search, import, status]
+  response_format: '{"version": 1, "status": "ok|error", "data": {...}}'
+notes:
+  - Socket protocol changes must bump version field ("version": 2, etc.)
+  - Sidecar must be running before the JUCE plugin can communicate
+  - macOS entitlements required: com.apple.security.cs.allow-unsigned-executable-memory
+examples:
+  - "uv run python src/samplemind/sidecar/server.py --socket /tmp/samplemind.sock &"
+  - "echo '{\"version\": 1, \"action\": \"ping\"}' | nc -U /tmp/samplemind.sock"
+

@@ -1,0 +1,78 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflow: dev-start
+# Purpose: Start all development services in the correct order with health
+#          validation at each step. Covers Flask, FastAPI, and optionally Tauri.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: dev-start
+description: >
+  Start all SampleMind development services: database init, FastAPI API,
+  Flask web UI, optionally Tauri desktop. Validates each step.
+agent: devops-agent
+trigger: manual    # auggie workflow dev-start
+
+steps:
+  - id: env_check
+    name: "Verify dev environment"
+    commands:
+      - "uv --version"
+      - "pnpm --version 2>/dev/null || echo 'pnpm not installed (Tauri unavailable)'"
+    on_failure: "Run: bash scripts/setup-dev.sh"
+
+  - id: db_init
+    name: "Initialize database"
+    command: |
+      uv run python -c "
+      from samplemind.data.orm import init_orm
+      from samplemind.data.database import init_db
+      init_db()
+      init_orm()
+      print('DB ready')
+      "
+    note: "Creates samples + users tables if not present. Safe to re-run."
+
+  - id: alembic_check
+    name: "Check Alembic migration state"
+    command: "uv run alembic current"
+    note: "If 'No heads' — run: uv run alembic upgrade head"
+
+  - id: start_fastapi
+    name: "Start FastAPI REST API (background)"
+    command: "uv run samplemind api &"
+    wait_for_port: 8000
+    timeout_secs: 10
+    validate: "curl -sf http://localhost:8000/api/v1/health"
+
+  - id: start_flask
+    name: "Start Flask web UI (background)"
+    command: "uv run samplemind serve --port 5000 &"
+    wait_for_port: 5000
+    timeout_secs: 10
+    validate: "curl -sf http://localhost:5000/api/status"
+
+  - id: start_tauri
+    name: "Start Tauri desktop app (optional)"
+    optional: true
+    condition: "pnpm --version"
+    command: "cd app && pnpm tauri dev"
+    note: "Opens Tauri window. Flask must be on port 5174 for Tauri dev."
+    skip_message: "pnpm not found — skipping Tauri desktop. Install: npm i -g pnpm"
+
+service_urls:
+  fastapi: "http://localhost:8000/api/docs"
+  flask: "http://localhost:5000"
+  tauri: "Desktop window opens automatically"
+
+reporting:
+  on_pass: |
+    ✅ All services running:
+      Flask web UI  → http://localhost:5000
+      FastAPI API   → http://localhost:8000/api/docs
+      Tauri desktop → window open (if started)
+  on_fail: "❌ Service start failed — see step above for details"
+
+stop_all: |
+  pkill -f "samplemind serve" 2>/dev/null || true
+  pkill -f "samplemind api" 2>/dev/null || true
+  pkill -f "tauri dev" 2>/dev/null || true
+

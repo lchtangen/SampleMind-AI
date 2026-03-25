@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}SampleMind AI{% endblock %}
+
+{% block body %}
+  <header>
+    <div class="logo">🎧 SampleMind AI</div>
+    <div class="header-right">
+      <span class="library-count" id="library-count">{{ total }} samples in library</span>
+      <button id="import-btn" class="import-btn">+ Import Folder</button>
+      {% if current_user %}
+      <span class="user-badge">{{ current_user.username }}</span>
+      <a href="/logout" class="logout-link">Sign out</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ── Import progress toast ── -->
+  <div id="import-toast" class="toast hidden"></div>
+
+  <main>
+    <!-- ── Search & Filter Bar ── -->
+    <section class="filters">
+      <input id="search-input" type="text" placeholder="Search by name or tag…"
+             value="{{ filters.query or '' }}" />
+
+      <select id="genre-filter">
+        <option value="">All genres</option>
+        {% for g in ["trap","lofi","house","techno","dnb","ambient","hiphop","pop"] %}
+          <option value="{{ g }}" {% if filters.genre == g %}selected{% endif %}>{{ g }}</option>
+        {% endfor %}
+      </select>
+
+      <select id="energy-filter">
+        <option value="">All energy</option>
+        {% for e in ["low","mid","high"] %}
+          <option value="{{ e }}" {% if filters.energy == e %}selected{% endif %}>{{ e }}</option>
+        {% endfor %}
+      </select>
+
+      <select id="instrument-filter">
+        <option value="">All types</option>
+        {% for t in ["kick","snare","hihat","bass","pad","lead","loop","sfx"] %}
+          <option value="{{ t }}" {% if filters.instrument == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+
+      <input id="bpm-min" type="number" placeholder="BPM min"
+             value="{{ filters.bpm_min or '' }}" min="40" max="300" />
+      <input id="bpm-max" type="number" placeholder="BPM max"
+             value="{{ filters.bpm_max or '' }}" min="40" max="300" />
+    </section>
+
+    <!-- ── Sample Table ── -->
+    <section class="table-wrap">
+      <table id="sample-table">
+        <thead>
+          <tr>
+            <th>Filename</th><th>BPM</th><th>Key</th><th>Type</th>
+            <th>Genre</th><th>Energy</th><th>Mood</th><th>Play</th><th>Tag</th>
+          </tr>
+        </thead>
+        <tbody id="sample-tbody">
+          {% for s in samples %}
+          <tr data-path="{{ s.path }}" data-id="{{ s.id }}">
+            <td class="filename">{{ s.filename }}</td>
+            <td>{{ s.bpm or '—' }}</td>
+            <td>{{ s.key or '—' }}</td>
+            <td><span class="chip instrument">{{ s.instrument or '—' }}</span></td>
+            <td class="editable" data-field="genre">{{ s.genre or '' }}</td>
+            <td class="editable" data-field="energy">{{ s.energy or '' }}</td>
+            <td class="editable" data-field="mood">{{ s.mood or '' }}</td>
+            <td><button class="play-btn" data-id="{{ s.id }}">▶</button></td>
+            <td><button class="tag-btn">🏷️</button></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="empty">No samples found. Import some first.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Tag Modal ── -->
+    <div id="tag-modal" class="modal hidden">
+      <div class="modal-box">
+        <h2>🏷️ Tag Sample</h2>
+        <p id="modal-filename"></p>
+        <label>Genre <input id="modal-genre" type="text" placeholder="trap, lofi, house…" /></label>
+        <label>Mood  <input id="modal-mood"  type="text" placeholder="dark, chill, euphoric…" /></label>
+        <label>Energy
+          <select id="modal-energy">
+            <option value="">—</option>
+            <option value="low">low</option>
+            <option value="mid">mid</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+        <label>Tags <input id="modal-tags" type="text" placeholder="comma,separated,tags" /></label>
+        <div class="modal-actions">
+          <button id="modal-save">Save</button>
+          <button id="modal-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Audio Player ── -->
+    <div id="player-bar" class="hidden">
+      <span id="player-filename">—</span>
+      <audio id="audio-player" controls></audio>
+    </div>
+  </main>
+
+  <!-- ── Drag-and-drop overlay ── -->
+  <div id="drop-overlay" class="drop-overlay hidden">
+    <div class="drop-box">
+      <div class="drop-icon">📂</div>
+      <div class="drop-title">Drop to Import</div>
+      <div class="drop-hint">Release to import WAV files or a folder</div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+{% endblock %}
+

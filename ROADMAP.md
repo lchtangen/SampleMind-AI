@@ -10,13 +10,22 @@
 2. [Tech Stack — What We Use and Why](#2-tech-stack--what-we-use-and-why)
 3. [Tauri vs Electron — Desktop UI Choice](#3-tauri-vs-electron--desktop-ui-choice)
 4. [FL Studio Integration — macOS and Windows](#4-fl-studio-integration--macos-and-windows)
-5. [Phase 1 — CLI Prototype ✅](#5-phase-1--cli-prototype-)
-6. [Phase 2 — AI Analysis and Web UI 🔄](#6-phase-2--ai-analysis-and-web-ui-)
-7. [Phase 3 — Desktop App with Tauri 🔄](#7-phase-3--desktop-app-with-tauri-)
-8. [Phase 4 — FL Studio Plugin / VST3 / AU 🔮](#8-phase-4--fl-studio-plugin--vst3--au-)
-9. [Phase 5 — Community and Cloud Sharing 🔮](#9-phase-5--community-and-cloud-sharing-)
-10. [Backlog and Future Ideas](#10-backlog-and-future-ideas)
-11. [Long-term Vision 2026+](#11-long-term-vision-2026)
+5. [Phase 1 — Foundation & CLI ✅](#5-phase-1--foundation--cli-)
+6. [Phase 2 — Audio Testing & Analysis ✅](#6-phase-2--audio-testing--analysis-)
+7. [Phase 3 — Authentication & Authorization ✅](#7-phase-3--authentication--authorization-)
+8. [Phase 4 — Database & Data Layer ✅](#8-phase-4--database--data-layer-)
+9. [Phase 5 — CLI Modernization 📋](#9-phase-5--cli-modernization-)
+10. [Phase 6 — Web UI Improvements 📋](#10-phase-6--web-ui-improvements-)
+11. [Phase 7 — Desktop App (Tauri + Svelte 5) 📋](#11-phase-7--desktop-app-tauri--svelte-5-)
+12. [Phase 8 — FL Studio Automation 📋](#12-phase-8--fl-studio-automation-)
+13. [Phase 9 — VST3/AU Plugin 📋](#13-phase-9--vst3au-plugin-)
+14. [Phase 10 — Sample Packs 📋](#14-phase-10--sample-packs-)
+15. [Phase 11 — Production & Release 📋](#15-phase-11--production--release-)
+16. [Phase 12 — Semantic Search & Vector Embeddings 📋](#16-phase-12--semantic-search--vector-embeddings-)
+17. [Phase 13 — AI Agent Automation 📋](#17-phase-13--ai-agent-automation-)
+18. [Backlog and Future Ideas](#18-backlog-and-future-ideas)
+19. [Long-term Vision 2026–2030](#19-long-term-vision-20262030)
+20. [Technology Decision Log](#20-technology-decision-log)
 
 ---
 
@@ -24,30 +33,36 @@
 
 ```
 SampleMind-AI/
-├── src/                        # Python backend (analysis, CLI, web)
-│   ├── analyzer/
-│   │   ├── audio_analysis.py   # librosa-based BPM, key, mood analysis
-│   │   └── classifier.py       # Rule-based AI: energy, mood, instrument
-│   ├── cli/
-│   │   ├── analyze.py          # CLI: analyze a file
-│   │   ├── importer.py         # CLI: import samples to database
-│   │   ├── library.py          # CLI: search and manage library
-│   │   └── tagger.py           # CLI: manual tagging
-│   └── web/
-│       ├── app.py              # Flask web app (local UI)
-│       ├── templates/          # HTML Jinja2 templates
-│       └── static/             # CSS, JS, waveform components
-├── app/                        # Tauri desktop app (Rust + Web frontend)
+├── src/
+│   ├── main.py                     # Legacy entry point (required by Tauri dev mode)
+│   ├── samplemind/                 # New src-layout package (Python 3.13)
+│   │   ├── __init__.py
+│   │   ├── analyzer/
+│   │   │   ├── audio_analysis.py   # librosa: BPM, key, energy, mood, instrument
+│   │   │   └── classifier.py       # Rule-based: 9 features → energy/mood/instrument
+│   │   ├── cli/
+│   │   │   ├── app.py              # Typer CLI: import/analyze/list/search/tag/serve
+│   │   │   └── commands/           # One module per command
+│   │   ├── data/
+│   │   │   └── database.py         # sqlite3: ~/.samplemind/library.db
+│   │   └── web/
+│   │       └── app.py              # Flask web UI (localhost:5000)
+├── app/                            # Tauri 2 desktop app
 │   ├── src-tauri/
-│   │   ├── Cargo.toml          # Rust dependencies
-│   │   ├── tauri.conf.json     # Tauri configuration
-│   │   └── src/main.rs         # Rust backend code
-│   ├── dist/                   # Compiled frontend (HTML/JS/CSS)
-│   └── package.json            # Node/pnpm scripts for Tauri CLI
-├── scripts/                    # Helper scripts
-├── docs/                       # Documentation
-├── requirements.txt            # Python dependencies
-└── main.py                     # Main entry point
+│   │   ├── Cargo.toml
+│   │   ├── tauri.conf.json
+│   │   └── src/main.rs             # Rust: pick_folder, is_directory commands
+│   ├── src/                        # Svelte 5 frontend
+│   └── package.json                # pnpm scripts
+├── plugin/                         # JUCE 8 VST3/AU plugin (Phase 8, planned)
+├── scripts/
+│   ├── setup-dev.sh                # Dev environment setup
+│   └── start.sh                    # Quick-start services
+├── tests/                          # pytest suite (soundfile fixtures, no real audio)
+├── docs/en/                        # English phase docs (phase-01 through phase-10)
+├── docs/no/                        # Norwegian phase docs
+├── pyproject.toml                  # uv + ruff + pytest config (replaces requirements.txt)
+└── .github/workflows/ci.yml        # CI: uv+ruff+pytest+clippy
 ```
 
 ### Data Flow (current)
@@ -73,17 +88,30 @@ FL Studio drag-and-drop / sample browser →
 
 ## 2. Tech Stack — What We Use and Why
 
-| Layer | Technology | Rationale |
-|-------|------------|-----------|
-| Audio analysis | Python + librosa | Industry standard for audio ML. Provides BPM, key, spectral features. |
-| AI classification | NumPy + rule-based (now) → scikit-learn / transformers (future) | Start simple, scale to ML. |
-| Database | SQLite (via Python) | File-based, no server. Perfect for local desktop app. |
-| CLI | Python argparse / click | Fast to prototype and test. |
-| Web UI (local) | Flask + Jinja2 + HTMX | Simple local web server. HTMX provides reactivity without React/Vue overhead. |
-| Desktop app | **Tauri 2** (Rust + Web) | Small bundle size, native performance, macOS-integrated. See section 3. |
-| Desktop frontend | HTML + CSS + JS (vanilla or Svelte) | Tauri requires web frontend. Svelte is lightweight. |
-| macOS integration | AppleScript / Swift / Rust | For FL Studio communication. See section 4. |
-| Plugin (future) | JUCE (C++) + Python sidecar | VST3/AU plugin that communicates with Python backend. |
+| Layer | Technology | Version | Rationale |
+|-------|------------|---------|-----------|
+| **Runtime** | Python | 3.13 (GIL + JIT preview) | 3.13 ships experimental JIT (`--jit`); 3.14 brings free-threaded mode (PEP 703) for true parallel audio processing |
+| **Packaging** | uv (Astral) | ≥0.6 | 10–100× faster than pip; single tool for venv, add, run, publish, workspace |
+| **Audio analysis** | librosa | 0.11.x | Industry standard; BPM, key, spectral features, onset detection |
+| **Beat tracking** | madmom (Python ≤3.11) | 0.16.1 | RNN downbeat + beat tracker from CPJKU; best-in-class accuracy; requires separate conda env |
+| **AI audio embeddings** | CLAP (HuggingFace ClapModel) | transformers ≥4.40 | Contrastive Language-Audio Pretraining; zero-shot audio classification via text query |
+| **Vector search** | **sqlite-vec** | ≥0.1.7 | Pure-C SQLite extension; float32/int8/binary vectors; sub-millisecond ANN search; zero extra infra |
+| **AI agents** | **pydantic-ai** | ≥1.0 | Model-agnostic (Claude/GPT/Gemini/Ollama); type-safe tools via Python type annotations; structured outputs |
+| **Semantic text search** | sentence-transformers | ≥3.0 | Encode tag text and user queries into embeddings for "find similar" queries |
+| **ML classifier** | scikit-learn | ≥1.6 | RandomForest/KNN — upgrade path from rule-based to trained classifier |
+| **Database ORM** | SQLModel + Alembic | ≥0.0.21 / ≥1.14 | Type-safe ORM (SQLAlchemy 2 + Pydantic v2); Alembic for versioned migrations |
+| **API** | FastAPI + Uvicorn | ≥0.115 / ≥0.34 | Async, auto OpenAPI docs, Pydantic v2 validation |
+| **Auth** | python-jose + bcrypt | ≥3.3 / ≥4.x | JWT HS256/RS256; direct bcrypt (passlib incompatible with bcrypt 4.x/5.x) |
+| **Web UI (local)** | Flask + HTMX + SSE | ≥3.1 | Simple local server; HTMX for reactivity; SSE for import progress stream |
+| **CLI** | Typer + Rich | ≥0.12 / ≥13 | Type-safe commands; auto `--help`; Rich tables + progress bars |
+| **Desktop app** | Tauri 2 + Svelte 5 Runes | ≥2.1 / ≥5.0 | 3–15 MB bundle vs 120–200 MB Electron; Svelte 5 Runes = fine-grained reactivity |
+| **Linting/format** | Ruff | ≥0.15 | Replaces flake8 + isort + black in one Rust binary; <100ms on full repo |
+| **Type checking** | Pyright | ≥1.1.390 | Rust-based; faster than mypy; first-class Pydantic v2 support; VSCode default |
+| **Testing** | pytest + hypothesis | ≥9 / ≥6 | Hypothesis: property-based / fuzz testing to find edge cases automatically |
+| **Observability** | Logfire (Pydantic) | ≥3.0 | OpenTelemetry-native; auto-instruments FastAPI, SQLModel, httpx, pydantic-ai |
+| **Logging** | structlog | ≥24.4 | Structured JSON logs → Logfire / console; never pollutes stdout (IPC contract) |
+| **Plugin (Phase 9)** | JUCE 8 (C++) | ≥8.0 | VST3 + AU from one codebase; Python sidecar via Unix socket |
+| **Local LLM (future)** | Ollama | — | Run Llama 3, Gemma 3, Qwen 2.5 locally; pydantic-ai `OllamaModel` provider |
 
 ---
 
@@ -436,274 +464,264 @@ macOS requirements for audio apps:
 
 ---
 
-## 5. Phase 1 — CLI Prototype ✅
+## 5. Phase 1 — Foundation & CLI ✅
 
-**Status: Complete**
+**Status: Complete** — See `docs/en/phase-01-foundation.md`
 
 ### What Was Built
 
 | Module | File | Function |
 |--------|------|---------|
-| Audio analysis | `src/analyzer/audio_analysis.py` | BPM, key (chroma + tonnetz), mood |
-| AI classification | `src/analyzer/classifier.py` | energy, mood, instrument via 8 audio features |
-| Import CLI | `src/cli/importer.py` | Import WAV files to database |
-| Analysis CLI | `src/cli/analyze.py` | Analyze single file or folder |
-| Library CLI | `src/cli/library.py` | Search and manage samples |
-| Tagger | `src/cli/tagger.py` | Manual tagging of samples |
+| Audio analysis | `src/samplemind/analyzer/audio_analysis.py` | BPM, key (chroma + tonnetz), energy, mood, instrument |
+| AI classification | `src/samplemind/analyzer/classifier.py` | 9-feature rule-based classifier |
+| CLI | `src/samplemind/cli/app.py` | Typer app: `import`, `analyze`, `list`, `search`, `tag`, `serve` |
+| Database | `src/samplemind/data/database.py` | sqlite3: `~/.samplemind/library.db` |
+| Web UI | `src/samplemind/web/app.py` | Flask: `localhost:5000` |
+| Legacy entry | `src/main.py` | argparse CLI (still required by Tauri dev mode) |
 
 ### Running the CLI Tools
 
 ```bash
-# Set up environment
-python -m venv .venv
-source .venv/bin/activate      # macOS/Linux
-.venv\Scripts\activate          # Windows
-pip install -r requirements.txt
+# Set up environment (use uv — not pip)
+uv sync
 
 # Analyze a sample
-python main.py analyze path/to/sample.wav
+uv run samplemind analyze path/to/sample.wav
 
 # Import an entire folder
-python main.py import ~/Music/MySamples/
+uv run samplemind import ~/Music/MySamples/
 
 # Search the library
-python main.py library search --mood dark --instrument kick
+uv run samplemind search --energy high --instrument kick
 
 # Tag a sample manually
-python main.py tag sample.wav --tags "trap,heavy,808"
+uv run samplemind tag sample --genre trap --mood dark
+
+# Start web UI
+uv run samplemind serve
 ```
 
 ### How Audio Analysis Works
 
 ```
 WAV file
-  └─ librosa.load() → y (audio wave), sr (sample rate)
+  └─ librosa.load() → y (float32 array), sr=22050
        ├─ BPM: beat_track() → tempo in BPM
-       ├─ Key: chroma_cens() → 12 frequency bands → highest = root note
+       ├─ Key: chroma_cens() → 12 bands → root note
        │         tonnetz() → harmonic tension → major/minor
-       └─ Classifier (8 features):
-            ├─ rms                → energy/loudness
-            ├─ spectral_centroid  → bright/dark tone
-            ├─ zero_crossing_rate → noise/percussive character
-            ├─ spectral_flatness  → tone vs white noise
-            ├─ spectral_rolloff   → high-frequency energy
-            ├─ onset_strength     → rhythmic attacks
-            ├─ low_freq_ratio     → bass content
-            └─ duration           → length → loop vs one-shot
+       └─ Classifier (9 features):
+            ├─ rms                → energy: <0.015=low, <0.06=mid, ≥0.06=high
+            ├─ centroid_norm      → spectral brightness (0–1, normalized)
+            ├─ zcr                → zero-crossing rate → noise/percussive
+            ├─ flatness           → tone vs white noise
+            ├─ rolloff_norm       → high-frequency energy (0–1)
+            ├─ onset_mean         → average rhythmic attack strength
+            ├─ onset_max          → peak rhythmic attack
+            ├─ low_freq_ratio     → bass content (energy below 300 Hz)
+            └─ duration           → length → loop (>2s) vs one-shot
 ```
 
-### Remaining Tasks in Phase 1
+**Classifier output values** (exact strings stored in DB):
 
-- [ ] `organizer` module: automatic folder structure based on metadata
-  ```
-  ~/Music/SampleMind/
-  ├── Drums/
-  │   ├── Kicks/
-  │   │   └── kick_heavy_128bpm_Cmaj.wav
-  │   └── Snares/
-  └── Bass/
-      └── bass_dark_140bpm_Fmin.wav
-  ```
-- [ ] Test data suite with known samples and expected results
-- [ ] `pytest` suite for analyzer and classifier
+| Field | Values |
+|-------|--------|
+| `energy` | `"low"` `"mid"` `"high"` — ⚠️ **never `"medium"`** |
+| `mood` | `"dark"` `"chill"` `"aggressive"` `"euphoric"` `"melancholic"` `"neutral"` |
+| `instrument` | `"loop"` `"hihat"` `"kick"` `"snare"` `"bass"` `"pad"` `"lead"` `"sfx"` `"unknown"` |
 
 ---
 
-## 6. Phase 2 — AI Analysis and Web UI 🔄
+## 6. Phase 2 — Audio Testing & Analysis ✅
 
-**Status: Partially complete**
+**Status: Complete** — See `docs/en/phase-02-audio-analysis.md`
 
-### What Is Missing
+### What Was Built
 
-#### 2a. ML-based classification (replacement for rule-based)
+- `tests/conftest.py` — synthetic WAV fixtures (soundfile + numpy, no real audio files)
+- `tests/test_audio_analysis.py` — BPM, key, feature extraction tests
+- `tests/test_classifier.py` — energy, mood, instrument classification tests
+- CI coverage enforcement: `fail_under = 60` in pyproject.toml
+- pytest markers: `slow`, `integration`, `macos`, `juce`, `benchmark`
 
-The current `classifier.py` uses hardcoded thresholds. The next step is a trained model:
-
-```python
-# Future: src/analyzer/ml_classifier.py
-from sklearn.ensemble import RandomForestClassifier
-import joblib
-
-class MLClassifier:
-    def __init__(self, model_path="models/classifier.pkl"):
-        self.model = joblib.load(model_path)
-
-    def predict(self, features: dict) -> dict:
-        X = [[
-            features["rms"],
-            features["centroid_norm"],
-            features["zcr"],
-            features["flatness"],
-            features["rolloff_norm"],
-            features["onset_mean"],
-            features["low_freq_ratio"],
-            features["duration"]
-        ]]
-        instrument = self.model.predict(X)[0]
-        return {"instrument": instrument}
-
-    # Training workflow:
-    # 1. Create labeled dataset (CSV with features + labels)
-    # 2. python scripts/train_classifier.py
-    # 3. Save model as models/classifier.pkl
-```
-
-#### 2b. Web UI improvements
-
-```
-Current Flask Web UI:
-  src/web/app.py → localhost:5000
-
-Missing:
-  [ ] Drag & drop sample import (Dropzone.js or native HTML5)
-  [ ] Waveform preview (Wavesurfer.js)
-  [ ] HTMX for live updates without page reload
-  [ ] Voice-based search ("find dark kicks with high energy")
-```
-
-```html
-<!-- Waveform preview with Wavesurfer.js -->
-<!-- templates/sample_detail.html -->
-<div id="waveform"></div>
-<button id="play">▶ Play</button>
-
-<script src="https://unpkg.com/wavesurfer.js@7"></script>
-<script>
-const ws = WaveSurfer.create({
-    container: '#waveform',
-    waveColor: '#6366f1',
-    progressColor: '#4f46e5',
-    url: '/static/samples/{{ sample.filename }}'
-});
-document.getElementById('play').addEventListener('click', () => ws.playPause());
-</script>
-```
-
-```html
-<!-- Drag & drop with HTMX -->
-<!-- templates/import.html -->
-<div id="drop-zone"
-     hx-post="/api/import"
-     hx-encoding="multipart/form-data"
-     hx-trigger="drop"
-     hx-target="#results">
-  Drop samples here
-</div>
-```
-
----
-
-## 7. Phase 3 — Desktop App with Tauri 🔄
-
-**Status: Early phase — Tauri 2 shell is set up**
-
-### Current Tauri Setup
-
-```
-app/
-├── src-tauri/
-│   ├── Cargo.toml          # Tauri 2 + dialog + tray-icon
-│   ├── tauri.conf.json     # Window: 1280x840, system tray
-│   └── src/main.rs         # Rust entry point
-├── dist/                   # Frontend (not built yet)
-└── package.json            # Tauri CLI scripts
-```
-
-### Build and Run the Tauri App
+### Test Commands
 
 ```bash
-# Requires Rust installed: https://rustup.rs/
-# macOS: xcode-select --install
+uv run pytest tests/ -v                                      # all tests
+uv run pytest tests/ -m "not slow"                          # skip slow tests
+uv run pytest tests/ -n auto                                # parallel (pytest-xdist)
+uv run pytest --cov=samplemind --cov-report=term-missing    # coverage report
+```
 
+### Phase 2 Targets (not yet implemented)
+
+- [ ] `src/samplemind/analyzer/fingerprint.py` — SHA-256 dedup fingerprinting
+- [ ] `src/samplemind/analyzer/batch.py` — parallel batch analysis (ProcessPoolExecutor)
+- [ ] `spectral_bandwidth` feature added to audio_analysis.py
+- [ ] ML-based classifier (Phase 2+ target — scikit-learn RandomForest)
+
+---
+
+## 7. Phase 3 — Authentication & Authorization ✅
+
+**Status: Complete** — Full JWT + RBAC auth system implemented
+
+### What Was Built
+
+| Component | File | Description |
+|-----------|------|-------------|
+| JWT handler | `src/samplemind/core/auth/jwt_handler.py` | Access + refresh tokens, `python-jose` |
+| Password hashing | `src/samplemind/core/auth/password.py` | Direct `bcrypt` 5.x-compatible hashing |
+| RBAC | `src/samplemind/core/auth/rbac.py` | Role-based permissions (viewer/owner/admin) |
+| Dependencies | `src/samplemind/core/auth/dependencies.py` | FastAPI `Depends` helpers |
+| User SQLModel | `src/samplemind/core/models/user.py` | Users table (id, email, role, hashed_password…) |
+| User repository | `src/samplemind/data/repositories/user_repository.py` | CRUD for users |
+| FastAPI auth routes | `src/samplemind/api/routes/auth.py` | `/register` `/login` `/refresh` `/me` `/change-password` |
+| Flask auth UI | `src/samplemind/web/app.py` | Login/register pages, `@login_required` |
+| Tauri token store | `app/src-tauri/src/main.rs` | `store_token` / `get_token` / `clear_token` IPC |
+| Alembic migration | `migrations/versions/0001_create_users_table.py` | Baseline `users` schema |
+| Test suite | `tests/test_auth.py` | 24 tests covering all auth paths |
+
+### Auth Architecture
+
+```
+FastAPI /register → UserRepository.create() → bcrypt hash → SQLite users table
+FastAPI /login    → bcrypt verify → JWT access+refresh tokens → client
+FastAPI /me       → Bearer token → JWT decode → UserRepository.get_by_id()
+Tauri JS          → invoke('store_token') → AuthTokenStore (Mutex<Option<String>>)
+Flask session     → cookie-based session → @login_required decorator
+```
+
+### Key Technical Decisions
+
+- **Direct `bcrypt`** instead of `passlib` — passlib 1.7.x cannot parse bcrypt 4.x/5.x version strings
+- **`expire_on_commit=False`** in session — prevents `DetachedInstanceError` on ORM objects after commit
+- **`StaticPool`** in tests — ensures in-memory SQLite shares one connection across threads
+- **`datetime.now(UTC)`** throughout — replaces deprecated `datetime.utcnow()`
+
+---
+
+## 8. Phase 4 — Database & Data Layer 🔄
+
+**Status: In Progress** — See `docs/en/phase-03-database.md`
+
+### Goal
+
+Replace the raw `sqlite3` implementation in `database.py` with SQLModel + Alembic + Repository pattern
+for the `samples` table. The `users` table is already on SQLModel (Phase 3).
+
+### What Was Built
+
+- `src/samplemind/data/orm.py` — shared SQLModel engine + session factory (used by auth)
+- `migrations/versions/0001_create_users_table.py` — users schema baseline
+- WAL mode + performance PRAGMAs on every connection (via SQLAlchemy event listener)
+
+### In Progress / Targets
+
+- [x] SQLModel engine + `init_orm()` (done — `data/orm.py`)
+- [x] Alembic configured with `render_as_batch=True` for SQLite
+- [ ] `src/samplemind/core/models/sample.py` — `Sample` SQLModel table + `SampleCreate`/`SampleUpdate`
+- [ ] `src/samplemind/data/repositories/sample_repository.py` — `SampleRepository`
+- [ ] `migrations/versions/0002_create_samples_table.py` — samples schema migration
+- [ ] CLI commands migrated from `database.py` to `SampleRepository`
+- [ ] Flask web routes migrated from `database.py` to `SampleRepository`
+- [ ] `database.py` retired (kept as legacy fallback until full cutover)
+
+---
+
+## 9. Phase 5 — CLI Modernization 📋
+
+**Status: Planned** — See `docs/en/phase-04-cli.md`
+
+### Goal
+
+Ensure all 6+ CLI commands use the `SampleRepository` (Phase 4) and support `--json` output.
+Add `stats` and `duplicates` commands.
+
+### Targets
+
+- [ ] All import/list/search/tag commands use `SampleRepository`
+- [ ] `stats` command — library statistics (total, by instrument, by mood, by energy)
+- [ ] `duplicates` command — SHA-256 fingerprint dedup
+- [ ] `--workers` flag on `import` — `ProcessPoolExecutor` batch analysis
+- [ ] Shell completion via `samplemind --install-completion`
+
+---
+
+## 10. Phase 6 — Web UI Improvements 📋
+
+**Status: Planned** — See `docs/en/phase-05-web-ui.md`
+
+### Goal
+
+Upgrade the Flask web UI with HTMX-powered live updates, Server-Sent Events (SSE) for import
+progress, and waveform preview using wavesurfer.js.
+
+### Targets
+
+- [ ] HTMX inline search (no page reload)
+- [ ] SSE progress stream during import (`/api/import/stream`)
+- [ ] Waveform preview via wavesurfer.js
+- [ ] Dark/light theme toggle
+- [ ] Responsive mobile layout
+
+---
+
+## 11. Phase 7 — Desktop App (Tauri + Svelte 5) 📋
+
+**Status: Foundation complete** — See `docs/en/phase-06-desktop-app.md`
+
+### What Was Built (Foundation)
+
+- `app/src-tauri/src/main.rs` — Tauri 2 app with Rust commands:
+  - `pick_folder` — native folder dialog (tauri-plugin-dialog)
+  - `is_directory` — path check helper
+  - `store_token` / `get_token` / `clear_token` — JWT token store (Phase 3)
+- System tray with Show/Quit menu
+- Dev mode: Flask spawned on port 5174, Tauri WebView loads it
+- Bundle targets: macOS (dmg+app), Windows (msi+nsis), Linux (appimage+deb)
+
+### Targets (Phase 7)
+
+- [ ] Svelte 5 frontend replaces Flask WebView
+- [ ] `import_folder` IPC command — calls Python sidecar `samplemind import --json`
+- [ ] `search_samples` IPC command — calls `samplemind search --json`
+- [ ] `SampleTable` Svelte component with sorting and filtering
+- [ ] `WaveformPlayer` component using wavesurfer.js
+- [ ] `ImportPanel` with drag-and-drop and progress
+- [ ] `stores/library.svelte.ts` — Svelte 5 Runes state management
+
+### Build and Run
+
+```bash
 cd app/
-pnpm install   # or: npm install
+pnpm install
 
-# Run in dev mode (hot reload)
+# Dev mode (spawns Flask on port 5174 automatically)
 pnpm tauri dev
 
-# Build for distribution
+# Production build
 pnpm tauri build
 # Output: app/src-tauri/target/release/bundle/
-#   macOS: SampleMind AI.app + .dmg
-#   Windows: .exe + .msi
-```
-
-### Plan: Frontend Architecture for the Tauri App
-
-We will build the frontend with **Svelte** (lightweight, compiled, fast):
-
-```bash
-# Set up Svelte in the Tauri project
-cd app/
-npm create vite@latest . -- --template svelte
-npm install
-```
-
-```
-app/
-├── src/                    # Svelte frontend
-│   ├── App.svelte          # Main component
-│   ├── lib/
-│   │   ├── SampleBrowser.svelte   # List and filter samples
-│   │   ├── WaveformPlayer.svelte  # Wavesurfer.js preview
-│   │   ├── TagEditor.svelte       # Tag editing
-│   │   └── ImportDropzone.svelte  # Drag & drop import
-│   └── tauri.js            # Tauri API wrappers
-├── src-tauri/
-└── package.json
-```
-
-### Key Tauri Commands to Implement
-
-```rust
-// src-tauri/src/main.rs — commands the frontend can call
-
-#[tauri::command]
-async fn scan_folder(path: String) -> Result<Vec<SampleInfo>, String> {
-    // Call Python script or use Rust-based scanning
-    todo!()
-}
-
-#[tauri::command]
-async fn analyze_sample(path: String) -> Result<AnalysisResult, String> {
-    // Spawn Python process: python main.py analyze <path>
-    let output = std::process::Command::new("python")
-        .args(["main.py", "analyze", &path])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    let json_str = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
-    serde_json::from_str(&json_str).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn export_to_fl_studio(sample_id: u32) -> Result<String, String> {
-    // Copy file to FL Studio sample folder
-    todo!()
-}
-```
-
-### macOS-specific Tauri Configuration
-
-```json
-// tauri.conf.json — macOS bundle settings
-{
-  "bundle": {
-    "macOS": {
-      "minimumSystemVersion": "12.0",
-      "signingIdentity": "Developer ID Application: Your Name",
-      "entitlements": "entitlements.plist",
-      "exceptionDomain": "",
-      "frameworks": []
-    },
-    "category": "MusicApplication"
-  }
-}
+#   macOS:   SampleMind.app + SampleMind.dmg
+#   Windows: SampleMind.exe + SampleMind.msi
 ```
 
 ---
 
-## 8. Phase 4 — FL Studio Plugin / VST3 / AU 🔮
+## 12. Phase 8 — FL Studio Automation 📋
+
+**Status: Planned** — See `docs/en/phase-07-fl-studio.md`
+
+### Targets
+
+- [ ] Filesystem export to FL Studio sample folder
+- [ ] AppleScript automation (focus FL Studio, open browser)
+- [ ] Clipboard path copy for drag-and-drop into FL Studio
+- [ ] MIDI CC messages via `python-rtmidi` (optional)
+
+---
+
+## 13. Phase 9 — VST3/AU Plugin 🔮
 
 **Status: Not started — requires C++ / JUCE knowledge**
 
@@ -791,7 +809,19 @@ def start_server():
 
 ---
 
-## 9. Phase 5 — Community and Cloud Sharing 🔮
+## 14. Phase 10 — Sample Packs 📋
+
+**Status: Planned** — See `docs/en/phase-09-sample-packs.md`
+
+---
+
+## 15. Phase 11 — Production & Release 📋
+
+**Status: Planned** — See `docs/en/phase-10-production.md`
+
+---
+
+## 16. Community and Cloud Sharing 🔮
 
 **Status: Concept**
 
@@ -861,7 +891,194 @@ jobs:
 
 ---
 
-## 10. Backlog and Future Ideas
+## 16. Phase 12 — Semantic Search & Vector Embeddings 📋
+
+**Status: Planned** — Prerequisites: Phase 4 (Database) ✅, Phase 5 (CLI), Phase 11 (Release)
+
+### Why Semantic Search?
+
+Rule-based search (`energy="high"`, `instrument="kick"`) misses *intent*.
+Semantic search lets users type **"punchy 808 with sub tail"** or **"bright pluck that feels euphoric"**
+and get ranked results — even if those exact words aren't in the filename or tags.
+
+### Architecture
+
+```
+Audio file imported
+  └─► librosa feature extraction (existing)
+  └─► CLAP encoder (HuggingFace ClapModel) → 512-dim float32 embedding
+        └─► sqlite-vec virtual table (ann_samples) ← ANN index
+              └─► KNN query: "find dark atmospheric pads" → text embedding → cosine distance
+```
+
+### Implementation Plan
+
+| Task | File | Description |
+|------|------|-------------|
+| Add embeddings column | `migrations/versions/0003_add_embeddings.py` | `embedding BLOB` in samples table |
+| CLAP encoder | `src/samplemind/analyzer/embeddings.py` | `encode_audio()` + `encode_text()` |
+| sqlite-vec integration | `src/samplemind/data/vector_store.py` | ANN index create, insert, query |
+| Semantic search API | `src/samplemind/api/routes/search.py` | `POST /search/semantic` |
+| CLI command | `src/samplemind/cli/commands/search.py` | `samplemind search "dark kick" --semantic` |
+| Re-index command | `src/samplemind/cli/commands/embeddings.py` | `samplemind embeddings rebuild` |
+
+### Key Code Patterns
+
+```python
+# src/samplemind/analyzer/embeddings.py
+import sqlite_vec                        # C extension — no extra infra
+from transformers import ClapModel, ClapProcessor
+
+model = ClapModel.from_pretrained("laion/larger_clap_music")
+processor = ClapProcessor.from_pretrained("laion/larger_clap_music")
+
+def encode_audio(path: str) -> list[float]:
+    """Return 512-dim float32 CLAP embedding for an audio file."""
+    inputs = processor(audios=load_audio(path), return_tensors="pt", sampling_rate=48000)
+    with torch.no_grad():
+        return model.get_audio_features(**inputs).squeeze().tolist()
+
+def encode_text(query: str) -> list[float]:
+    """Return 512-dim float32 CLAP embedding for a text query."""
+    inputs = processor(text=[query], return_tensors="pt", padding=True)
+    with torch.no_grad():
+        return model.get_text_features(**inputs).squeeze().tolist()
+```
+
+```python
+# src/samplemind/data/vector_store.py
+import sqlite_vec
+import struct, sqlite3
+
+def create_vec_table(conn: sqlite3.Connection) -> None:
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS ann_samples USING vec0(embedding float[512])")
+
+def semantic_search(conn: sqlite3.Connection, query_text: str, k: int = 10) -> list[int]:
+    embedding = encode_text(query_text)
+    blob = struct.pack(f"{len(embedding)}f", *embedding)
+    rows = conn.execute(
+        "SELECT rowid, distance FROM ann_samples WHERE embedding MATCH ? ORDER BY distance LIMIT ?",
+        (blob, k)
+    ).fetchall()
+    return [r[0] for r in rows]
+```
+
+### Testing
+
+```python
+# tests/test_semantic_search.py (future)
+from hypothesis import given, strategies as st
+
+@given(st.text(min_size=3, max_size=100))
+def test_semantic_search_never_crashes(query):
+    """Property: any query string should return a valid list, never raise."""
+    results = semantic_search_text(query, k=5)
+    assert isinstance(results, list)
+    assert len(results) <= 5
+```
+
+---
+
+## 17. Phase 13 — AI Agent Automation 📋
+
+**Status: Planned** — Prerequisites: Phase 12 (Semantic Search), pydantic-ai installed ✅
+
+### Why AI Agents?
+
+Manual tagging doesn't scale to 10,000+ sample libraries.
+An agent can:
+- **Auto-tag** samples using CLAP embeddings + LLM reasoning ("this sounds like a snare in a reverb room")
+- **Answer natural-language questions** ("how many dark kicks do I have under 130 BPM?")
+- **Suggest samples** for a project context ("I'm making a lofi hip-hop beat at 90 BPM in C minor — what fits?")
+- **Batch import + organize** an entire folder with smart genre/mood inference
+
+### Architecture
+
+```
+User query (CLI or Tauri)
+  └─► pydantic-ai Agent (model = claude-3-5-sonnet or ollama/llama3.3)
+        └─► Tools (Python functions auto-discovered from type annotations):
+              ├── search_samples(query, energy, instrument, bpm_min, bpm_max) → list[Sample]
+              ├── semantic_search(description) → list[Sample]  ← sqlite-vec ANN
+              ├── get_library_stats() → LibraryStats
+              ├── tag_sample(path, genre, mood, energy, tags) → bool
+              ├── analyze_file(path) → AudioFeatures
+              └── import_folder(path) → ImportResult
+        └─► Structured response (Pydantic model → JSON → CLI/Tauri)
+```
+
+### Implementation Plan
+
+```python
+# src/samplemind/agents/library_agent.py
+from pydantic_ai import Agent
+from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.ollama import OllamaModel
+from samplemind.core.config import get_settings
+from samplemind.data.repositories.sample_repository import SampleRepository
+
+def build_agent(use_local: bool = False) -> Agent:
+    """Build the SampleMind library agent.
+
+    use_local=True: use Ollama (llama3.3 — no API key needed, runs offline)
+    use_local=False: use Claude claude-3-5-sonnet-latest (better reasoning)
+    """
+    model = OllamaModel("llama3.3") if use_local else AnthropicModel("claude-3-5-sonnet-latest")
+
+    agent = Agent(
+        model=model,
+        system_prompt=(
+            "You are SampleMind, an AI assistant for music producers. "
+            "You help organize, search, and discover audio samples. "
+            "Always return structured data. Be concise and musical."
+        ),
+    )
+
+    @agent.tool
+    def search_samples(query: str, energy: str | None = None, instrument: str | None = None) -> list[dict]:
+        """Search the sample library by filename, tags, energy, or instrument."""
+        results = SampleRepository.search(query=query, energy=energy, instrument=instrument)
+        return [{"id": s.id, "filename": s.filename, "bpm": s.bpm, "mood": s.mood} for s in results[:10]]
+
+    @agent.tool
+    def get_library_stats() -> dict:
+        """Get statistics about the current sample library."""
+        return {"total": SampleRepository.count()}
+
+    return agent
+```
+
+### CLI Integration
+
+```bash
+# Interactive agent chat
+uv run samplemind agent chat
+
+# Single question (pipe-friendly)
+uv run samplemind agent ask "find me 5 dark kicks between 120-140 BPM"
+
+# Auto-tag an entire imported folder
+uv run samplemind agent autotag ~/Music/NewSamples/ --model ollama/llama3.3
+
+# JSON output for Tauri IPC
+uv run samplemind agent ask "show library stats" --json
+```
+
+### Model Provider Support (via pydantic-ai)
+
+| Provider | When to use | Config |
+|----------|------------|--------|
+| `claude-3-5-sonnet-latest` | Best reasoning, complex queries | `ANTHROPIC_API_KEY` env var |
+| `gpt-4o` | OpenAI users | `OPENAI_API_KEY` env var |
+| `ollama/llama3.3` | Fully offline, no API key | Ollama running locally |
+| `ollama/qwen2.5-coder` | Code-heavy tool use | Ollama running locally |
+| `gemini-2.0-flash` | Fast, cheap, large context | `GOOGLE_API_KEY` env var |
+
+---
+
+## 18. Backlog and Future Ideas
 
 | Idea | Complexity | Value | Priority |
 |------|------------|-------|----------|
@@ -918,53 +1135,103 @@ def find_duplicates(sample_paths: list[str]) -> list[tuple[str, str]]:
 
 ---
 
-## 11. Long-term Vision 2026+
+## 19. Long-term Vision 2026–2030
 
 ```
-SampleMind AI Product Suite:
+SampleMind AI Product Suite (2026–2030):
 
-┌─────────────────────────────────────────────────────────┐
-│                  SampleMind Ecosystem                    │
-│                                                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │  SampleMind  │  │  SampleMind  │  │  SampleMind  │  │
-│  │   Desktop    │  │   Plugin     │  │    Cloud     │  │
-│  │  (Tauri App) │  │ (VST3 / AU)  │  │  (Web App)   │  │
-│  │              │  │              │  │              │  │
-│  │  Organize,   │  │  Directly in │  │  Share packs,│  │
-│  │  analyze,    │  │  FL Studio   │  │  backup,     │  │
-│  │  search,     │  │  and DAWs    │  │  collaborate │  │
-│  │  export      │  │              │  │              │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
-│         │                 │                 │           │
-│         └─────────────────┴─────────────────┘           │
-│                    Shared backend:                       │
-│              Python AI + SQLite + REST API               │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        SampleMind Ecosystem                              │
+│                                                                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐   │
+│  │  SampleMind │  │  SampleMind │  │  SampleMind │  │  SampleMind  │   │
+│  │   Desktop   │  │   Plugin    │  │    Cloud    │  │    Agent     │   │
+│  │ (Tauri 2+)  │  │ (VST3 / AU) │  │  (Web App)  │  │  (CLI + API) │   │
+│  │             │  │             │  │             │  │              │   │
+│  │ Svelte 5    │  │ JUCE 8      │  │ Sync, share │  │ pydantic-ai  │   │
+│  │ Runes UI    │  │ C++ + IPC   │  │ collaborate │  │ Ollama local │   │
+│  │ Waveform    │  │ In FL Studio│  │ AI mastering│  │ auto-tag,    │   │
+│  │ Semantic    │  │ and other   │  │ pack market │  │ Q&A, suggest │   │
+│  │ search      │  │ DAWs        │  │ place       │  │              │   │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬───────┘   │
+│         │                │                │                │            │
+│         └────────────────┴────────────────┴────────────────┘            │
+│                          Shared Python Backend                           │
+│        FastAPI + SQLModel + sqlite-vec + pydantic-ai + Alembic          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Milestones Toward SampleMind Pro
+### Milestone Timeline (2026–2030)
 
-| Timeline | Goal |
-|----------|------|
-| Q1 2026 | Complete Tauri desktop app with Svelte UI and Python integration |
-| Q2 2026 | FL Studio filesystem integration + sample export workflow |
-| Q3 2026 | First JUCE plugin prototype (AU/VST3) |
-| Q4 2026 | macOS App Store or direct distribution with notarization |
-| 2027 | SampleMind Cloud beta — sharing, collaboration, AI mastering |
+| Timeline | Milestone | Key Technologies |
+|----------|-----------|-----------------|
+| **Q2 2026** | Phase 5–6: CLI + Web UI polished | Typer, HTMX, SSE, Rich |
+| **Q3 2026** | Phase 7: Tauri + Svelte 5 desktop app ships | Tauri 2, Svelte 5 Runes, pnpm |
+| **Q4 2026** | Phase 8: FL Studio filesystem integration | AppleScript, Rust, clipboard |
+| **Q1 2027** | Phase 9: VST3/AU plugin prototype | JUCE 8, Unix socket IPC |
+| **Q2 2027** | Phase 12: Semantic search live | sqlite-vec, CLAP embeddings, sentence-transformers |
+| **Q3 2027** | Phase 13: AI agent CLI + API | pydantic-ai, Ollama (offline), Claude/GPT (cloud) |
+| **Q4 2027** | Phase 11: macOS + Windows production release | Tauri bundle, PyInstaller sidecar, notarization |
+| **2028** | SampleMind Cloud beta | FastAPI cloud, PostgreSQL + pgvector, Stripe |
+| **2028** | Python 3.14 free-threaded migration | PEP 703 no-GIL → true parallel librosa workers |
+| **2029** | Mobile companion app | Tauri Mobile (iOS/Android), React Native alternative |
+| **2030** | SampleMind Pro: AI mastering & generation | On-device diffusion models, ControlNet for audio |
 
-### Learning Resources
+### AI Technology Roadmap (Audio-Specific)
+
+| Year | Technology | Use Case | Notes |
+|------|-----------|----------|-------|
+| 2026 | CLAP (ClapModel via HuggingFace transformers) | Zero-shot instrument classification + semantic search | numpy 2.x compatible via transformers ≥4.40 |
+| 2026 | sqlite-vec | Sub-ms ANN search, no external vector DB | Pure C, works in Tauri sidecar bundle |
+| 2026 | pydantic-ai + Ollama | Offline AI agent, auto-tag, Q&A | Runs llama3.3 / qwen2.5 locally |
+| 2027 | AudioBox (Meta) / Stable Audio 2 | AI sample generation ("generate a 4-bar lofi loop") | Inference API or local |
+| 2027 | XTTS-v2 / Kokoro-TTS | Audio description narration for accessibility | Local inference |
+| 2028 | Python 3.14 free-threaded | True parallel librosa batch processing (no GIL) | 2–8× speedup on multi-core |
+| 2028 | Diffusion-based source separation | Stem splitting (vocals/drums/bass) inside SampleMind | Building on Demucs v5+ |
+| 2029 | On-device LLM (Apple Neural Engine) | mlx-based inference on Apple Silicon, no internet | mlx-lm, llama.cpp Metal |
+| 2030 | Audio ControlNet | AI-guided sample morphing and stem-aware effects | Research → production |
+
+### Learning Resources (2026 Edition)
 
 | Topic | Resource |
 |-------|---------|
 | Tauri 2 docs | https://v2.tauri.app/start/ |
-| Svelte tutorial | https://learn.svelte.dev/ |
-| JUCE beginner guide | https://juce.com/learn/tutorials/ |
-| Audio plugin development | "Designing Software Synthesizer Plugins in C++" by Will Pirkle |
-| librosa documentation | https://librosa.org/doc/ |
-| Rust beginner book | https://doc.rust-lang.org/book/ |
-| macOS plugin signing | https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution |
+| Svelte 5 Runes | https://svelte-5-preview.vercel.app/docs/introduction |
+| pydantic-ai docs | https://ai.pydantic.dev/ |
+| sqlite-vec docs | https://alexgarcia.xyz/sqlite-vec/ |
+| CLAP model (HuggingFace) | https://huggingface.co/laion/larger_clap_music |
+| Ollama local models | https://ollama.com/library |
+| JUCE 8 tutorials | https://juce.com/learn/tutorials/ |
+| librosa documentation | https://librosa.org/doc/0.11.0/ |
+| Rust async book | https://rust-lang.github.io/async-book/ |
+| uv documentation | https://docs.astral.sh/uv/ |
+| Logfire observability | https://logfire.pydantic.dev/ |
 
 ---
 
-*Last updated: March 2026 — Active development in progress*
+## 20. Technology Decision Log
+
+| Technology | Replaces | Rationale | Status |
+|---|---|---|---|
+| **python-jose** | PyJWT | RS256 + HS256 support; used in Beta auth | ✅ Live |
+| **bcrypt (direct)** | passlib[bcrypt] | passlib 1.7.x can't parse bcrypt 4.x/5.x version strings | ✅ Live |
+| **FastAPI** | Flask (for API) | Async, auto OpenAPI docs, Pydantic v2 native | ✅ Live |
+| **SQLModel** | raw sqlite3 | Type-safe ORM (SQLAlchemy 2 + Pydantic v2 in one class) | ✅ Live |
+| **Alembic** | `_migrate()` hack | Reversible, versioned schema migrations; CI-verified | ✅ Live |
+| **platformdirs** | hardcoded paths | Cross-platform app data dirs (macOS/Linux/Windows) | ✅ Live |
+| **StaticPool** in tests | thread-local pools | In-memory SQLite shared across threads — critical for FastAPI tests | ✅ Live |
+| **sqlite-vec** | Qdrant / pgvector | Zero-infra ANN search inside existing SQLite DB; C extension | ✅ Installed |
+| **pydantic-ai** | LangChain | Simpler, type-safe, model-agnostic agent framework from Pydantic team | ✅ Installed |
+| **hypothesis** | manual edge-case tests | Property-based fuzzing finds edge cases no human would write | ✅ Installed |
+| **pyright** | mypy | Rust-based type checker; 10–100× faster; first-class Pydantic v2 support | ✅ Installed |
+| **Logfire** | print/logging | OpenTelemetry-native structured observability; auto-instruments FastAPI | 📋 Phase 11 |
+| **Ruff ≥0.15** | flake8+isort+black | Single binary; adds ANN + S + PERF + LOG rule sets | ✅ Live |
+| **CLAP (HuggingFace)** | laion-clap | numpy 2.x compatible; zero-shot audio classification via text | 📋 Phase 12 |
+| **Ollama** | OpenAI API | Fully offline LLM inference; llama3.3, qwen2.5, gemma3 | 📋 Phase 13 |
+| **Python 3.14 no-GIL** | GIL-limited threads | PEP 703 free-threaded mode → true parallel audio workers | 📋 2028 |
+
+---
+
+---
+
+*Last updated: March 2026 — v0.2.0 — Active development in progress*

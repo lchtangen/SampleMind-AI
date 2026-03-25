@@ -1,0 +1,280 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Auggie CLI — Agent Definitions for SampleMind-AI
+#
+# Routing priority:
+#   1. If a phase number is named → use matching phase-NN agent
+#   2. Otherwise → most specific domain agent for touched files/keywords
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Cross-cutting domain agents ───────────────────────────────────────────────
+agents:
+
+  audio-analyzer:
+    description: >
+      Audio analysis, librosa, BPM/key/energy/mood/instrument detection,
+      WAV/AIFF processing, classifier thresholds, batch analysis,
+      fingerprinting, duplicate detection, src/analyzer/, conftest.py fixtures.
+    model: sonnet
+    skills: [analyze_audio, batch_import, fingerprint, coverage]
+    trigger_keywords:
+      - librosa, audio, BPM, key detection, spectral, WAV, AIFF
+      - instrument classification, mood, energy, classifier.py
+      - audio_analysis.py, soundfile, soxr, fingerprint, duplicate
+      - batch analysis, ProcessPoolExecutor, src/analyzer/
+    domains: [src/samplemind/analyzer/, tests/conftest.py, tests/test_audio_analysis.py]
+    default: true
+
+  test-runner:
+    description: >
+      pytest, cargo test, failing tests, coverage, CI failures,
+      conftest.py, fixtures, markers, xdist, ruff lint errors.
+    model: sonnet
+    skills: [run_tests, check_coverage, lint]
+    trigger_keywords:
+      - pytest, tests, failing, coverage, CI, conftest, fixtures
+      - markers, xdist, ruff errors, clippy errors, why is CI failing
+    domains: [tests/, .github/workflows/]
+
+  tauri-builder:
+    description: >
+      Tauri 2, Rust, Svelte 5 Runes, app/ directory, IPC, pnpm builds,
+      Universal Binary, macOS signing, PyInstaller sidecar, GitHub Actions.
+    model: sonnet
+    skills: [build_tauri, check]
+    trigger_keywords:
+      - Tauri, Rust, Svelte, app/, src-tauri, IPC, pnpm, invoke()
+      - Universal Binary, signing, notarization, sidecar, release.yml
+      - tauri::command, Cargo.toml, tauri.conf.json
+    domains: [app/, app/src-tauri/, app/src/]
+
+  doc-writer:
+    description: >
+      Writing or updating documentation, docs/en/, docs/no/,
+      phase docs, ARCHITECTURE.md, README.md, CONTRIBUTING.md.
+    model: haiku
+    skills: []
+    trigger_keywords:
+      - documentation, docs, phase doc, README, ARCHITECTURE, CONTRIBUTING
+      - translate, Norwegian, troubleshooting, write a doc, add to the docs
+    domains: [docs/, ARCHITECTURE.md, README.md, CONTRIBUTING.md]
+
+  fl-studio-agent:
+    description: >
+      FL Studio integration, JUCE VST3/AU plugin, AppleScript, sidecar IPC,
+      MIDI clock, IAC Driver, virtual MIDI, Windows COM automation.
+    model: sonnet
+    skills: [sidecar]
+    trigger_keywords:
+      - FL Studio, JUCE, VST3, AU, AppleScript, MIDI, IAC Driver
+      - sidecar, plugin/, PythonSidecar, IPCSocket, osascript
+    domains: [plugin/, src/samplemind/sidecar/]
+
+# ── Phase-specific agents (route when phase number is mentioned) ──────────────
+
+  phase-02-audio-testing:
+    description: >
+      Phase 2: pytest infrastructure, synthetic WAV fixtures, conftest.py,
+      classifier threshold validation, analyzer coverage.
+    model: sonnet
+    skills: [run_tests, analyze_audio, coverage]
+    phase: 2
+    trigger_keywords:
+      - phase 2, pytest audio, WAV fixtures, conftest, classifier threshold
+    domains: [tests/, src/samplemind/analyzer/]
+
+  phase-03-database:
+    description: >
+      Phase 3: SQLModel ORM migration, Alembic versioning, repository
+      patterns, schema-safe data evolution.
+    model: sonnet
+    skills: [db_migrate]
+    phase: 3
+    trigger_keywords:
+      - phase 3, SQLModel, Alembic, ORM, migration, repository pattern
+    domains: [src/samplemind/data/, migrations/]
+
+  phase-04-cli:
+    description: >
+      Phase 4: Typer command design, Rich terminal UX, JSON output
+      contracts, --json flag, stderr/stdout IPC split.
+    model: sonnet
+    skills: [check]
+    phase: 4
+    trigger_keywords:
+      - phase 4, Typer, Rich, CLI, JSON flag, command design
+    domains: [src/samplemind/cli/]
+
+  phase-05-web:
+    description: >
+      Phase 5: Flask web UI, REST API endpoints, HTMX interactions,
+      SSE progress streams, flask-cors.
+    model: sonnet
+    skills: []
+    phase: 5
+    trigger_keywords:
+      - phase 5, Flask, HTMX, SSE, web UI, API endpoint
+    domains: [src/samplemind/web/, src/web/]
+
+  phase-06-desktop:
+    description: >
+      Phase 6: Tauri 2 desktop app, Rust IPC commands, Svelte 5 Runes
+      components, SearchBar, desktop packaging.
+    model: sonnet
+    skills: [build_tauri]
+    phase: 6
+    trigger_keywords:
+      - phase 6, Tauri commands, Svelte 5, Runes, desktop, SearchBar
+    domains: [app/]
+
+  phase-07-fl-studio:
+    description: >
+      Phase 7: FL Studio automation, filesystem export, clipboard flows,
+      AppleScript, MIDI metadata signaling.
+    model: sonnet
+    skills: [sidecar]
+    phase: 7
+    trigger_keywords:
+      - phase 7, FL Studio automation, clipboard, AppleScript, MIDI handoff
+    domains: [plugin/, src/samplemind/sidecar/]
+
+  phase-08-vst-plugin:
+    description: >
+      Phase 8: JUCE 8 plugin architecture, VST3/AU targets, plugin-side
+      IPC sockets, CMake presets, auval validation.
+    model: sonnet
+    skills: []
+    phase: 8
+    trigger_keywords:
+      - phase 8, JUCE plugin, VST3, AU, CMake, auval, PluginProcessor
+    domains: [plugin/]
+
+  phase-09-sample-packs:
+    description: >
+      Phase 9: sample pack metadata, semantic versioning, packaging
+      and distribution flow, update channels.
+    model: sonnet
+    skills: []
+    phase: 9
+    trigger_keywords:
+      - phase 9, sample pack, metadata, distribution, versioning
+    domains: [src/samplemind/]
+
+  phase-10-production:
+    description: >
+      Phase 10: production release engineering, CI/CD pipelines,
+      build orchestration, macOS signing/notarization, release automation.
+    model: opus
+    skills: [build_tauri, check]
+    phase: 10
+    trigger_keywords:
+      - phase 10, production, signing, notarization, CI/CD, release, GitHub Actions
+    domains: [.github/workflows/, app/src-tauri/]
+
+# ── Functional / service agents (added Phase 3–5 realised features) ──────────
+
+  api-agent:
+    description: >
+      FastAPI REST API, uvicorn, OpenAPI docs, JWT auth endpoints,
+      CORS, FastAPI lifespan, routers, Pydantic schemas, HTTP status codes,
+      api/main.py, api/routes/auth.py, Bearer tokens, OAuth2PasswordRequestForm.
+    model: sonnet
+    skills: [serve_api, auth, health_check]
+    trigger_keywords:
+      - FastAPI, uvicorn, REST API, OpenAPI, /api/docs, /api/v1
+      - auth endpoint, Bearer token, router, lifespan, CORS
+      - api/main.py, api/routes/, pydantic schema, HTTP status
+    domains: [src/samplemind/api/, src/samplemind/core/auth/]
+    endpoints:
+      health: GET /api/v1/health
+      docs: GET /api/docs
+      register: POST /api/v1/auth/register
+      login: POST /api/v1/auth/login
+      refresh: POST /api/v1/auth/refresh
+      me: GET /api/v1/auth/me
+    run_dev: "uv run samplemind api --reload"
+
+  web-agent:
+    description: >
+      Flask web UI, Jinja2 templates, session auth, web/app.py routes,
+      audio streaming (/audio/<id>), login/register pages, HTMX, SSE,
+      /api/samples JSON endpoint, /api/import, /api/tag, /api/status.
+    model: sonnet
+    skills: [serve_web, health_check]
+    trigger_keywords:
+      - Flask, web UI, Jinja2, template, session, web/app.py
+      - /api/samples, /api/import, /api/tag, /api/status, audio streaming
+      - HTMX, SSE, login page, register page, library view
+    domains: [src/samplemind/web/, src/web/]
+    routes:
+      - "GET  /          → library view (login-required)"
+      - "GET  /login     → login page"
+      - "POST /login     → authenticate"
+      - "GET  /register  → register page"
+      - "POST /register  → create account"
+      - "GET  /logout    → clear session"
+      - "GET  /api/samples  → JSON samples (live search)"
+      - "POST /api/tag   → update tags via web"
+      - "POST /api/import → import folder"
+      - "GET  /api/status  → health + stats"
+      - "GET  /audio/<id>  → stream WAV file"
+    run_dev: "uv run samplemind serve --port 5000"
+
+  security-agent:
+    description: >
+      Auth system: JWT access/refresh tokens (python-jose HS256), password
+      hashing (passlib bcrypt), RBAC (UserRole: viewer/member/owner/admin),
+      Permission enum, RBACService, API keys, OAuth2 providers, dependencies.
+    model: sonnet
+    skills: [auth]
+    trigger_keywords:
+      - JWT, access token, refresh token, python-jose, HS256
+      - bcrypt, password hash, passlib, RBAC, UserRole, Permission
+      - RBACService, api keys, OAuth2, Google OAuth, GitHub OAuth
+      - core/auth/, jwt_handler.py, rbac.py, permissions.py
+    domains: [src/samplemind/core/auth/]
+    jwt_config:
+      algorithm: HS256
+      access_expire_minutes: 30
+      refresh_expire_days: 7
+      secret_key_env: SAMPLEMIND_SECRET_KEY
+    roles:
+      viewer: [audio:read, search:basic]
+      member: [audio:read/write/delete/analyze/batch, search:*, pack:*, api:key_create]
+      owner: member + [api:key_revoke]
+      admin: all permissions
+
+  devops-agent:
+    description: >
+      Dev environment setup, scripts/setup-dev.sh, scripts/start.sh,
+      GitHub Actions, CI/CD, WSL2 configuration, git performance tuning,
+      pre-commit hooks, environment variables, pyproject.toml build system.
+    model: sonnet
+    skills: [setup_dev, start, check, lint]
+    trigger_keywords:
+      - setup, install, dev environment, WSL2, scripts/, setup-dev.sh, start.sh
+      - GitHub Actions, CI/CD, workflow file, pre-commit, git config
+      - pyproject.toml, uv sync, pnpm install, environment variables
+    domains: [scripts/, .github/, pyproject.toml]
+    quick_start:
+      setup: "bash scripts/setup-dev.sh"
+      web: "bash scripts/start.sh web"
+      desktop: "bash scripts/start.sh desktop"
+      both: "bash scripts/start.sh both"
+
+  ml-agent:
+    description: >
+      ML model loading, 8-bit quantization, disk offloading, transformers,
+      model_loader.py, HuggingFace models, low-memory inference,
+      scikit-learn classifiers, numba JIT, future semantic search features.
+    model: sonnet
+    skills: [analyze_audio]
+    trigger_keywords:
+      - ML model, transformers, 8-bit, quantization, offload, HuggingFace
+      - model_loader.py, AutoModelForCausalLM, scikit-learn, numba
+      - semantic search, embeddings, vector, Phase 12, Phase 13
+    domains: [src/samplemind/utils/model_loader.py, src/samplemind/analyzer/]
+    notes:
+      - "Current use: rule-based classifiers (classifier.py) — no heavy ML needed yet"
+      - "Phase 12 target: vector embeddings for semantic sample search"
+      - "Phase 13 target: AI agent automation for library curation"
+      - "model_loader.py supports: 8-bit quantization, disk offloading, fallback inference"

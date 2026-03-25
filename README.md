@@ -30,7 +30,7 @@ Everything reads from the same SQLite database — no sync needed.
 | Feature | Description |
 |---------|-------------|
 | **8-Feature Audio Analysis** | BPM, key, instrument, mood, energy, duration, spectral features |
-| **AI Classification** | Automatic: kick/snare/hihat/bass/pad + dark/neutral/bright + low/medium/high |
+| **AI Classification** | Automatic: kick/snare/hihat/bass/pad/lead/loop/sfx + dark/chill/aggressive/euphoric/melancholic/neutral + low/mid/high |
 | **Audio Fingerprinting** | SHA-256 dedup detection — find and remove exact duplicates |
 | **Batch Import** | Parallel analysis with `--workers` (defaults to CPU count) |
 | **SQLite Library** | WAL mode + FTS5 full-text search, < 50ms queries |
@@ -57,40 +57,49 @@ cd SampleMind-AI
 ### Install & Run
 
 ```bash
-# Install all dependencies (creates .venv automatically):
-uv sync
+# Install all dependencies including dev tools (creates .venv automatically):
+uv sync --dev
+
+# Run the database migrations to create the SQLite tables (required before first run):
+uv run alembic upgrade head
 
 # Run the CLI:
 uv run samplemind --help
 
-# Import a folder of samples:
+# Import a folder of WAV samples (analyzes BPM, key, instrument, mood, energy):
 uv run samplemind import ~/Music/Samples/
 
-# Search your library:
-uv run samplemind search "dark kick"
+# List all imported samples in a table:
+uv run samplemind list
 
-# Show library statistics:
-uv run samplemind stats
+# Search the library (text query, combined with optional filters):
+uv run samplemind search --query "dark kick" --energy high
+
+# Tag a sample with genre and custom tags:
+uv run samplemind tag "kick_128" --genre trap --tags "808,heavy"
 
 # Start the web UI (http://localhost:5000):
 uv run samplemind serve
+
+# Start the FastAPI auth server (http://localhost:8000/docs for OpenAPI UI):
+uv run samplemind api
 ```
 
 ### Development Setup (WSL2)
 
 ```bash
-# Run the dev setup script:
-chmod +x scripts/setup-dev.sh && ./scripts/setup-dev.sh
-
-# Run tests:
+# Run the full test suite (33 tests):
 uv run pytest tests/ -v
 
-# Run linter:
-uv run ruff check src/
+# Run only fast tests (skips real librosa analysis — ~0.5s total):
+uv run pytest tests/ -v -m "not slow"
 
-# Run full CI suite locally:
-# (uses /check slash command in Claude Code)
-uv run ruff check src/ && uv run pytest tests/ -n auto
+# Lint and type-check:
+uv run ruff check src/ tests/
+uv run pyright src/
+
+# Run full CI suite locally (same checks as GitHub Actions):
+uv run ruff check src/ tests/ && uv run pyright src/ && uv run pytest tests/ -n auto && uv run alembic check
 ```
 
 ---
@@ -127,15 +136,18 @@ lipo -info app/src-tauri/target/universal-apple-darwin/release/bundle/macos/Samp
 | **Python** | 3.13 | Core analysis + CLI + web backend |
 | **Audio analysis** | [librosa 0.11](https://librosa.org/) | Feature extraction (8 features per file) |
 | **Database** | SQLite (WAL + FTS5) | Local sample metadata store |
-| **ORM (target)** | SQLModel + Alembic | Type-safe DB with migration history |
-| **CLI** | [Typer](https://typer.tiangolo.com/) + [Rich](https://rich.readthedocs.io/) | Beautiful terminal UX |
+| **ORM** | SQLModel + Alembic | Type-safe DB layer; versioned schema migrations |
+| **Auth** | JWT (python-jose) + bcrypt | Access + refresh tokens; viewer/owner/admin RBAC |
+| **API** | FastAPI + Uvicorn | Async REST API with auto-generated OpenAPI docs |
+| **CLI** | [Typer](https://typer.tiangolo.com/) + [Rich](https://rich.readthedocs.io/) | Beautiful terminal UX with `--json` output for IPC |
 | **Web UI** | Flask + [HTMX](https://htmx.org/) | Browser interface, SSE progress |
 | **Desktop app** | [Tauri 2](https://tauri.app/) | Native macOS/Windows app (~15 MB) |
 | **Frontend** | [Svelte 5](https://svelte.dev/) Runes + Vite | Reactive desktop UI |
 | **Plugin** | [JUCE 8](https://juce.com/) | VST3/AU plugin for FL Studio |
 | **Lint/format** | [ruff](https://github.com/astral-sh/ruff) | Fast Python linter + formatter |
-| **Tests** | [pytest](https://pytest.org/) + soundfile | Synthetic WAV fixtures |
-| **CI** | GitHub Actions | pytest + ruff + clippy on push |
+| **Type checking** | [pyright](https://github.com/microsoft/pyright) | Rust-based static analysis; first-class Pydantic v2 support |
+| **Tests** | [pytest](https://pytest.org/) + hypothesis + soundfile | Unit, integration, and property-based tests |
+| **CI** | GitHub Actions | ruff + pyright + pytest + alembic check + clippy on push |
 
 ---
 
@@ -143,16 +155,17 @@ lipo -info app/src-tauri/target/universal-apple-darwin/release/bundle/macos/Samp
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | Foundation (uv, src-layout, Typer CLI) | ✅ Complete |
-| 2 | Audio Analysis & Testing | 🔄 In Progress |
-| 3 | Database (SQLModel + Alembic + FTS5) | 📋 Planned |
-| 4 | CLI Expansion (stats, duplicates, --workers) | 📋 Planned |
-| 5 | Web UI (Flask-CORS, dark mode, bulk tag) | 📋 Planned |
-| 6 | Desktop App (Tauri 2 + Svelte 5) | 📋 Planned |
-| 7 | FL Studio Integration (AppleScript, MIDI) | 📋 Planned |
-| 8 | VST3/AU Plugin (JUCE 8) | 📋 Planned |
-| 9 | Sample Packs (.smpack format) | 📋 Planned |
-| 10 | Production (signing, notarization, CI/CD) | 📋 Planned |
+| 1 | Foundation (uv, src-layout, Typer CLI, Flask web UI) | ✅ Complete |
+| 2 | Audio Analysis & Testing (librosa, 33 tests) | ✅ Complete |
+| 3 | Authentication & Authorization (JWT, RBAC, FastAPI) | ✅ Complete |
+| 4 | Database Layer (SQLModel + Alembic, SampleRepository, WAL) | ✅ Complete |
+| 5 | CLI Modernization (stats, duplicates, --workers) | 📋 Planned |
+| 6 | Web UI Improvements (HTMX, SSE, wavesurfer.js) | 📋 Planned |
+| 7 | Desktop App (Tauri 2 + Svelte 5 Runes) | 📋 Planned |
+| 8 | FL Studio Integration (AppleScript, filesystem, MIDI) | 📋 Planned |
+| 9 | VST3/AU Plugin (JUCE 8) | 📋 Planned |
+| 10 | Sample Packs (.smpack format) | 📋 Planned |
+| 11 | Production (signing, notarization, CI/CD) | 📋 Planned |
 
 See [ROADMAP.md](ROADMAP.md) for the full roadmap.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the system architecture.

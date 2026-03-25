@@ -7,6 +7,20 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
 
+// ── Auth token store ─────────────────────────────────────────────────────────
+//
+// In-process storage for the JWT access token issued by the FastAPI auth layer.
+// The token is stored here so Rust commands can include it in direct HTTP
+// calls to the FastAPI server (/api/v1/…) without going through the WebView.
+//
+// For the Flask web UI (loaded in the WebView), auth is handled via session
+// cookies automatically — no token bridging is needed there.
+//
+// Security note: tokens are held only in process memory, never written to disk.
+
+#[derive(Default)]
+struct AuthTokenStore(Mutex<Option<String>>);
+
 const FLASK_PORT: u16 = 5174;
 const FLASK_URL: &str = "http://127.0.0.1:5174";
 
@@ -114,6 +128,48 @@ fn is_directory(path: String) -> bool {
     std::path::Path::new(&path).is_dir()
 }
 
+// ── Tauri commands: JWT token bridge ─────────────────────────────────────────
+//
+// These three commands let the Svelte/JS frontend hand the FastAPI JWT token
+// to Rust, so that future native Rust→FastAPI calls can include it.
+//
+// Typical JS call sequence after login via FastAPI:
+//   const tokens = await fetch('/api/v1/auth/login', { method: 'POST', … }).json()
+//   await invoke('store_token', { token: tokens.access_token })
+//
+// Rust code that needs to call FastAPI directly can then call get_token() on
+// the app state internally.
+
+/// Store the JWT access token in process memory.
+///
+/// Called from JavaScript after a successful FastAPI /api/v1/auth/login.
+#[tauri::command]
+fn store_token(
+    token: String,
+    state: tauri::State<'_, AuthTokenStore>,
+) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    *guard = Some(token);
+    Ok(())
+}
+
+/// Retrieve the stored JWT access token.
+///
+/// Returns `None` if no token has been stored (user not logged in via FastAPI).
+#[tauri::command]
+fn get_token(state: tauri::State<'_, AuthTokenStore>) -> Result<Option<String>, String> {
+    let guard = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(guard.clone())
+}
+
+/// Clear the stored JWT token (called on logout).
+#[tauri::command]
+fn clear_token(state: tauri::State<'_, AuthTokenStore>) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    *guard = None;
+    Ok(())
+}
+
 // ── System tray ──────────────────────────────────────────────────────────────
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -170,7 +226,16 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())   // register the dialog plugin
-        .invoke_handler(tauri::generate_handler![pick_folder, is_directory])
+        // Register all IPC commands — must match capabilities/default.json
+        .invoke_handler(tauri::generate_handler![
+            pick_folder,
+            is_directory,
+            store_token,
+            get_token,
+            clear_token,
+        ])
+        // Manage auth token state (process-lifetime, not persisted to disk)
+        .manage(AuthTokenStore::default())
         .setup(move |app| {
             // ── System tray ───────────────────────────────────────────────
             setup_tray(app)?;

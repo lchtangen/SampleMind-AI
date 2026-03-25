@@ -1,1163 +1,1067 @@
-# 🎵 SampleMind AI — Master Roadmap
-> **Unified roadmap consolidating all planning documents.**  
-> Version: v3.0 | Updated: 2026-03-24 | Status: Active Development
+# SampleMind AI — Master Roadmap (2026–2030)
+
+> **The authoritative engineering and product vision document.**
+> Covers architecture, all development phases, AI/ML strategy, and the 2026–2030 product trajectory.
+> Version: 3.0 | Updated: 2026-03-25 | Status: Active Development — v0.2.0
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
-1. [Project Vision & Overview](#1-project-vision--overview)
-2. [Tech Stack](#2-tech-stack)
-3. [Architecture Overview](#3-architecture-overview)
-4. [Current Status](#4-current-status)
-5. [v3.0 Migration — 100 Keypoints](#5-v30-migration--100-keypoints)
-6. [Phase-by-Phase Development Plan](#6-phase-by-phase-development-plan)
-   - [Phase 4.1C — Smart Caching](#phase-41c-smart-caching--predictive-preloading)
-   - [Phase 4.2 — Advanced Audio](#phase-42-advanced-audio-features)
-   - [Phase 4.3 — Neural Generation](#phase-43-neural-audio-generation)
-   - [Phase 5 — Web UI & Cloud](#phase-5-web-ui--cloud-sync)
-   - [Phase 6 — Enterprise DAW](#phase-6-enterprise-daw-integration)
-   - [Phase 7 — AI Analytics](#phase-7-advanced-ai--analytics)
+1. [Project Vision](#1-project-vision)
+2. [System Architecture](#2-system-architecture)
+3. [Tech Stack — Current & Target (2026–2030)](#3-tech-stack--current--target-20262030)
+4. [Phase Status (March 2026)](#4-phase-status-march-2026)
+5. [13-Phase Development Plan](#5-13-phase-development-plan)
+6. [AI & ML Strategy](#6-ai--ml-strategy)
 7. [Sprint Planning](#7-sprint-planning)
-8. [Long-Term Strategic Roadmap (Phase 10–15+)](#8-long-term-strategic-roadmap-phase-1015)
-9. [Infrastructure & Operations](#9-infrastructure--operations)
-10. [Testing & Quality Assurance](#10-testing--quality-assurance)
-11. [Metrics & KPIs](#11-metrics--kpis)
-12. [Technical Debt](#12-technical-debt)
-13. [Risk Management](#13-risk-management)
-14. [Contribution Guide](#14-contribution-guide)
+8. [Long-Term Vision (2027–2030)](#8-long-term-vision-20272030)
+9. [Performance Targets & SLAs](#9-performance-targets--slas)
+10. [Testing & Quality](#10-testing--quality)
+11. [Technical Debt](#11-technical-debt)
+12. [Risk Management](#12-risk-management)
+13. [Contribution Guide](#13-contribution-guide)
 
 ---
 
-## 1. Project Vision & Overview
+## 1. Project Vision
 
-### What is SampleMind AI?
+**SampleMind AI** is a **local-first, AI-powered audio sample library manager and
+DAW companion** for music producers. It combines traditional signal-processing analysis
+(librosa), neural audio embeddings (CLAP), vector similarity search (sqlite-vec), and
+AI agent automation (pydantic-ai + Ollama) — all running **offline on your own machine**.
 
-**SampleMind AI** is a **CLI-first, offline-capable music production AI** for audio analysis, sample management, stem separation, MIDI transcription, and AI-powered recommendations.
+Everything — CLI, Flask web UI, Tauri desktop app, JUCE VST3/AU plugin — reads the
+same SQLite database, enhanced with vector embeddings for semantic search.
 
-Core pillars:
-- **CLI/TUI is the primary interface** — Modern, responsive, feature-complete
-- **Web UI is supplementary** — For collaboration and convenience
-- **DAW plugins are essential** — Deep integration with professional tools
-- **AI is pervasive** — Intelligent recommendations, generation, and analysis throughout
+### Core Pillars
 
-### Core Innovation: Neurologic Audio Classification
+**Analyze** — Extract BPM, key, instrument, mood, energy, and 8 acoustic features from
+every sample using librosa 0.11 + rule-based classifiers. Future: CLAP neural embeddings
+for zero-shot zero-label classification.
 
-Traditional audio analysis examines frequency, amplitude, and time (3 dimensions). SampleMind adds psychological, emotional, and contextual dimensions — creating a **multi-dimensional audio fingerprint** far more useful for music production.
+**Organize** — Store rich metadata in SQLite (SQLModel + Alembic) with full-text FTS5
+search, tag filtering, fingerprint deduplication, and **512-dim vector embeddings** stored
+in sqlite-vec for sub-millisecond semantic retrieval.
 
-### Analysis Levels
+**Search Semantically** — Type *"punchy 808 with sub tail"* or *"dark atmospheric pad in A minor"*
+and get ranked results via cosine similarity on CLAP audio embeddings. No keywords required.
 
-```python
-# Used in audio_engine.py — match to AnalysisLevel enum
-BASIC        # BPM, key, duration — <0.5s
-STANDARD     # + MFCC, chroma, spectral — <1s
-DETAILED     # + harmonic/percussive separation — <2s
-PROFESSIONAL # + AI analysis, BEATs classification, embeddings — <5s
+**Automate with Agents** — pydantic-ai agents (powered by Claude, GPT-4o, or local Ollama)
+auto-tag libraries, answer natural-language questions about your samples, and suggest sounds
+for active projects — all with type-safe tool calls and structured JSON responses.
+
+**Integrate** — Connect with FL Studio via filesystem export, clipboard, AppleScript
+automation, virtual MIDI, and a native JUCE VST3/AU plugin.
+
+**Ship** — Distribute as a signed, notarized macOS Universal Binary (arm64 + x86_64)
+with a PyInstaller-bundled Python sidecar, auto-updater, and `.smpack` sample pack format.
+
+### What This Is NOT
+
+- No mandatory cloud sync or SaaS subscription — everything runs fully offline
+- AI agents default to local Ollama (no API key) — cloud APIs are opt-in
+- No Electron, no React, no MongoDB — see [Tech Stack](#3-tech-stack--current--target-20262030)
+- Not a DAW — a companion tool that lives alongside FL Studio (and other DAWs)
+
+---
+
+## 2. System Architecture
+
+### Five-Layer Architecture (2026 Target)
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 5 — DAW Integration                                      │
+│  ┌─────────────────────┐   ┌──────────────────────────────────┐ │
+│  │  JUCE Plugin (C++)  │   │  FL Studio / Any DAW             │ │
+│  │  VST3 + AU          │   │  - Filesystem browser            │ │
+│  │  PluginEditor UI    │   │  - AppleScript automation        │ │
+│  │  PythonSidecar      │   │  - Virtual MIDI (IAC Driver)     │ │
+│  └──────────┬──────────┘   └──────────────────────────────────┘ │
+└─────────────┼───────────────────────────────────────────────────┘
+              │ Unix domain socket (~/tmp/samplemind.sock)
+┌─────────────┼───────────────────────────────────────────────────┐
+│  Layer 4 — Desktop Application (Tauri 2 + Svelte 5)             │
+│  ┌──────────┴──────────┐                                        │
+│  │  Svelte 5 Runes     │  SampleTable, SemanticSearch,          │
+│  │  (WKWebView macOS)  │  WaveformPlayer, AgentChat             │
+│  └──────────┬──────────┘                                        │
+│             │ tauri::invoke() IPC                               │
+│  ┌──────────┴──────────┐                                        │
+│  │  Rust (Tauri core)  │  import_folder, search_semantic,       │
+│  │  app/src-tauri/     │  pick_folder_dialog, agent_ask         │
+│  └──────────┬──────────┘                                        │
+└─────────────┼───────────────────────────────────────────────────┘
+              │ stdout JSON  (samplemind import --json ...)
+┌─────────────┼───────────────────────────────────────────────────┐
+│  Layer 3 — Python Backend                                       │
+│  ┌──────────┴──────────┐                                        │
+│  │  Typer CLI + FastAPI │  import, analyze, search, tag,        │
+│  │  src/samplemind/     │  serve, agent, export, pack           │
+│  └──────────┬──────────┘                                        │
+│  ┌──────────┴──────────────────────────────────────────────┐    │
+│  │  Core Services                                           │    │
+│  │  ┌──────────────────┐  ┌──────────────────────────────┐ │    │
+│  │  │  Audio Analysis  │  │  Sample Repository            │ │    │
+│  │  │  librosa 0.11    │  │  SQLModel + Alembic           │ │    │
+│  │  │  8 rule features │  │  SampleRepository             │ │    │
+│  │  └──────────────────┘  └──────────────────────────────┘ │    │
+│  │  ┌──────────────────┐  ┌──────────────────────────────┐ │    │
+│  │  │  Embeddings      │  │  AI Agent Layer               │ │    │
+│  │  │  CLAP encoder    │  │  pydantic-ai + tools          │ │    │
+│  │  │  sqlite-vec ANN  │  │  Ollama / Claude / GPT        │ │    │
+│  │  └──────────────────┘  └──────────────────────────────┘ │    │
+│  │  ┌──────────────────┐  ┌──────────────────────────────┐ │    │
+│  │  │  Flask Web UI    │  │  Pack System                  │ │    │
+│  │  │  HTMX + SSE      │  │  .smpack ZIP format           │ │    │
+│  │  └──────────────────┘  └──────────────────────────────┘ │    │
+│  └──────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+              │
+┌─────────────┼───────────────────────────────────────────────────┐
+│  Layer 2 — AI / Embedding Services (optional, local)            │
+│  ┌──────────┴──────────┐   ┌──────────────────────────────────┐ │
+│  │  Ollama             │   │  HuggingFace ClapModel            │ │
+│  │  llama3.3 (offline) │   │  CLAP music/audio embeddings      │ │
+│  │  qwen2.5-coder      │   │  sentence-transformers (text)     │ │
+│  │  gemma3             │   │  (loaded on-demand, no server)    │ │
+│  └─────────────────────┘   └──────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+              │
+┌─────────────┼───────────────────────────────────────────────────┐
+│  Layer 1 — Storage                                              │
+│  ┌──────────┴──────────┐   ┌──────────────────────────────────┐ │
+│  │  SQLite DB          │   │  Audio Files                     │ │
+│  │  + sqlite-vec       │   │  ~/Music/SampleMind/             │ │
+│  │  (WAL, FTS5,        │   │  (WAV/AIFF, paths preserved)     │ │
+│  │   vector ANN idx)   │   │                                  │ │
+│  └─────────────────────┘   └──────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### IPC Contract
+
+All Rust (Tauri) ↔ Python communication uses **stdout JSON** exclusively.
+Python logs status/progress to **stderr only** — never stdout. This is a hard contract.
+
+| Tauri Command | Python CLI Invocation | JSON Response |
+| --- | --- | --- |
+| `import_folder` | `samplemind import <path> --json` | `{"imported": N, "errors": M, "samples": [...]}` |
+| `search_samples` | `samplemind search --query X --json` | `{"samples": [...]}` |
+| `search_semantic` | `samplemind search "dark kick" --semantic --json` | `{"samples": [...], "query_ms": N}` |
+| `analyze_file` | `samplemind analyze <path> --json` | `{"bpm": F, "key": S, "energy": S, ...}` |
+| `get_library_stats` | `samplemind list --stats --json` | `{"total": N, "by_instrument": {...}}` |
+| `agent_ask` | `samplemind agent ask "..." --json` | `{"answer": S, "samples": [...]}` |
+| `export_pack` | `samplemind pack create NAME SLUG --json` | `{"pack_path": S, "sample_count": N}` |
+
+### Python Sidecar Socket Protocol (JUCE Plugin)
+
+Length-prefixed JSON over Unix domain socket (`~/tmp/samplemind.sock`):
+
+```text
+Request:  [4-byte big-endian length] [UTF-8 JSON]
+Response: [4-byte big-endian length] [UTF-8 JSON]
+
+{"version": 2, "action": "ping"}
+{"version": 2, "action": "search", "query": "...", "energy": "high"}
+{"version": 2, "action": "analyze", "path": "/abs/path/file.wav"}
 ```
 
 ---
 
-## 2. Tech Stack
+## 3. Tech Stack — Current & Target (2026–2030)
 
-### AI Providers
+### Migration State
 
-| Provider | SDK | Model | Use |
-|----------|-----|-------|-----|
-| Anthropic | `anthropic ^0.84.0` | `claude-3-7-sonnet-20250219` | Primary analysis |
-| OpenAI | `openai ^2.0.0` | `gpt-4o` + `gpt-4o-audio-preview` | Agent workflows |
-| Google | `google-genai ^1.56.0` | `gemini-2.0-flash` | Fast streaming |
-| Ollama | `ollama ^0.4.0` | `qwen2.5:7b-instruct` | Offline inference |
+| Component | Current (v0.2.0) | Target (v1.0) | Phase |
+| --- | --- | --- | --- |
+| Package manager | uv ≥0.6 + pyproject.toml | ✅ live | — |
+| Python version | 3.13 (JIT preview) | 3.14 free-threaded (2028) | — |
+| Package layout | src/samplemind/ | ✅ live | — |
+| Auth | JWT + RBAC (FastAPI) | ✅ live | 3 |
+| Database | SQLModel + Alembic | ✅ live | 4 |
+| Vector search | sqlite-vec (installed) | ANN index + CLAP embeddings | 12 |
+| AI agents | pydantic-ai (installed) | Agent CLI + Tauri chat | 13 |
+| CLI | Typer + Rich + `--json` | + `agent` + `search --semantic` | 5 |
+| Web UI | Flask + Jinja2 | Flask + HTMX + SSE + semantic search | 6 |
+| Desktop frontend | Tauri shell + Flask WebView | Svelte 5 Runes + pnpm | 7 |
+| FL Studio | none | filesystem + AppleScript + MIDI | 8 |
+| Plugin | none | JUCE 8 VST3/AU | 9 |
+| Sample packs | none | .smpack ZIP + SHA-256 manifest | 10 |
+| Distribution | none | PyInstaller sidecar + notarized DMG/MSI | 11 |
+| Lint / format | ruff ≥0.15 | ✅ live | — |
+| Type checking | pyright ≥1.1.390 | ✅ live | — |
+| Tests | pytest ≥9 + hypothesis | ✅ live | — |
+| Observability | structlog → stderr | Logfire (OpenTelemetry) | 11 |
+| CI | uv + ruff + pytest + clippy | + pyright + alembic check | — |
 
-### Audio
+### Full Technology Decision Log
 
-- `librosa ^0.11.0` — BPM, key, MFCC, chroma, spectral features
-- `demucs ^4.0.0` — 6-stem source separation (`htdemucs_6s` model)
-- `basic-pitch ^0.4.0` — MIDI transcription from audio
-- `pedalboard ^0.9.0` — Professional audio effects (Spotify)
-- `soundfile ^0.12.1` — Audio I/O (WAV, FLAC, OGG)
-- `torch ^2.8.0` + `transformers ^4.47.0` — ML models
-- `faster-whisper ^1.1.0` — 4× faster offline transcription
-- `madmom`, `essentia`, `aubio` — Beat tracking, advanced analysis
+| Technology | Replaces | Rationale | Status |
+| --- | --- | --- | --- |
+| **uv** (Astral) | pip + venv | 10–100× faster; workspace support; `uv run` replaces scripts | ✅ |
+| **pyproject.toml** | requirements.txt | PEP 621; deps + scripts + tool config in one file | ✅ |
+| **src-layout** | flat layout | Prevents accidental import of source tree | ✅ |
+| **SQLModel** | raw sqlite3 | Type-safe ORM: SQLAlchemy 2.0 + Pydantic v2 in one class | ✅ |
+| **Alembic** | `_migrate()` hack | Versioned, reversible migrations; `alembic check` in CI | ✅ |
+| **bcrypt (direct)** | passlib[bcrypt] | passlib 1.7.x fails to parse bcrypt 4.x/5.x version strings | ✅ |
+| **FastAPI** | Flask (for API) | Async; auto OpenAPI docs; Pydantic v2 native integration | ✅ |
+| **StaticPool** in tests | thread-local pools | In-memory SQLite shared across threads (FastAPI test fix) | ✅ |
+| **sqlite-vec** | Qdrant / pgvector | C extension; zero extra infra; ANN inside existing SQLite DB | ✅ |
+| **pydantic-ai** | LangChain | Type-safe; model-agnostic; structured outputs; smaller API | ✅ |
+| **hypothesis** | manual edge cases | Property-based fuzzing; finds edge cases no human writes | ✅ |
+| **pyright** | mypy | Rust-based; 10–100× faster; first-class Pydantic v2 support | ✅ |
+| **Typer + Rich** | argparse | Type annotations → auto `--help`; Rich tables + progress | ✅ |
+| **HTMX** | custom JS fetch | 80% less JS with HTML attributes; pairs with Flask SSE | 📋 Phase 6 |
+| **Svelte 5 Runes** | Svelte 4 / React | Fine-grained reactivity; `.svelte.ts` stores; 0 virtual DOM | 📋 Phase 7 |
+| **Tauri 2** | Electron | 3–15 MB vs 120–200 MB; Rust; WKWebView; capability security | 📋 Phase 7 |
+| **CLAP (HuggingFace)** | laion-clap | numpy 2.x compatible; zero-shot audio↔text classification | 📋 Phase 12 |
+| **Ollama** | OpenAI API | Fully offline; llama3.3, qwen2.5, gemma3; pydantic-ai native | 📋 Phase 13 |
+| **Logfire** (Pydantic) | print + structlog | OpenTelemetry-native; auto-instruments FastAPI + SQLModel | 📋 Phase 11 |
+| **JUCE 8** | — | VST3 + AU from one C++ codebase; PluginEditor + sidecar | 📋 Phase 9 |
+| **PyInstaller** | requiring Python | Standalone sidecar binary for end-user distribution | 📋 Phase 11 |
+| **Python 3.14 no-GIL** | GIL-limited threads | PEP 703: true parallel audio workers (2028 migration) | 🔮 2028 |
 
-### UI / API
+### Audio Analysis Pipeline (Current + Future)
 
-- `textual ^0.87.0` — Terminal UI framework (13 screens)
-- `fastapi ^0.115.0` + `uvicorn` — REST API
-- `next.js 15` + `react 19` + `tailwind v4` — Web UI
-- `langgraph ^0.2.0` + `langchain ^0.3.0` — Agentic workflows
+```text
+WAV file
+  │
+  ├─ [Current: librosa 0.11]
+  │    └─ librosa.load(sr=22050, mono=True)
+  │         ├─ BPM:   beat_track() → tempo in BPM
+  │         ├─ Key:   chroma_cens() + tonnetz() → root + major/minor
+  │         └─ 8 features → 3 rule-based classifiers:
+  │              rms, spectral_centroid, zero_crossing_rate
+  │              spectral_flatness, spectral_rolloff
+  │              onset_mean/max, low_freq_ratio, duration
+  │              → classify_energy()     → "low" | "mid" | "high"
+  │              → classify_mood()       → "dark" | "chill" | "aggressive" | "euphoric"
+  │              → classify_instrument() → "kick" | "snare" | "hihat" | "bass" | ...
+  │
+  └─ [Phase 12: CLAP neural embeddings]
+       └─ ClapModel.from_pretrained("laion/larger_clap_music")
+            └─ 512-dim float32 audio embedding
+                 └─ sqlite-vec: INSERT INTO ann_samples(embedding) VALUES (?)
+                      └─ Query: "dark atmospheric pad" → text embedding →
+                           → cosine ANN search → top-K sample IDs → JOIN samples
+```
 
-### Database
+---
 
-- `motor ^3.6.0` + `beanie ^1.26.0` — MongoDB async ODM
-- `redis ^5.0.1` — Session cache, Pub/Sub
-- `chromadb ^0.5.0` — Vector similarity search
+## 4. Phase Status (March 2026)
 
-### Primary Python Stack
+```text
+Phase 1  — Foundation & CLI      ████████████████████  100% ✅
+Phase 2  — Audio Analysis        ████████████████████  100% ✅
+Phase 3  — Authentication        ████████████████████  100% ✅
+Phase 4  — Database (SQLModel)   ████████████████████  100% ✅
+Phase 5  — CLI Modernization     ░░░░░░░░░░░░░░░░░░░░    0% 📋
+Phase 6  — Web UI (HTMX)         ░░░░░░░░░░░░░░░░░░░░    0% 📋
+Phase 7  — Tauri + Svelte 5      ████░░░░░░░░░░░░░░░░   20% 🔄 (foundation only)
+Phase 8  — FL Studio             ░░░░░░░░░░░░░░░░░░░░    0% 📋
+Phase 9  — JUCE Plugin           ░░░░░░░░░░░░░░░░░░░░    0% 📋
+Phase 10 — Sample Packs          ░░░░░░░░░░░░░░░░░░░░    0% 📋
+Phase 11 — Production            ░░░░░░░░░░░░░░░░░░░░    0% 📋
+Phase 12 — Semantic Search       ████░░░░░░░░░░░░░░░░   10% 🔄 (sqlite-vec installed)
+Phase 13 — AI Agent Automation   ████░░░░░░░░░░░░░░░░   10% 🔄 (pydantic-ai installed)
 
-```python
-primary_stack = {
-    'language': 'Python 3.11+',
-    'ml_framework': 'PyTorch 2.8+',
-    'audio_processing': 'Librosa 0.11+',
-    'web_framework': 'FastAPI 0.115+',
-    'tui': 'Textual 0.87+',
-    'database': 'MongoDB (Beanie ODM) + Redis + ChromaDB'
+Overall: ~48% complete (core infrastructure solid; AI + desktop phases ahead)
+```
+
+| Phase | Deliverable | Key Tech |
+| --- | --- | --- |
+| ✅ 1 | Foundation, CLI, src-layout | uv, Typer, pyproject.toml |
+| ✅ 2 | Audio analysis, 33 tests | librosa 0.11, pytest, soundfile fixtures |
+| ✅ 3 | JWT auth, RBAC, user model | FastAPI, bcrypt, python-jose, SQLModel |
+| ✅ 4 | Sample model, SampleRepository, WAL mode | SQLModel, Alembic, sqlite-vec (installed) |
+| 📋 5 | stats/duplicates CLI, --workers | Typer, ProcessPoolExecutor |
+| 📋 6 | HTMX search, SSE import progress | HTMX, Flask SSE, wavesurfer.js |
+| 🔄 7 | Svelte 5 Runes desktop | Tauri 2, Svelte 5, pnpm |
+| 📋 8 | FL Studio filesystem + MIDI | AppleScript, python-rtmidi |
+| 📋 9 | VST3/AU plugin | JUCE 8, C++, Unix socket |
+| 📋 10 | .smpack packs | ZIP, SHA-256 |
+| 📋 11 | Signed DMG/MSI, Logfire | PyInstaller, GitHub Actions |
+| 🔄 12 | Semantic search | sqlite-vec ANN, CLAP embeddings |
+| 🔄 13 | AI agent CLI + API | pydantic-ai, Ollama |
+
+---
+
+## 5. 13-Phase Development Plan
+
+---
+
+### Phase 1 — Foundation ✅
+
+**Goal:** Establish a modern Python 3.13 project with uv, src-layout, CI, and dev tooling.
+
+**Deliverables:**
+
+- `pyproject.toml` with all deps, ruff, pytest, coverage configuration
+- `src/samplemind/` package with `__init__.py`, `__main__.py`, cli/, analyzer/, data/, web/
+- `.python-version` pinned to 3.13
+- `.github/workflows/python-lint.yml` — uv + ruff + pytest + Rust clippy
+- `scripts/setup-dev.sh` bootstrap for new contributors
+- `.vscode/settings.json` for WSL2 development
+- `.pre-commit-config.yaml` with ruff hooks
+- `.editorconfig` for consistent indentation
+
+**Success criteria:**
+
+- `uv sync && uv run pytest` passes from a clean clone
+- `uv run ruff check src/` reports zero errors
+- `cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings` passes
+
+**Phase doc:** [docs/en/phase-01-foundation.md](en/phase-01-foundation.md)
+
+---
+
+### Phase 2 — Audio Analysis & AI Classification 🔄
+
+**Goal:** Fully test and extend the librosa-based analysis pipeline with batch processing,
+fingerprinting, and comprehensive test coverage.
+
+**Deliverables:**
+
+- All 8 features tested in `tests/test_audio_analysis.py`
+- All 3 classifiers tested in `tests/test_classifier.py` with 90%+ coverage
+- `kick_wav`, `hihat_wav`, `bass_wav`, `silent_wav` fixtures in `tests/conftest.py`
+- Batch analysis with `ProcessPoolExecutor` and `--workers N` flag
+- Audio fingerprinting: SHA-256 of first 64 KB for deduplication
+- Analysis cache: skip re-analysis if file `mtime` is unchanged
+- `samplemind duplicates [--remove]` CLI command
+
+**Key tech decisions:**
+
+- Always load at `sr=22050, mono=True` for deterministic results
+- `ProcessPoolExecutor` (not ThreadPoolExecutor) — CPU-bound work
+- SHA-256 fingerprint of raw bytes (not acoustic hash) — fast and collision-resistant
+
+**Success criteria:**
+
+- `uv run pytest tests/ --cov=samplemind --cov-report=term-missing` → analyzer 80%+
+- Batch import of 100 synthetic WAVs completes in < 30s on 8-core machine
+- `samplemind duplicates` finds injected duplicates with zero false positives
+
+**Phase doc:** [docs/en/phase-02-audio-analysis.md](en/phase-02-audio-analysis.md)
+
+---
+
+### Phase 3 — Database & Data Layer 📋
+
+**Goal:** Migrate from raw sqlite3 to SQLModel + Alembic with the Repository pattern,
+FTS5 full-text search, and WAL mode.
+
+**Deliverables:**
+
+- `alembic/` directory initialized with `alembic.ini` and `versions/`
+- `alembic/versions/0001_initial.py` — initial schema migration
+- `src/samplemind/models.py` — `Sample` SQLModel class
+- `src/samplemind/data/repository.py` — `SampleRepository` with typed methods:
+  `upsert()`, `tag()`, `search()`, `get_by_name()`, `count()`, `get_all()`
+- `src/samplemind/data/db.py` — engine setup with platformdirs path and PRAGMA settings
+- `tests/test_repository.py` with in-memory SQLite session fixture
+- FTS5 virtual table for search (< 50ms on 10k samples)
+- WAL mode enabled by default
+
+**Key tech decisions:**
+
+- SQLModel = SQLAlchemy 2.0 + Pydantic — one model for both ORM and validation
+- Alembic replaces the `_migrate()` function — proper version history in CI
+- In-memory SQLite (`sqlite://`) for all tests — never write to disk in pytest
+
+**PRAGMA settings** (applied on engine creation):
+
+```sql
+PRAGMA journal_mode=WAL;
+PRAGMA cache_size = -64000;
+PRAGMA synchronous = NORMAL;
+PRAGMA temp_store = MEMORY;
+```
+
+**Success criteria:**
+
+- `alembic upgrade head` runs cleanly from a fresh clone
+- `SampleRepository.search(query="kick", energy="high")` returns in < 50ms on 10k rows
+- All existing sqlite3 tests pass with no behavior changes
+
+**Phase doc:** [docs/en/phase-03-database.md](en/phase-03-database.md)
+
+---
+
+### Phase 4 — CLI with Typer and Rich 🔄
+
+**Goal:** Complete the Typer CLI with all 8 commands, `--json` IPC mode, Rich progress
+bars, and shell completion.
+
+**Deliverables:**
+
+- All 6 existing commands (`import`, `analyze`, `list`, `search`, `tag`, `serve`)
+  with `--json` flag outputting machine-readable JSON to stdout ✅
+- `samplemind stats [--json]` — library statistics
+- `samplemind duplicates [--remove]` — find/remove duplicates by fingerprint
+- Rich progress bar during import with ETA and per-file status
+- Shell completion: `samplemind --install-completion`
+- `tests/test_cli.py` with Typer `CliRunner` and 70%+ coverage
+
+**IPC contract (non-negotiable):**
+
+- JSON to stdout only — Rust reads this
+- Human-readable text to stderr only — never mix
+- `--json` flag on all data-returning commands
+
+**Success criteria:**
+
+- `samplemind import /path/to/samples --json | python -m json.tool` validates cleanly
+- `samplemind stats --json` returns `{"total": N, "by_instrument": {...}}`
+- Shell completion works in bash and zsh
+
+**Phase doc:** [docs/en/phase-04-cli.md](en/phase-04-cli.md)
+
+---
+
+### Phase 5 — Web UI with Flask and HTMX 🔄
+
+**Goal:** Upgrade Flask to a factory pattern with Blueprints, HTMX live search, and
+SSE import progress.
+
+**Deliverables:**
+
+- `create_app()` factory with test configuration
+- Blueprint structure: `library` (search/list/tag) and `import_` (upload + SSE)
+- HTMX live search with 300ms debounce — no page reload
+- SSE stream for import progress: `start → progress (N/total) → done`
+- Waveform preview with Wavesurfer.js
+- `POST /api/samples/bulk-tag` — bulk tag by ID list
+- `GET /api/samples/stats` — library statistics endpoint
+- `flask-cors` configured for `tauri://localhost` origin
+- `tests/test_web.py` with Flask test client and in-memory database
+
+**Key tech decisions:**
+
+- HTMX replaces 80% of JavaScript — HTML attributes drive server interactions
+- SSE (not WebSocket) for progress — simpler, unidirectional, no handshake
+- Keep API response shapes stable — Tauri and app.js consume them
+
+**Success criteria:**
+
+- Import of 50 files streams progress to browser without polling
+- Live search responds within 300ms on 10k-sample library
+- All API endpoints return correct JSON with `flask-cors` headers
+
+**Phase doc:** [docs/en/phase-05-web-ui.md](en/phase-05-web-ui.md)
+
+---
+
+### Phase 6 — Desktop App with Tauri 2 and Svelte 5 🔄
+
+**Goal:** Build the complete Svelte 5 frontend with Runes-based reactivity backed by
+Tauri 2 Rust commands that spawn the Python CLI.
+
+**Deliverables:**
+
+- `app/src/` scaffolded with Svelte 5 + Vite + TypeScript
+- `app/vite.config.ts` targeting Tauri dev server
+- Library store: `app/src/lib/stores/library.svelte.ts` with `$state` Runes
+- Components: `SampleTable.svelte`, `ImportPanel.svelte`, `WaveformPlayer.svelte`
+- Typed invoke wrappers: `app/src/lib/api/tauri.ts`
+- Rust commands: `import_folder`, `search_samples`, `pick_folder_dialog`
+- System tray: show/hide window, quit
+- HMR (Hot Module Replacement) in `pnpm tauri dev`
+- `app/src-tauri/capabilities/default.json` with all command permissions
+
+**Svelte 5 Runes pattern:**
+
+```svelte
+<script lang="ts">
+  let query = $state('');
+  let results = $derived.by(async () => await searchSamples(query));
+</script>
+```
+
+**Success criteria:**
+
+- `pnpm tauri dev` starts with HMR, no console errors
+- Import folder dialog opens and drives progress visible in ImportPanel
+- SampleTable updates reactively as search query changes
+- `pnpm tauri build` produces a distributable bundle
+
+**Phase doc:** [docs/en/phase-06-desktop-app.md](en/phase-06-desktop-app.md)
+
+---
+
+### Phase 7 — FL Studio Integration 📋
+
+**Goal:** Connect SampleMind to FL Studio at all 4 integration levels: filesystem,
+clipboard, AppleScript automation, and virtual MIDI.
+
+**Deliverables:**
+
+- `src/samplemind/integrations/paths.py` — FL Studio 20/21 path detection (macOS + Windows)
+- `src/samplemind/integrations/filesystem.py` — `export_to_fl_studio()` with folder
+  organization by instrument/mood/genre
+- `src/samplemind/integrations/clipboard.py` — `copy_sample_path()` (pbcopy / clip.exe)
+- `src/samplemind/integrations/applescript.py` — `focus_fl_studio()`,
+  `is_fl_studio_running()`, `open_sample_browser()`
+- `src/samplemind/integrations/midi.py` — virtual MIDI port via python-rtmidi,
+  CC messages for BPM/key metadata
+- `src/samplemind/integrations/naming.py` — `kick_128bpm_Cmin.wav` naming scheme
+- `entitlements.plist` with `com.apple.security.automation.apple-events` ✅
+- Tauri command: `focus_fl_studio` → osascript call
+
+**FL Studio macOS paths:**
+
+```text
+~/Documents/Image-Line/FL Studio/Data/Patches/Samples/SampleMind/    ← FL20
+~/Documents/Image-Line/FL Studio 21/Data/Patches/Samples/SampleMind/ ← FL21
+```
+
+**Success criteria:**
+
+- `samplemind export --fl-studio` copies samples to correct FL Studio folder
+- `focus_fl_studio()` brings FL Studio to front without permission error
+- Virtual MIDI port appears in FL Studio MIDI settings
+
+**Phase doc:** [docs/en/phase-07-fl-studio.md](en/phase-07-fl-studio.md)
+
+---
+
+### Phase 8 — VST3/AU Plugin with JUCE 8 📋
+
+**Goal:** Build a JUCE 8 C++ plugin that runs inside FL Studio and communicates with
+the Python sidecar via Unix domain socket.
+
+**Deliverables:**
+
+- `plugin/CMakeLists.txt` with JUCE 8 VST3 + AU targets
+- `plugin/src/PluginProcessor.h/.cpp` — audio passthrough, state management
+- `plugin/src/PluginEditor.h/.cpp` — UI with search field, sample list, waveform
+- `plugin/src/PythonSidecar.h/.cpp` — launch, communicate, stop lifecycle
+- `plugin/src/IPCSocket.h/.cpp` — length-prefixed JSON over Unix domain socket
+- `src/samplemind/sidecar/server.py` — asyncio socket server (search, analyze, ping)
+- Sidecar health-check ping every 5s; auto-restart on timeout (max 3 retries)
+- `auval -v aufx SmPl SmAI` passes on macOS
+
+**Sidecar startup sequence:**
+
+1. `PluginProcessor::prepareToPlay()` → `sidecar.launch(binaryPath)`
+2. Wait for `{"status": "ready", "version": 2}` on stdout
+3. Begin 5s ping loop
+4. On editor close: `sidecar.shutdown()`
+
+**Success criteria:**
+
+- Plugin loads in FL Studio without crash
+- Search in plugin UI returns results from local SQLite library
+- `auval -v aufx SmPl SmAI` exits 0 on macOS
+
+**Phase doc:** [docs/en/phase-08-vst-plugin.md](en/phase-08-vst-plugin.md)
+
+---
+
+### Phase 9 — Sample Packs (.smpack) 📋
+
+**Goal:** Build a portable `.smpack` format (ZIP + JSON manifest) for exporting, sharing,
+and importing curated sample libraries with SHA-256 integrity verification.
+
+**Deliverables:**
+
+- `.smpack` format: `manifest.json` + `samples/` inside a ZIP archive
+- `src/samplemind/packs/manifest.py` — `PackManifest` Pydantic model with `SampleEntry`
+- `src/samplemind/packs/exporter.py` — `export_pack()` filtering library into ZIP
+- `src/samplemind/packs/importer.py` — `import_pack()` with SHA-256 verification,
+  idempotent upsert
+- CLI commands: `pack create NAME SLUG`, `pack import FILE`, `pack verify FILE`,
+  `pack list`
+- `scripts/release-pack.sh` — create GitHub Release with `.smpack` as asset
+- `tests/test_packs.py` — roundtrip export → import test
+
+**Manifest schema:**
+
+```json
+{
+  "name": "Dark Trap Kit Vol.1",
+  "slug": "dark-trap-kit-v1",
+  "version": "1.0.0",
+  "format_version": 1,
+  "author": "lchtangen",
+  "samples": [
+    {"file": "samples/kick.wav", "sha256": "abc123...", "bpm": 128.0, "key": "C min"}
+  ]
 }
 ```
 
+**Success criteria:**
+
+- Export + import roundtrip preserves all metadata with zero data loss
+- SHA-256 mismatch causes import to abort with clear error
+- `pack verify` passes on a valid pack, fails on a corrupted one
+
+**Phase doc:** [docs/en/phase-09-sample-packs.md](en/phase-09-sample-packs.md)
+
 ---
 
-## 3. Architecture Overview
+### Phase 10 — Production & Distribution 📋
 
-### Key File Locations
+**Goal:** Sign, notarize, and distribute SampleMind as a native macOS Universal Binary
+and Windows installer via automated GitHub Actions.
 
-```
-main.py                                        # CLI entry point
-pyproject.toml                                 # All dependencies (Poetry)
+**Deliverables:**
 
-src/samplemind/
-├── interfaces/
-│   ├── cli/menu.py                            # Main CLI (~2255 lines)
-│   ├── tui/app.py                             # Textual TUI app
-│   ├── tui/screens/                           # 13 TUI screens
-│   └── api/                                   # FastAPI router layer
-├── server/                                    # FastAPI server entrypoint
-├── core/
-│   ├── engine/audio_engine.py                 # Audio analysis engine
-│   ├── loader.py                              # AdvancedAudioLoader
-│   ├── database/chroma.py                     # ChromaDB vector search
-│   └── library/pack_creator.py                # Sample pack creation
-├── integrations/
-│   ├── ai_manager.py                          # Multi-provider AI routing
-│   └── daw/fl_studio_plugin.py                # FL Studio integration
-├── ai/                                        # AI utilities
-├── services/                                  # Business logic services
-└── utils/                                     # Cross-cutting utilities
+- `scripts/bump-version.sh` — sync version across `pyproject.toml`, `Cargo.toml`,
+  `tauri.conf.json`, `package.json`
+- `scripts/build-sidecar.sh` — PyInstaller one-file bundle from `samplemind-server.spec`
+- `scripts/release-pack.sh` — GitHub Release creation ✅ (Phase 9)
+- `.github/workflows/release.yml` — macOS Universal Binary build + signing +
+  notarization + Windows MSI build
+- `app/src-tauri/entitlements.plist` — all required Apple entitlements ✅
+- Tauri auto-updater with GitHub Releases endpoint
+- Sentry crash reporting wired to `SAMPLEMIND_SENTRY_DSN` env var (opt-in)
+- Production release checklist in `docs/en/phase-10-production.md`
 
-plugins/
-├── fl_studio_plugin.py
-├── fl_studio/cpp/samplemind_wrapper.cpp
-├── ableton/python_backend.py
-└── installer.py
+**macOS entitlements required:**
 
-tests/unit/                                    # 81 tests, ~30% coverage
-apps/web/                                      # Next.js 15 web UI (in progress)
-```
+- `com.apple.security.automation.apple-events` (AppleScript)
+- `com.apple.security.cs.allow-unsigned-executable-memory` (Python sidecar)
+- `com.apple.security.files.user-selected.read-write` (file access)
+- `com.apple.security.assets.music.read-write` (Music folder)
 
-### AI Manager Pattern
+**Success criteria:**
+
+- `pnpm tauri build --target universal-apple-darwin` produces a notarized `.dmg`
+- `xcrun stapler validate SampleMind.app` exits 0
+- Auto-updater detects and installs a staged update from GitHub Releases
+- Sentry receives a test event when `SAMPLEMIND_SENTRY_DSN` is set
+
+**Phase doc:** [docs/en/phase-10-production.md](en/phase-10-production.md)
+
+---
+
+## 6. AI & ML Strategy
+
+### Guiding Principles
+
+1. **Local-first by default** — All AI features work offline. Cloud APIs are opt-in.
+2. **Progressive enhancement** — Phases 1–11 work without any AI models installed.
+   Phases 12–13 enhance the experience when models are available.
+3. **No numpy version hell** — All AI packages must support numpy ≥2.0.
+   Legacy packages requiring numpy <2.0 (laion-clap, madmom) require a separate conda environment.
+4. **Structured outputs only** — pydantic-ai agents always return typed Pydantic models.
+   No free-form string parsing. JSON to stdout, logs to stderr.
+5. **Deterministic fallback** — If an AI model is unavailable, the system falls back
+   to the rule-based classifier (Phase 2). No silent failures.
+
+### AI Component Map
+
+| Component | Technology | Model | Input | Output | Phase |
+| --- | --- | --- | --- | --- | --- |
+| Rule-based classifier | librosa + sklearn | N/A | audio features | energy/mood/instrument | ✅ 2 |
+| Audio embeddings | HuggingFace ClapModel | laion/larger_clap_music | WAV file | 512-dim float32 | 📋 12 |
+| Text embeddings | sentence-transformers | all-MiniLM-L6-v2 | tag text | 384-dim float32 | 📋 12 |
+| Vector ANN search | sqlite-vec | N/A | query embedding | sample IDs + distances | 📋 12 |
+| Library agent | pydantic-ai + Ollama | llama3.3 (offline) | natural language | structured results | 📋 13 |
+| Cloud agent | pydantic-ai + Anthropic | claude-3-5-sonnet | natural language | structured results | 📋 13 |
+
+### Phase 12 — Semantic Search Implementation
 
 ```python
-from src.samplemind.integrations.ai_manager import SampleMindAIManager
+# Embedding pipeline (runs at import time, stored in sqlite-vec)
+encode_audio(path) → ClapModel → 512-dim float32 → struct.pack("512f") → BLOB
+encode_text(query) → ClapProcessor → 512-dim float32 → BLOB
 
-manager = SampleMindAIManager()
-result = await manager.analyze_audio(
-    audio_path="sample.wav",
-    model="claude-3-7-sonnet-20250219",   # or "auto"
-    analysis_level="PROFESSIONAL"
-)
+# ANN query
+"dark atmospheric pad" → encode_text() → cosine_similarity(ann_samples) → top-10 sample IDs
 ```
 
-### FastAPI Pattern
+**sqlite-vec table:**
+```sql
+CREATE VIRTUAL TABLE IF NOT EXISTS ann_samples USING vec0(
+    embedding float[512]   -- CLAP audio embedding, L2-normalized
+);
+```
+
+**Performance target:** < 50ms for KNN search over 100K samples on MacBook Air M3.
+
+### Phase 13 — AI Agent Tools
+
+pydantic-ai auto-discovers tools from Python type annotations:
 
 ```python
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+@agent.tool
+def search_samples(ctx: RunContext, query: str, energy: str | None = None) -> list[SampleResult]:
+    """Search the sample library. Use this for any 'find me samples' request."""
+    ...
 
-router = APIRouter(prefix="/api/v1/audio", tags=["audio"])
+@agent.tool
+def get_library_stats(ctx: RunContext) -> LibraryStats:
+    """Get count, breakdown by instrument, mood, energy. Use to answer 'how many' questions."""
+    ...
 
-@router.post("/analyze")
-async def analyze_audio(file: UploadFile) -> AnalysisResult:
+@agent.tool
+def semantic_search(ctx: RunContext, description: str, k: int = 10) -> list[SampleResult]:
+    """Find samples by natural language description using vector similarity."""
     ...
 ```
 
-### Textual TUI Pattern
-
-```python
-class MyScreen(Screen):
-    BINDINGS = [("escape", "pop_screen", "Back")]
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield Footer()
-
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        result = await self.app.some_async_method()
-        self.notify(f"Done: {result}")
-```
-
----
-
-## 4. Current Status
-
-```
-Phase 1: Core Functionality          ████████████████████░░  90%
-Phase 2: Cross-Platform Support      ████████░░░░░░░░░░░░░░  40%
-Phase 3: Testing & Quality           ██░░░░░░░░░░░░░░░░░░░░  10%
-Phase 4: Performance                 ██████░░░░░░░░░░░░░░░░  30%
-Phase 5: Distribution                ░░░░░░░░░░░░░░░░░░░░░░   0%
-Phase 6: Documentation               ████████████░░░░░░░░░░  60%
-
-Phases 1-9 (Foundation):             ██████████████████░░░░  85%
-v3.0 Migration:                      ████░░░░░░░░░░░░░░░░░░  20%
-
-Overall Project Completion:          ██████████████░░░░░░░░  70%
-```
-
-### P0 Dependency Upgrades (Complete)
-
-| Package | Old | New |
-|---------|-----|-----|
-| `anthropic` | `^0.7.0` | `^0.84.0` |
-| `openai` | `^1.3.0` | `^2.0.0` |
-| `google-genai` | `google-generativeai` | `^1.56.0` |
-| `textual` | `^0.44.0` | `^0.87.0` |
-| `torch` | `^2.0.0` | `^2.8.0` |
-| `numpy` | `<2.0.0` (capped) | `>=2.0.0` |
-| `demucs` | Not in pyproject | `^4.0.0` |
-| `pedalboard` | Not in pyproject | `^0.9.0` |
-| `basic-pitch` | Commented out | `^0.4.0` |
-
----
-
-## 5. v3.0 Migration — 100 Keypoints
-
-> The 100-keypoint plan drives v3.0 development. Execute in category order.  
-> Tools: **Claude Code** = architecture/complex, **Copilot** = completions/quick, **Codex** = scaffolding/generation
-
----
-
-### 🔴 Category 1: Foundation & Refactor (Weeks 1–2)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 1 | **Consolidate Duplicate Cache Dirs** | `core/cache/` AND `core/caching/` both exist — merge into single `CacheManager` | Claude Code |
-| 2 | **Eliminate Stub-Only Directories** | Many TUI subdirs contain only `__init__.py` — implement or consolidate | Codex |
-| 3 | **Harden `core/loader.py` (28KB monolith)** | Refactor into `core/loading/audio_loader.py`, `model_loader.py`, `batch_loader.py` | Claude Code |
-| 4 | **Upgrade Python to 3.12 Full Compatibility** | Use `match/case`, `tomllib`, f-string improvements, `typing.override` | Codex |
-| 5 | **Fix `requirements.txt` Dependency Conflicts** | `fastapi` pinned twice — clean all deps into single `pyproject.toml` | Copilot |
-| 6 | **Upgrade All Dependency Versions (2026 Stack)** | `torch ^2.8`, `transformers ^4.47`, `anthropic ^0.84`, `openai ^2.0`, `textual ^0.87` | Claude Code |
-| 7 | **Unify `main.py` + `main_enhanced.py`** | Merge into single entry point with feature flags via config | Claude Code |
-| 8 | **Git Hygiene — Fix `.gitignore`** | Remove/ignore: `*.wav` test files, `debug_forensics.py`, move to `tests/fixtures/` | Codex |
-| 9 | **Implement All Stub `__init__.py` Files** | `ai/classification/`, `ai/mastering/`, `core/generation/` — implement with proper exports | Claude Code |
-| 10 | **Fix Hardcoded Script Paths** | Replace all `/home/lchta/Projects/samplemind-ai-v6` with `$(git rev-parse --show-toplevel)` | Copilot |
-
----
-
-### 🟠 Category 2: AI Engine Upgrade (Weeks 3–4)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 11 | **Upgrade `openai_integration.py` → GPT-4o Audio** | Add `gpt-4o-audio-preview`, `gpt-4o-realtime-preview`, audio modality | Claude Code |
-| 12 | **Upgrade `anthropic_integration.py` → Claude 3.7** | Upgrade models, add extended thinking mode, add `files` API for direct audio submission | Claude Code |
-| 13 | **Upgrade `google_ai_integration.py` → Gemini 2.0 Flash** | Migrate to `google-genai` SDK, add `gemini-2.0-flash-exp` + thinking variants | Claude Code |
-| 14 | **Build `openai_agents_integration.py`** | OpenAI Agents SDK: `AudioAnalysisAgent → TaggingAgent → OrganizationAgent` pipeline | Codex |
-| 15 | **Build `langchain_audio_chain.py` — LangGraph Workflow** | Stateful `analyze → classify → tag → embed → search` graph nodes via Redis | Claude Code |
-| 16 | **Add CLAP Audio Embeddings** | Zero-shot classification: "trap beat", "jazz piano" — 512-dim ChromaDB embeddings | Claude Code |
-| 17 | **Add BEATs Audio Foundation Model (Microsoft)** | State-of-the-art audio representation, 527 AudioSet categories | Claude Code |
-| 18 | **Add `faster-whisper` Transcription Pipeline** | 4× faster offline transcription — vocal transcription, lyric detection | Codex |
-| 19 | **Add Demucs v4 Stem Separation (Meta)** | Separate: drums, bass, vocals, guitar, piano, other — output as library entries | Claude Code |
-| 20 | **Add Basic Pitch v2 — MIDI Extraction** | Re-enable `basic-pitch` — audio → MIDI → store for harmonic search | Codex |
-| 21 | **Build Hybrid LLM Router in `ai_manager.py`** | `claude-3-7 → gpt-4o → gemini-2.0-flash → qwen2.5:7b → phi3` fallback chain | Claude Code |
-| 22 | **Add `Qwen2.5-Audio-7B` Offline Model** | `ollama pull qwen2.5:7b-instruct` + Qwen2.5-Audio via transformers | Copilot |
-| 23 | **Add Audio Spectrogram Transformer (AST)** | MIT AST model: 527-class audio classification | Claude Code |
-| 24 | **Add `music2vec` / `MusicFM` Embeddings** | Self-supervised music representations in ChromaDB | Claude Code |
-| 25 | **Implement CNN Audio Classifier (Migrate from V2.0)** | Migrate `ai_engine/cnn/` → `src/samplemind/ai/classification/cnn_classifier.py` | Claude Code |
-
----
-
-### 🟡 Category 3: Audio Processing Engine (Weeks 5–6)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 26 | **Implement `core/analysis/` Full Module** | Build: `spectral_analyzer.py`, `harmonic_analyzer.py`, `rhythmic_analyzer.py`, `timbral_analyzer.py` | Claude Code |
-| 27 | **Advanced BPM Detection — Multi-Algorithm** | Combine: librosa + madmom `BeatTrackingProcessor` + essentia `RhythmExtractor2013` | Claude Code |
-| 28 | **Key + Scale Detection — SOTA** | Krumhansl-Schmuckler + NNLS Chroma + Camelot wheel output (1A–12B) | Claude Code |
-| 29 | **Mood + Emotion Analysis Pipeline** | Russell circumplex: valence + arousal. Labels: dark, euphoric, aggressive, chill, melancholic | Codex |
-| 30 | **Genre Multi-Label Classification** | 400+ genre taxonomy, multi-label output: `["hip-hop", "trap", "drill", "UK drill"]` | Claude Code |
-| 31 | **Instrument Detection + Timbre Analysis** | 128 instrument classes (MIDI GM), OpenMIC-2018 fine-tuned model, onset timestamps | Codex |
-| 32 | **Implement Loop Point Detection** | Migrate from V2.0 `modules/loop_detection/` — detect start/end, seamless loop verification | Claude Code |
-| 33 | **Audio Quality Scorer** | Metrics: LUFS, true peak, dynamic range, SNR, clipping detection, "production ready" 0–100 | Codex |
-| 34 | **Similarity Search Engine** | `core/similarity/` — ChromaDB + CLAP embeddings + cosine similarity, sub-50ms query | Claude Code |
-| 35 | **Batch Processing Pipeline with Celery** | `core/tasks/` — Celery queue for background analysis, progress streaming via WebSocket | Claude Code |
-| 36 | **Audio Format Conversion Engine** | Convert: WAV, FLAC, AIFF, MP3, OGG, OPUS, M4A — normalize sample rate & bit depth | Codex |
-| 37 | **Waveform Fingerprinting** | Perceptual fingerprint (Chromaprint-style) — detect duplicates, time-stretched copies | Codex |
-| 38 | **Transient / Onset Detection for One-Shots** | ADSR envelope extraction, classify: one-shot vs loop vs pad vs texture | Claude Code |
-| 39 | **Harmonic Complexity Analysis** | Chord timeline, progression analysis, tension/resolution, mode detection | Claude Code |
-| 40 | **Stem Metadata Auto-Tagging** | After Demucs: auto-tag stems, link back to parent in MongoDB | Claude Code |
-
----
-
-### 🟢 Category 4: TUI (Textual) Upgrade (Week 7)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 41 | **Upgrade Textual `^0.44` → `^0.87`** | New: `Collapsible`, `TabbedContent`, `MarkdownViewer`, `Sparkline`, `Digits`, CSS grid | Copilot |
-| 42 | **Implement `tui/screens/` Full Architecture** | Build all 13 screens: home, library, analysis, batch, search, settings, ai-chat, visualizer | Claude Code |
-| 43 | **Build `tui/widgets/` Component Library** | `waveform_widget.py`, `spectrum_widget.py`, `sample_card.py`, `bpm_wheel.py`, `ai_chat_panel.py` | Claude Code |
-| 44 | **Implement Live Waveform Visualization** | `textual-plotext` ASCII waveform: amplitude, RMS envelope, peak markers, real-time update | Codex |
-| 45 | **Build AI Chat Panel in TUI** | Full in-terminal AI chat, "What key is this?" via `ai_manager.py` routing | Claude Code |
-| 46 | **Implement `tui/playback/` Audio Preview** | `pygame.mixer` or `sounddevice` — playback position, stop/play/pause via keyboard | Codex |
-| 47 | **Dark/Light Theme System (12 Themes)** | `samplemind_dark.tcss`, `samplemind_light.tcss`, `midnight_pro.tcss`, `neon_synthwave.tcss` | Copilot |
-| 48 | **Command Palette with `/` Key** | Fuzzy search all commands: analyze, organize, search, tag — recent commands, keyboard hints | Claude Code |
-| 49 | **Keyboard Navigation Map** | `Space`=preview, `Enter`=analyze, `a`=advanced, `t`=tag, `s`=search, `f`=find-similar, `/`=palette | Copilot |
-| 50 | **TUI Status Bar (Always-Visible Footer)** | Show: active model, library size, last action, API status, version — color-coded | Copilot |
-
----
-
-### 🔵 Category 5: Web App (Next.js) Upgrade (Week 8)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 51 | **Upgrade to Next.js 15 + React 19** | Server Components default, React 19 hooks: `use()`, `useOptimistic()`, Turbopack | Copilot |
-| 52 | **Build Audio Dashboard Page** | Pages: `dashboard/`, `analyze/`, `library/`, `collections/`, `ai-chat/`, `settings/` | Claude Code |
-| 53 | **Build Drag-and-Drop Audio Upload** | React Dropzone v14 + Web Audio API — waveform preview, format validation | Codex |
-| 54 | **Waveform Visualization (WaveSurfer.js v7)** | Interactive waveform: zoom, select region, loop — spectrogram overlay | Codex |
-| 55 | **Semantic Search UI** | Natural language: "aggressive trap samples in A minor" — AI query expansion, WebSocket results | Claude Code |
-| 56 | **Real-Time Analysis Progress (WebSocket)** | `useAnalysisStream.ts` — stream: BPM → Key → Mood → Genre → Tags with progress bars | Claude Code |
-| 57 | **AI Chat Interface (Web)** | Full chat UI + markdown — model selector: GPT-4o / Claude / Gemini / Local — attach audio | Claude Code |
-| 58 | **Sample Card Component System** | `SampleCard.tsx` — compact/expanded views: BPM, key, genre tags, waveform preview | Codex |
-| 59 | **Tailwind + shadcn/ui Component Library** | `npx shadcn@latest add button card dialog table badge` — dark/light theme | Copilot |
-| 60 | **Mobile-Responsive Layout + PWA** | Responsive breakpoints — `next-pwa` for offline library access | Copilot |
-
----
-
-### 🟣 Category 6: Database & Backend (Weeks 9–10)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 61 | **Implement `core/database/` Full Module** | Build: `mongo_client.py`, `redis_client.py`, `chroma_client.py`, `migrations/` | Claude Code |
-| 62 | **Build Beanie ODM Models** | `AudioSample(Document)` with: filename, file_hash, bpm, key, camelot, genre, mood, embedding | Claude Code |
-| 63 | **FastAPI Router Implementation** | `POST /api/v1/analyze`, `GET /api/v1/library`, `POST /api/v1/search`, WebSocket `/ws/analysis` | Claude Code |
-| 64 | **Add Rate Limiting + API Keys** | `slowapi` — per-user limits: 100 req/min free, unlimited pro | Codex |
-| 65 | **Implement `services/organizer.py`** | Auto-organize by genre/key/BPM/date/project — move/copy/symlink modes, dry-run preview | Claude Code |
-| 66 | **Implement `services/storage.py`** | S3 + local filesystem adapter pattern — chunked upload for large files | Claude Code |
-| 67 | **Implement `services/sync.py`** | Bidirectional sync: local ↔ cloud ↔ DAW project folder — conflict resolution | Claude Code |
-| 68 | **Add Redis Pub/Sub for Real-Time Events** | Analysis complete → Redis → TUI subscribes → Web WebSocket (instant UI) | Codex |
-| 69 | **Add Celery Beat Scheduler** | Scheduled: nightly library re-scan, weekly similarity re-index, daily analytics, auto-backup | Codex |
-| 70 | **Add OpenTelemetry Observability** | `core/monitoring/` — trace: analysis pipeline, API calls, model inference → Grafana | Codex |
-
----
-
-### ⚫ Category 7: DAW Integration (Ongoing)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 71 | **Implement `integrations/daw/` Module** | Build: `ableton_bridge.py`, `logic_bridge.py`, `fl_studio_bridge.py`, `osc_bridge.py` | Claude Code |
-| 72 | **Ableton Live Integration** | Parse `.als` (XML) — find sample references, show samples used in projects | Claude Code |
-| 73 | **Logic Pro Integration** | Parse `.logicx` bundles — track sample usage, import Logic's sample browser metadata | Claude Code |
-| 74 | **OSC Protocol Bridge** | Real-time bidirectional: SampleMind ↔ Ableton metadata — `python-osc` | Codex |
-| 75 | **Rekordbox / Serato / Traktor Export** | Export: Rekordbox XML, Serato ID3 tags, Traktor NML — DJ-ready library management | Codex |
-
----
-
-### 🔴 Category 8: Testing & CI/CD (Ongoing)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 76 | **Implement Missing Test Files** | `test_clap_embedder.py`, `test_genre_classifier.py`, `test_mood_analyzer.py`, TUI tests | Codex |
-| 77 | **Add E2E Tests with Playwright** | `tests/e2e/` — test web app: upload → analyze → search full workflow | Codex |
-| 78 | **Integration Tests for All AI Providers** | Mock API responses for OpenAI, Anthropic, Google — test fallback chain | Codex |
-| 79 | **Upgrade GitHub Actions CI Pipeline** | Matrix: Python 3.11 + 3.12, Ubuntu + macOS — lint → test → security → build → deploy | Claude Code |
-| 80 | **Enhance Performance Benchmarks** | `scripts/benchmark.py` — SLAs: BPM < 2s, embedding < 5s, search < 100ms — CI guard | Copilot |
-
----
-
-### 🟤 Category 9: Plugins & Extensibility (Ongoing)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 81 | **Implement Plugin Architecture** | `plugins/` — implement: `AudioAnalyzerPlugin`, `TaggingPlugin`, `ExportPlugin` | Claude Code |
-| 82 | **Build Sample Pack Importer Plugins** | `plugins/loopmasters_importer/`, `plugins/splice_importer/`, `plugins/drum_broker_importer/` | Codex |
-| 83 | **Build Export Plugins** | `plugins/rekordbox_exporter/`, `plugins/notion_exporter/`, `plugins/ableton_rack_builder/` | Codex |
-| 84 | **MCP Server Integration** | `.mcp/` — expose SampleMind as MCP tool: `analyze_audio`, `search_library`, `tag_sample` | Claude Code |
-
----
-
-### ⚪ Category 10: UI/UX Design System (Ongoing)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 85 | **Create SampleMind Design Tokens** | Deep Purple `#1A0A2E`, Electric Teal `#00F5FF`, Hot Pink `#FF007F`, Lime `#A8FF3E` | Copilot |
-| 86 | **Animated Loading Screens** | `tui/screens/splash_screen.py` — ASCII art logo animation, progress: DB → model → library scan | Codex |
-| 87 | **Dashboard Home Screen with Stats** | Total samples, library size, recent analysis, quick actions, live stats | Claude Code |
-| 88 | **Onboarding Flow (First Run)** | Step 1: library folder, Step 2: AI mode, Step 3: API keys, Step 4: initial scan | Claude Code |
-| 89 | **Settings / Configuration Screen** | API keys (masked), AI model selection per task, library paths, theme selector | Claude Code |
-| 90 | **Responsive TUI for Different Terminal Sizes** | Support: 80×24 (minimal), 120×40 (standard), 200×60 (ultrawide) | Copilot |
-
----
-
-### 🌟 Category 11: Platform & Marketplace (Future)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 91 | **User Accounts + Authentication System** | JWT + bcrypt + OAuth2 (GitHub, Google), magic link — roles: Producer/Studio/Enterprise | Claude Code |
-| 92 | **Sample Library Cloud Backup** | S3 / Cloudflare R2 backend — delta sync + encryption | Claude Code |
-| 93 | **Collaborative Collections** | Share collections — comments, ratings, stars — import via URL | Claude Code |
-| 94 | **SampleMind API as a Service (SaaS)** | Public API `/api/v1/public/analyze` — rate-limited by key — SDK: `samplemind-python`, `samplemind-js` | Claude Code |
-| 95 | **AI Sample Generation Hooks** | MusicGen (Meta AudioCraft) — "generate bass loop matching this drum pattern" | Claude Code |
-
----
-
-### 🔐 Category 12: Security & Performance (Ongoing)
-
-| # | Keypoint | Action | Tool |
-|---|----------|--------|------|
-| 96 | **Secret Scanning + Environment Security** | `detect-secrets` pre-commit hook, SOPS/Vault for secrets management | Copilot |
-| 97 | **Input Validation + File Safety** | `core/security/` — validate file magic bytes, sanitize filenames, max file size, ClamAV hook | Claude Code |
-| 98 | **Numba JIT Compilation for DSP** | `@numba.jit` hot paths: MFCC, spectral centroid, onset detection — 10× speedup | Claude Code |
-| 99 | **Implement `core/cache/` Full Redis Caching** | Cache by SHA256 — analysis=30d TTL, AI responses=7d — `samplemind:analysis:{hash}` | Claude Code |
-| 100 | **Add OpenAPI Spec + Auto-Generated Docs** | FastAPI `/docs` + `/redoc` — API versioning — OpenAPI JSON export — Swagger branding | Copilot |
-
----
-
-### 📊 Priority Execution Order
-
-```
-WEEK 1-2:   Foundation   (Points 1–10)      → "Clean the house"
-WEEK 3-4:   Core AI      (Points 11–25)     → "Upgrade the brain"
-WEEK 5-6:   Audio Engine (Points 26–40)     → "Power the analysis"
-WEEK 7:     TUI          (Points 41–50)     → "Make it beautiful in terminal"
-WEEK 8:     Web App      (Points 51–60)     → "Build the visual platform"
-WEEK 9-10:  Backend      (Points 61–70)     → "Solidify the data layer"
-ONGOING:    DAW + Testing + Plugins + UX    → "Ship features consistently"
-FUTURE:     Platform + Security (91–100)    → "Scale the organization"
-```
-
----
-
-### 🤖 AI Tool Quick Commands
-
-```bash
-# Claude Code missions (run one at a time)
-> "Implement src/samplemind/ai/classification/ with CLAP and AST classifiers"
-> "Merge core/cache and core/caching into unified CacheManager"
-> "Build tui/screens/home_screen.py with Textual 0.87"
-> "Upgrade openai_integration.py to support gpt-4o-audio-preview"
-> "Implement tui/widgets/waveform_widget.py using textual-plotext"
-> "Build core/database/ with MongoDB, Redis, ChromaDB clients"
-> "Add faster-whisper transcription pipeline in ai/transcription/"
-> "Implement Demucs v4 stem separation in ai/separation/"
-> "Build LangGraph audio analysis workflow"
-```
-
-```
-# GitHub Copilot Chat
-@workspace upgrade dependency versions in pyproject.toml to 2026 stack
-@workspace fix all hardcoded absolute paths in scripts/
-@workspace generate missing unit tests for ai/ directory
-@workspace add type hints to all functions missing them
-```
-
----
-
-## 6. Phase-by-Phase Development Plan
-
----
-
-### Phase 4.1C: Smart Caching & Predictive Preloading
-**Timeline: 2 Weeks | Complexity: Medium-High | Team: 2–3 people**
-
-#### Objective
-Implement intelligent predictive caching using Markov chain prediction, reducing perceived latency from 1–2 seconds to <200ms for 80%+ of operations.
-
-#### Architecture
-
-```
-User Workflow Analysis (track file access sequences)
-           │
-           ↓
-Markov Chain Predictor (order-2 state transitions, 60%+ confidence threshold)
-           │
-           ↓
-Cache Warmer Service (async background preloading, priority queue)
-           │
-           ↓
-3-Tier Cache:
-  ├─ Memory (Redis)  512MB, 1hr TTL
-  ├─ Disk (SSD)     10GB, 24hr TTL
-  └─ Vector DB      Persistent
-```
-
-#### Key Implementation
-
-```python
-# Cache Prediction State
-CachePrediction = {
-    "current_state": "file_123:features:standard",
-    "predicted_next": [
-        {"state": "file_456:features:standard", "confidence": 0.85, "priority": 1},
-        {"state": "file_789:features:basic", "confidence": 0.72, "priority": 2},
-        {"state": "file_234:features:detailed", "confidence": 0.65, "priority": 3}
-    ],
-    "model_updated_at": float,
-    "accuracy_score": float
-}
-
-# Hook into AudioEngine for cache warmup
-engine = AudioEngine()
-await engine.analyze_batch_async(
-    file_paths=predicted_files,
-    on_progress=lambda current, total: update_ui(),
-    background=True
-)
-```
-
-#### Files to Create
-- `src/samplemind/interfaces/tui/analytics/usage_patterns.py` (200–300 LOC)
-- `src/samplemind/core/caching/markov_predictor.py` (250–350 LOC)
-- `src/samplemind/core/caching/cache_warmer.py` (200–300 LOC)
-- `src/samplemind/core/caching/cache_manager.py` — extend (300–400 LOC)
-
-#### Success Criteria
-- ✅ Cache hit ratio consistently >80% after 1 hour usage
-- ✅ Prediction accuracy 70%+ (correct in top 5 predictions)
-- ✅ Perceived latency <200ms for cached operations
-- ✅ Memory overhead <512MB for 50-file cache
-
----
-
-### Phase 4.2: Advanced Audio Features
-**Timeline: 3 Weeks | Complexity: High | Team: 3–4 people**
-
-#### Objective
-Professional-grade audio analysis: Demucs v4 stem separation, forensics detection (compression, distortion, edits), and real-time spectral monitoring.
-
-#### Key Implementation
-
-```python
-# Stem Separation Engine (Demucs v4)
-class StemSeparationEngine:
-    def separate_v4(
-        self,
-        audio_path: Path,
-        stems: List[str] = ["vocals", "drums", "bass", "other"],
-        quality: str = "balanced",  # "fast", "balanced", "quality"
-        device: str = "auto"        # "cuda", "cpu", or "auto"
-    ) -> StemSeparationResult: ...
-
-    def batch_separate(
-        self,
-        audio_paths: List[Path],
-        on_progress: callable
-    ) -> Dict[Path, StemSeparationResult]: ...
-
-# Forensics Result model
-ForensicsResult = {
-    "compression_detected": {
-        "probability": 0.85,
-        "indicators": ["spectral_flattening", "dynamic_range_reduction"],
-        "estimated_ratio": "4:1"
-    },
-    "distortion_detected": {
-        "probability": 0.62,
-        "type": "clipping",
-        "affected_frequencies": [[100, 500], [2000, 8000]],
-        "severity": 0.3
-    },
-    "edit_points": [
-        {"time_ms": 2450.5, "confidence": 0.88, "type": "cut"}
-    ],
-    "overall_quality_score": 78.5,
-    "recommendations": ["Audio is lightly compressed — acceptable for streaming"]
-}
-```
-
-#### Files to Create
-- `src/samplemind/core/processing/stem_separation.py` — extend (400–500 LOC)
-- `src/samplemind/core/processing/forensics_analyzer.py` — new (400–500 LOC)
-- `src/samplemind/core/engine/realtime_spectral.py` — new (350–450 LOC)
-
-#### Success Criteria
-- ✅ Forensics accuracy: 85%+ vs manual inspection
-- ✅ Stem separation SNR: >6dB
-- ✅ Real-time spectral: 60 FPS consistent
-- ✅ Processing speed: 10 files/hour
-
----
-
-### Phase 4.3: Neural Audio Generation
-**Timeline: 4 Weeks | Complexity: Very High | Team: 4–5 people**
-
-#### Objective
-Integrate MusicGen and AudioLDM for AI-powered audio generation: text-to-sample, audio inpainting, and fine-tuning on custom datasets.
-
-#### Architecture
-
-```
-Text/Audio Input
-  ├─ Text Encoder (T5 + CLIP)
-  └─ Audio Encoder (Mel-spectrogram)
-       │
-  ┌────┴────────────────┐
-  │ MusicGen            │ AudioLDM
-  │ (Music synthesis)   │ (Audio editing)
-  └────────────────┬────┘
-                   │
-            Vocoder Decoding
-                   │
-            Post-processing (Normalize, format)
-```
-
-#### Key Implementation
-
-```python
-class MusicGenEngine:
-    def generate(
-        self,
-        prompt: str,                    # "upbeat electronic drums with synth bass"
-        duration_seconds: float = 10.0,
-        num_outputs: int = 3,
-        temperature: float = 1.0,
-        top_k: int = 250,
-        guidance_scale: float = 3.0,
-        melody_path: Optional[Path] = None,
-        chords: Optional[str] = None,   # "C4 Dm7 G7 C4"
-        quality: str = "balanced"       # "fast", "balanced", "high"
-    ) -> List[GeneratedAudio]: ...
-
-    def continue_from_audio(
-        self,
-        audio_path: Path,
-        prompt: str,
-        duration_seconds: float = 5.0
-    ) -> GeneratedAudio: ...
-
-# Fine-tune Job model
-FineTuneJob = {
-    "base_model": "musicgen",
-    "hyperparameters": {
-        "learning_rate": 1e-5,
-        "batch_size": 8,
-        "num_epochs": 10,
-        "lora_rank": 16,
-        "lora_alpha": 32
-    },
-    "status": "queued | training | validating | completed"
-}
-```
-
-#### GPU Requirements
-- Inference: 1× NVIDIA A100 80GB or 2× RTX 4090
-- Training: 1× A100 or 4× RTX 4090 cluster
-- MusicGen large: ~12GB VRAM (compressed); AudioLDM: ~10GB
-
-#### Success Criteria
-- ✅ Generation speed: <10s for 10-sec audio
-- ✅ Audio quality: 4.0+/5.0 user rating
-- ✅ Fine-tuning converges in <2 hours on 1000 samples
-- ✅ Memory efficiency: <8GB VRAM for inference
-
----
-
-### Phase 5: Web UI & Cloud Sync
-**Timeline: 6 Weeks | Complexity: High | Team: 4–5 people**
-
-#### Architecture
-
-```
-Desktop CLI/TUI (Primary: 80% power users)
-           │
-  Local SQLite + Cache
-           │
-     Sync Service (Conflict Detection, every 30s)
-           │
-  ┌────────┼────────┐
-  │        │        │
-MongoDB  Redis    S3/R2
-(Data)  (Session) (Files)
-           │
-  Next.js Web UI (Secondary: mobile/browser)
-```
-
-#### Key Features
-1. **Cross-Device Sync** — auto-sync every 30s, selective sync, resume broken transfers
-2. **Real-time Collaboration** — WebSocket live updates, presence awareness, activity history
-3. **PWA Support** — offline mode, responsive 320px–4K
-
-#### Success Criteria
-- ✅ Sync latency: <3 seconds
-- ✅ Offline tolerance: 24 hours of changes
-- ✅ Collaboration: 10+ concurrent editors
-- ✅ Core Web Vitals: all "Good"
-
----
-
-### Phase 6: Enterprise DAW Integration
-**Timeline: 4 Weeks | Complexity: Very High | Team: 5–6 people**
-
-#### Components
-
-| Integration | Method | Key Feature |
-|-------------|--------|-------------|
-| VST3/AU Plugin | JUCE framework | Real-time analysis, parameter automation |
-| FL Studio | Native Python script | Auto-detect projects, drag-to-mixer, auto drum kits |
-| Ableton Live | Max for Live device | Sample browser, key/tempo detection, clip tags |
-| Logic Pro | AppleScript/JS | Sample library integration, Script menu |
-| DJ Tools | Rekordbox XML, Serato ID3, Traktor NML | Export cue points for DJ software |
-
-#### Success Criteria
-- ✅ Plugin latency: <50ms UI response
-- ✅ DAW stability: 99.9% uptime
-- ✅ Cross-platform: Windows/Mac
-
----
-
-### Phase 7: Advanced AI & Analytics
-**Timeline: 4 Weeks | Complexity: Very High | Team: 4–6 people**
-
-#### Components
-1. **Mixing Recommendations** — CNN-based EQ/compression suggestions, genre-aware, LUFS optimization
-2. **Audio Fingerprinting** — Shazam-like algorithm, 95%+ identification accuracy, detect covers/remixes
-3. **Similarity Search Engine** — Hybrid: semantic (CLIP) + acoustic (mel-spectrogram) + metadata, weighted ensemble
-4. **Analytics Dashboard** — Real-time metrics: volume, features, popular genres/tempos
-5. **ML Model Training** — Continuous improvement, A/B testing, automated retraining, model versioning
-
-#### Success Criteria
-- ✅ Recommendation accuracy: 85%+ approval
-- ✅ Fingerprinting accuracy: 95%+ identification
-- ✅ Similarity search: <500ms for 100k samples
-- ✅ Model improvement: 1×/week with better metrics
+### Supported Model Providers (pydantic-ai)
+
+| Provider | Model | Offline? | Notes |
+| --- | --- | --- | --- |
+| Ollama | llama3.3 (70B) | ✅ Yes | Best offline reasoning; 48GB+ RAM |
+| Ollama | qwen2.5-coder:7b | ✅ Yes | Fast tool use; 8GB RAM |
+| Ollama | gemma3:12b | ✅ Yes | Google model; good for structured output |
+| Anthropic | claude-3-5-sonnet-latest | ❌ API key | Best overall quality |
+| OpenAI | gpt-4o | ❌ API key | Strong tool use |
+| Google | gemini-2.0-flash | ❌ API key | Fast, large context |
+
+### Environment Compatibility Matrix
+
+| Package | numpy 2.x | Python 3.13 | Notes |
+| --- | --- | --- | --- |
+| librosa 0.11 | ✅ | ✅ | Core analysis — works today |
+| sqlite-vec 0.1.7 | ✅ | ✅ | C extension — installed ✅ |
+| pydantic-ai 1.x | ✅ | ✅ | Agent framework — installed ✅ |
+| sentence-transformers 3.x | ✅ | ✅ | Text embeddings — optional |
+| HuggingFace ClapModel | ✅ | ✅ | Via `transformers ≥4.40` |
+| laion-clap 1.1.7 | ❌ (needs <2.0) | ⚠️ | Use conda env: python=3.11 |
+| madmom 0.16.1 | ❌ (needs <2.0) | ❌ (Cython build fail) | Use conda env: python=3.11 |
 
 ---
 
 ## 7. Sprint Planning
 
-### Near-Term Sprints (v3.0 Migration)
+### Near-Term Sprints — Completing Phases 5–7 (8 Weeks)
 
-| Sprint | Week | Focus | Key Deliverables |
-|--------|------|-------|-----------------|
-| Sprint 1 | 1–2 | Foundation & Refactor | Clean codebase, dependency upgrades, fix paths |
-| Sprint 2 | 3–4 | AI Engine Upgrade | All providers upgraded, LLM router, CLAP/BEATs |
-| Sprint 3 | 5–6 | Audio Processing | Full analysis suite, stem separation, batch pipeline |
-| Sprint 4 | 7 | TUI Upgrade | All 13 screens, widget library, themes |
-| Sprint 5 | 8 | Web App | Next.js 15, dashboard, waveform UI, semantic search |
-| Sprint 6 | 9–10 | Backend | MongoDB/Redis/ChromaDB, Celery, REST API |
-| Ongoing | + | DAW + Tests + Plugins | CI/CD, E2E tests, plugin architecture |
+| Sprint | Weeks | Phase | Key Deliverables |
+| --- | --- | --- | --- |
+| 1 | 1–2 | Phase 5 | `stats`/`duplicates` CLI commands, `--workers`, shell completion |
+| 2 | 3–4 | Phase 6 | SSE import progress, HTMX live search, Wavesurfer waveform |
+| 3 | 5–6 | Phase 7 | Svelte 5 + Vite scaffold, SampleTable, Rust import commands |
+| 4 | 7–8 | Phase 12 | CLAP encoder, sqlite-vec ANN index, `search --semantic` |
 
-### Phase Timeline (Post-v3.0)
+### Quarterly Roadmap — Phases 8–13 (2026 Q3 → 2027 Q4)
 
-| Phase | Focus | Timeline | Impact |
-|-------|-------|----------|--------|
-| **4.1C** | Smart Caching & Prediction | 2 weeks | 4× faster perceived performance |
-| **4.2** | Advanced Audio Analysis | 3 weeks | Professional forensics & monitoring |
-| **4.3** | Neural Audio Generation | 4 weeks | Create samples with AI |
-| **5** | Web UI & Cloud Sync | 6 weeks | Cross-device workflow |
-| **6** | Enterprise DAW Integration | 4 weeks | Professional studio adoption |
-| **7** | Advanced AI & Analytics | 4 weeks | Personalization & insights |
+| Quarter | Phase | Focus | Critical Path |
+| --- | --- | --- | --- |
+| Q3 2026 | 8 | FL Studio filesystem + AppleScript + MIDI | macOS entitlements |
+| Q4 2026 | 9 | JUCE 8 VST3/AU plugin | CMake, sidecar IPC, auval validation |
+| Q4 2026 | 11 | Production release | signing, notarization, GitHub Actions |
+| Q1 2027 | 10 | Sample packs | .smpack format, SHA-256 manifest |
+| Q2 2027 | 13 | AI Agent CLI + API | pydantic-ai tools, Ollama offline, `agent ask` |
+| Q3 2027 | — | v1.0 release | full feature parity + semantic search + agents |
 
-**Total Phase 4.1C–7: 23 weeks (~6 months) | 35,000–45,000 new lines of code**
+### Phase Completion Gate Criteria
 
----
+Each phase must achieve before moving to the next:
 
-## 8. Long-Term Strategic Roadmap (Phase 10–15+)
-
-### Timeline Overview
-
-```
-2025-2026: Phases 1-9   (Foundation & Stabilization)    ✅ 85% COMPLETE
-2026-2027: Phase 10     (Next Generation)               📋 PLANNED
-2027-2028: Phases 11-12 (Specialization & Global)       🎯 STRATEGIC
-2028-2030: Phases 13-14 (Advanced Tech & Ecosystem)     🎯 STRATEGIC
-2030+:     Phase 15+    (Innovation & Future)           🚀 VISIONARY
-```
-
-### Phase 10: Next Generation Features (2026–2027)
-
-| Component | Timeline | Priority |
-|-----------|----------|----------|
-| Advanced ML Capabilities | Q1-Q2 2026 | P0 |
-| Multi-Tenancy (10K+ customers) | Q1-Q3 2026 | P0 |
-| Integration Ecosystem (GraphQL, webhooks, plugins) | Q2-Q3 2026 | P0 |
-| Analytics & BI Suite | Q2-Q4 2026 | P1 |
-| Security Enhancements | Q3-Q4 2026 | P1 |
-| Mobile Apps (iOS/Android) | Q3-Q4 2026 | P2 |
-
-**Revenue Target: $2M ARR | Team: 17 FTE | Budget: $2.5M**
-
-### Phase 11: Industry-Specific Solutions (2027–2028)
-
-- **Healthcare Vertical** — HIPAA compliance, medical data analytics, EHR integration
-- **Financial Services** — Compliance automation, risk analytics, fraud detection
-- **Manufacturing** — IoT integration, predictive maintenance, supply chain analytics
-
-**Revenue Target: $5M ARR | Duration: 12 months | Budget: $4M**
-
-### Phase 12: Global Expansion (2027–2028)
-
-- 15+ languages, regional UI/UX, local payment methods
-- Data centers in 6+ regions with GDPR/CCPA/PIPL compliance
-- Regional CDN + local support teams
-
-**Revenue Target: $8M ARR | Duration: 12 months | Budget: $3M**
-
-### Phase 13: Advanced AI & ML (2028–2029)
-
-- **AutoML Platform** — Automated model selection, hyperparameter tuning, model explainability
-- **Federated Learning** — Privacy-preserving ML, distributed training, governance controls
-- **Edge Computing** — On-premise deployment, local-cloud sync, offline capabilities
-
-**Revenue Target: $12M ARR | Duration: 12 months | Budget: $3.5M**
-
-### Phase 14: Ecosystem Maturation (2029–2030)
-
-- **Marketplace Platform** — Plugin store, revenue sharing, rating system
-- **Partner Program** — Technology partners, resellers, co-marketing
-- **SDKs in 5+ languages** + community forums + developer portal
-
-**Revenue Target: $15M ARR | Duration: 12 months | Budget: $2.5M**
-
-### Phase 15+: Future Innovation (2030+)
-
-- **Quantum Computing** — Quantum-classical hybrid, optimization problems
-- **Advanced AR/VR** — Immersive data visualization, spatial computing
-- **Autonomous Agents** — AI agents, decision automation, robotic process automation
-
-### Revenue Projections
-
-```
-2026 (Phase 10):  $2M ARR
-2027 (Phase 11):  $5M ARR
-2028 (Phase 12):  $8M ARR
-2029 (Phase 13):  $12M ARR
-2030 (Phase 14):  $15M ARR
-```
-
-### Phase Completion Gates
-
-Each phase must achieve:
-- Technical delivery: 95%+ of planned features
-- Quality: 85%+ test coverage, <1% critical bugs
-- Performance: Targets met or exceeded
-- Customer feedback: NPS 50+
-- Financial: Within budget ±10%
+- All deliverables from the phase doc implemented
+- New code has type hints on public functions
+- pytest coverage target met (see [Testing & Quality](#9-testing--quality))
+- `uv run ruff check src/` — zero errors
+- `cargo clippy -- -D warnings` — zero warnings
+- CI green on all 4 matrix jobs
 
 ---
 
-## 9. Infrastructure & Operations
+## 8. Long-Term Vision (2027–2030)
 
-### Infrastructure Deployment
+### AI & Intelligence (2027–2028)
 
-```yaml
-development:
-  environment: "Local + Docker"
-  tools: ["VS Code", "GitHub", "Postman"]
+- **Semantic search live** (Phase 12) — CLAP embeddings + sqlite-vec ANN; query *any* description
+- **AI agent CLI** (Phase 13) — pydantic-ai + Ollama; auto-tag, Q&A, project-aware suggestions
+- **ML-based classifier** — Replace rule-based thresholds with scikit-learn RandomForest
+  trained on a labeled dataset; retrain via `samplemind train --data labeled_samples.csv`
+- **Beat-aware analysis** — madmom RNN downbeat tracker (conda env: python=3.11, numpy=1.26)
+- **Loop point detection** — Detect seamless loop start/end using spectral autocorrelation
+- **Quality scorer** — LUFS, true peak, dynamic range, clipping detection → 0–100 score
+- **Source separation** — Demucs v5+ stem splitting (vocals/drums/bass/other) inside SampleMind
 
-staging:
-  platform: "AWS ECS"
-  region: "us-east-1"
-  specs:
-    - t3.medium instances
-    - MongoDB Atlas
-    - S3 storage
+### Platform Expansion (2028–2029)
 
-production:
-  platform: "AWS + Multi-region"
-  architecture:
-    - Auto-scaling groups
-    - Load balancers
-    - CloudFront CDN
-    - Route53 DNS
-  monitoring:
-    - Datadog APM
-    - PagerDuty alerts
-    - Sentry error tracking
+- **Windows COM automation** — `win32com.client` alternative to AppleScript on Windows
+- **Ableton Live support** — Filesystem export + User Library path detection
+- **Deep-link URL scheme** — `samplemind://import?path=...` for browser/finder import
+- **Tauri Mobile** — iOS + Android companion app (Tauri Mobile stable 2028)
+- **Python 3.14 free-threaded** — PEP 703 no-GIL: true parallel librosa workers (2028)
+  `ProcessPoolExecutor` → `ThreadPoolExecutor` with 4–8× speedup on multi-core
+
+### Cloud & Community (2028–2030)
+
+- **SampleMind Cloud** — FastAPI on cloud + PostgreSQL + pgvector; sync, backup, collaborate
+- **Sample pack registry** — JSON index on GitHub Pages; in-app one-click pack browser
+- **Pack marketplace** — Stripe payments for premium packs; creator revenue share
+- **Pack preview audio** — 30-second MP3 preview mixdown embedded in `.smpack`
+- **AI mastering assistant** — On-device diffusion models; normalize, limit, master a sample
+
+### On-Device AI (2029–2030)
+
+- **Apple Silicon mlx inference** — Run Llama 3 + CLAP on Neural Engine with `mlx-lm`
+- **ControlNet for audio** — AI-guided sample morphing (research → production)
+- **Generative sample suggestions** — AudioBox / Stable Audio 2 integration: "generate a
+  4-bar lofi loop at 85 BPM in C minor based on your library style"
+
+---
+
+## 9. Performance Targets & SLAs
+
+| Operation | Target | Current State | Blocker / Phase |
+| --- | --- | --- | --- |
+| Single file analysis (librosa) | < 500ms | ~800ms | lazy import + mtime cache (Phase 5) |
+| Batch import 100 files | < 30s | Sequential | `--workers N` ProcessPoolExecutor (Phase 5) |
+| Keyword search query | < 50ms | Full table scan | FTS5 virtual table (Phase 5) |
+| **Semantic search (vector ANN)** | **< 50ms** | **Not built** | **sqlite-vec + CLAP (Phase 12)** |
+| CLAP embedding (per file) | < 2s GPU / < 8s CPU | Not built | Phase 12 (one-time, cached) |
+| **Agent response (local Ollama)** | **< 5s** | **Not built** | **pydantic-ai + llama3.3 (Phase 13)** |
+| Agent response (Claude API) | < 2s | Not built | Phase 13 |
+| Tauri cold start | < 2s | On track | — |
+| Sidecar startup | < 3s | Not built | PyInstaller (Phase 11) |
+| VST3 UI open | < 200ms | Not started | JUCE (Phase 9) |
+| Pack export 100 samples | < 10s | Not built | Phase 10 |
+| Pack import 100 samples | < 15s | Not built | Phase 10 |
+
+---
+
+## 10. Testing & Quality
+
+### Coverage Targets
+
+| Module | Target | Strategy |
+| --- | --- | --- |
+| `analyzer/` | 80%+ | `@pytest.mark.slow` on librosa tests; synthetic WAV fixtures |
+| `classifier.py` | 90%+ | fast, parameterized synthetic inputs |
+| `cli/` | 70%+ | Typer `CliRunner`; `--json` output assertions |
+| `data/repositories/` | 85%+ | in-memory SQLite (`StaticPool`) |
+| `core/auth/` | 90%+ | JWT/RBAC unit tests — 24 tests live |
+| `web/` | 70%+ | Flask test client |
+| `packs/` | 80%+ | `tmp_path` roundtrip |
+| `analyzer/embeddings.py` | 70%+ | Mock CLAP model for speed; Phase 12 |
+| `agents/` | 60%+ | pydantic-ai `TestModel`; no real API calls in CI |
+
+### Test Pyramid (2026 strategy)
+
+```
+         ┌───────────────┐
+         │  E2E (Tauri)  │  ← Phase 7+ (Playwright / WebdriverIO)
+         └───────────────┘
+        ┌─────────────────┐
+        │  Integration    │  ← CLI CliRunner, Flask test client, Alembic check
+        └─────────────────┘
+      ┌─────────────────────┐
+      │  Unit               │  ← pytest + hypothesis (property-based fuzzing)
+      └─────────────────────┘
 ```
 
-### Infrastructure Costs (AWS/GCP — by phase)
-
-| Phase | GPU | Storage | Compute | Total/mo |
-|-------|-----|---------|---------|----------|
-| 4.1C-4.2 | — | $100 | $200 | $300 |
-| 4.3 | $1000 | $150 | $500 | $1,650 |
-| 5 | $500 | $500 | $1000 | $2,000 |
-| 6 | $300 | $500 | $800 | $1,600 |
-| 7 | $800 | $1000 | $2000 | $3,800 |
-
-### Security Implementation
+### Property-Based Tests (hypothesis — installed ✅)
 
 ```python
-security_implementation = {
-    'authentication': {
-        'provider': 'Auth0',
-        'methods': ['Email/Password', 'OAuth2', 'Magic Links'],
-        'mfa': 'Optional for all, required for enterprise'
-    },
-    'data_security': {
-        'encryption_at_rest': 'AES-256',
-        'encryption_in_transit': 'TLS 1.3',
-        'key_management': 'AWS KMS',
-        'backup': 'Daily automated, 30-day retention'
-    },
-    'compliance': {
-        'gdpr': 'Full compliance by launch',
-        'ccpa': 'California privacy rights',
-        'soc2': 'Type II certification (Year 2)'
-    },
-    'testing': {
-        'penetration_testing': 'Quarterly',
-        'security_audits': 'Annual',
-        'vulnerability_scanning': 'Continuous'
-    }
-}
+from hypothesis import given, strategies as st
+from samplemind.data.repositories.sample_repository import SampleRepository
+
+@given(st.text(min_size=1, max_size=255), st.floats(min_value=60, max_value=200))
+def test_upsert_never_crashes(filename, bpm):
+    """Property: any valid filename/BPM combination should upsert cleanly."""
+    data = SampleCreate(filename=filename, path=f"/test/{filename}", bpm=bpm)
+    sample = SampleRepository.upsert(data)
+    assert sample.bpm == bpm
+
+@given(st.text(min_size=3, max_size=100))
+def test_search_never_raises(query):
+    """Property: any search query should return a list, never raise."""
+    results = SampleRepository.search(query=query)
+    assert isinstance(results, list)
 ```
 
-### Release Management
+### Test Markers
 
 ```python
-release_process = {
-    'frequency': 'Bi-weekly sprints',
-    'schedule': {
-        'monday': 'Sprint planning',
-        'tuesday-thursday': 'Development',
-        'friday_week1': 'Code freeze',
-        'monday_week2': 'QA testing',
-        'wednesday_week2': 'Staging deployment',
-        'friday_week2': 'Production release'
-    },
-    'approval_chain': ['Engineering lead', 'Product manager', 'CTO final approval'],
-    'rollback_plan': 'Automated within 5 minutes'
-}
+@pytest.mark.slow        # > 1s real librosa analysis — skipped in fast CI
+@pytest.mark.macos       # AppleScript, auval, AU validation — macOS runner only
+@pytest.mark.juce        # JUCE plugin built (Phase 9+)
+@pytest.mark.ai          # requires Ollama running or ANTHROPIC_API_KEY
+@pytest.mark.embeddings  # requires CLAP model downloaded (~1.5GB)
 ```
 
-### Partnership Roadmap
+### CI Matrix
+
+| Job | Runner | What runs |
+| --- | --- | --- |
+| Python (ubuntu) | ubuntu-latest | `ruff check` + `pyright` + `pytest` + `coverage` + `alembic check` |
+| Python (Windows) | windows-latest | `pytest -m "not slow and not macos and not ai"` |
+| Python (macOS) | macos-14 | `pytest -m "not ai and not embeddings"` (smoke test) |
+| Rust | ubuntu-latest | `cargo clippy -D warnings` + `cargo test` |
+
+### Audio Fixtures (synthetic only — never commit real WAV files)
 
 ```python
-partnership_timeline = {
-    '2025_Q2': {'partner': 'FL Studio (Image-Line)', 'integration': 'Native plugin', 'terms': 'Revenue share 80/20'},
-    '2025_Q4': {'partner': 'Splice', 'integration': 'Sample library access (100M+ samples)'},
-    '2026_Q1': {'partner': 'Native Instruments', 'integration': 'Kontakt integration', 'reach': '2M+ producers'},
-    '2026_Q2': {'partner': 'Ableton', 'integration': 'Live plugin — Bundled with Live 12'}
-}
+# From tests/conftest.py — already implemented
+silent_wav    # 1s silence (soundfile + numpy zeros)
+kick_wav      # 0.5s 60Hz sine (low-frequency, high amplitude)
+hihat_wav     # 0.1s seeded white noise
+orm_engine    # in-memory SQLite with StaticPool (users + samples tables)
+test_user     # User fixture via UserRepository
+access_token  # JWT access token for authenticated test requests
 ```
 
 ---
 
-## 10. Testing & Quality Assurance
+## 11. Technical Debt
 
-### Testing Pyramid
+### High Priority (Resolve Immediately)
 
-```
-Unit Tests (85%+ coverage)
-     ↓
-Integration Tests (95%+ pass)
-     ↓
-E2E Tests (90%+ pass)
-     ↓
-Performance Tests (meet SLA benchmarks)
-     ↓
-Security Tests (SAST + DAST)
-     ↓
-Load Tests (10k+ concurrent users)
-```
+1. **`src/main.py` legacy entrypoint** — Still required by `app/src-tauri/src/main.rs`
+   in dev mode. Must be removed when Phase 7 (Svelte 5) lands.
 
-### CI/CD Pipeline
+2. **`samplemind-server.spec` entry point** — References `src/main.py`; must migrate to
+   `src/samplemind/sidecar/server.py` before Phase 11 production build.
 
-```yaml
-# .github/workflows/test.yml
-matrix:
-  python: ["3.11", "3.12"]
-  os: [ubuntu-latest, macos-latest]
+3. **database.py still present** — The legacy sqlite3 `database.py` is now unused by
+   CLI and web (replaced by SampleRepository in Phase 4). Remove in Phase 5.
 
-steps:
-  - lint (ruff + mypy + bandit)
-  - unit tests
-  - integration tests
-  - security scan (CodeQL)
-  - build
-  - deploy (staging → production)
-```
+### Medium Priority (Address in Respective Phases)
 
-### Key Test Files to Implement
+1. **`app/src-tauri/capabilities/default.json`** — Exists as empty skeleton; needs
+   command entries as each Rust command is added (Phase 7).
 
-| File | Priority | Coverage Target |
-|------|----------|----------------|
-| `tests/unit/ai/test_ai_manager.py` | P0 | 95% |
-| `tests/unit/core/test_audio_engine.py` | P0 | 90% |
-| `tests/unit/ai/test_clap_embedder.py` | P1 | 85% |
-| `tests/unit/ai/test_genre_classifier.py` | P1 | 85% |
-| `tests/integration/test_cli_workflow.py` | P0 | Integration |
-| `tests/e2e/test_web_app.py` | P2 | E2E |
+2. **`app/vite.config.ts` missing** — Svelte 5 frontend not scaffolded. Phase 7 first task.
 
-### Performance SLAs
+3. **CLAP environment isolation** — CLAP (laion-clap 1.1.7) requires numpy<2.0 and
+   Python ≤3.11. Document conda env setup and add `scripts/setup_clap_env.sh`.
 
-| Operation | Target |
-|-----------|--------|
-| BPM detection | <2 seconds |
-| Audio embedding | <5 seconds |
-| Similarity search | <100ms |
-| API response | <200ms (p95) |
-| Batch processing | 100 files in <5 minutes |
-| Startup time | <2 seconds |
-
----
-
-## 11. Metrics & KPIs
-
-### Technical Performance
-
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Uptime | 99.9% | Health checks |
-| API Response Time | <200ms (p95) | APM tools |
-| Cache Hit Ratio | 80%+ | Cache metrics |
-| Error Rate | <0.1% | Error tracking |
-| Code Coverage | >85% | CI reports |
-| Build Time | <10 minutes | CI/CD logs |
-
-### User Engagement
-
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Daily Active Users | 10,000+ | Analytics |
-| Monthly Active Users | 50,000+ | User database |
-| Feature Adoption | 80%+ | Feature tracking |
-| User Satisfaction | 4.5+/5.0 | NPS surveys |
-| Retention (30-day) | 70%+ | Cohort analysis |
-| Crash Rate | <0.1% | Error tracking |
-
-### Business Metrics
-
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Revenue (SaaS) | $100k/month | Stripe |
-| Plugin Downloads | 10k+/month | Store metrics |
-| GitHub Stars | 5k+ | GitHub |
-| Community Contributions | 100+ PRs | GitHub |
-
----
-
-## 12. Technical Debt
-
-### High Priority (Fix Immediately)
-1. Replace macOS-only `finder_dialog` with cross-platform `file_picker`
-2. Add comprehensive error handling + retry logic (exponential backoff) to all AI calls
-3. Implement proper logging throughout application (currently ad-hoc)
-4. Add input validation for all user inputs
-
-### Medium Priority (Next Sprint)
-1. Refactor `core/loader.py` (28KB monolith) into separate modules
-2. Add type hints to all functions (mypy strict mode)
-3. Optimize audio loading for large files
-4. Implement unified configuration management system
+4. **`pyright` errors** — pydantic-ai and sqlite-vec stubs may have missing type info.
+   Add `# type: ignore` only at the call site with a comment explaining why.
 
 ### Low Priority (Backlog)
-1. Add docstrings to all modules
-2. Standardize code formatting (some files pre-Black)
-3. Remove deprecated code from V2 migration
-4. Optimize import times (lazy imports for heavy libraries)
+
+1. **`plugin/` directory missing** — Phase 9 starting point; scaffold `CMakeLists.txt`.
+
+2. **Norwegian docs gap** — `docs/no/` missing `remote_inference.md` translation.
+
+3. **`scripts/start.sh` is empty** — Either implement or delete.
+
+4. **Alembic `check` not in CI** — Add `uv run alembic check` as a CI job step to
+   detect schema drift between models and migrations automatically.
 
 ---
 
-## 13. Risk Management
-
-### Risk Matrix
+## 12. Risk Management
 
 | Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|-----------|
-| GPU model costs | Medium | High | Implement quantization, use LoRA |
-| DAW integration complexity | Medium | Medium | Start simple, expand gradually |
-| Cloud sync conflicts | Medium | Medium | Comprehensive conflict testing |
-| ML model accuracy | High | Medium | Continuous retraining + user feedback |
-| Performance regressions | High | Medium | Automated benchmarking in CI |
-| Key person dependencies | High | High | Knowledge transfer, documentation |
-| Cloud vendor lock-in | Medium | High | Support multiple S3-compatible providers |
-| Technology disruption | Medium | High | R&D investment, early adoption |
-| Market competition | High | High | Feature differentiation, partnerships |
-
-### Contingency Plans
-
-```python
-contingency_scenarios = {
-    'funding_delay': {
-        'trigger': 'Unable to close round on time',
-        'actions': ['Reduce burn by 30%', 'Focus on revenue generation', 'Bridge financing']
-    },
-    'technical_outage': {
-        'trigger': 'Major outage during launch',
-        'actions': ['Multi-region deployment', 'Automated failover', 'Crisis communication plan']
-    },
-    'competitive_threat': {
-        'trigger': 'Major player enters market',
-        'actions': ['Accelerate unique features', 'Aggressive user acquisition', 'Strategic partnerships']
-    }
-}
-```
+| --- | --- | --- | --- |
+| JUCE build complexity on macOS | High | Medium | Phase 9 doc: step-by-step `auval` checklist |
+| Tauri IPC contract drift as CLI evolves | Medium | High | JSON schema in ARCHITECTURE.md; `--json` smoke tests in CI |
+| librosa cold-import latency (~800ms) | High | Medium | Lazy import + `mtime` cache (Phase 5) |
+| macOS signing pipeline failure | Medium | High | Phase 11: GitHub Secrets checklist; macOS CI runner |
+| PyInstaller sidecar binary bloat | Medium | Medium | `--onefile` + UPX; measure in CI artifact size check |
+| FL Studio AppleScript permission denied | Low | High | `entitlements.plist` in place; accessibility prompt on first run |
+| WSL2 NTFS path contamination | Medium | Low | `git config core.fsmonitor true`; CI enforces Linux paths |
+| Legacy `src/main.py` breakage | Medium | High | Never remove without coordinating with Tauri `main.rs` |
+| **CLAP numpy<2.0 conflict** | **High** | **Medium** | **Use HuggingFace ClapModel (numpy 2.x compat) instead of laion-clap** |
+| **Ollama not running (offline agent)** | **High** | **Low** | **Graceful fallback to rule-based search; clear error message** |
+| **pydantic-ai API instability** | **Medium** | **Medium** | **Pin to `pydantic-ai>=1.0,<2.0`; review changelog on upgrade** |
+| **sqlite-vec ANN accuracy at scale** | **Low** | **Medium** | **Benchmark KNN recall at 10K / 100K vectors; tune index params** |
+| **LLM hallucination in agent answers** | **Medium** | **Medium** | **Structured outputs only (Pydantic models); no free-form string answers** |
 
 ---
 
-## 14. Contribution Guide
+## 13. Contribution Guide
 
-### How to Contribute
+### First-Time Setup
 
-1. Pick a keypoint or task from this roadmap
-2. Create an issue on GitHub referencing the keypoint number
-3. Fork the repository
-4. Create a feature branch: `feature/keypoint-XX-description`
-5. Follow code conventions (Black, mypy strict, ruff)
-6. Run `make quality` before submitting PR
-7. Submit pull request with roadmap reference
+```bash
+# Clone and bootstrap
+git clone https://github.com/lchtangen/SampleMind-AI
+cd SampleMind-AI
+uv sync --dev                       # install Python 3.13 + all core + dev deps
+# Optional: uv sync --dev --extra ai   (sentence-transformers ~2 GB)
+cd app && pnpm install && cd ..     # install Node deps for Tauri
+pre-commit install                  # wire up ruff + pyright pre-commit hooks
+git config core.fsmonitor true      # WSL2: faster git status
 
-### Task Difficulty Levels
+# Database migrations (required before first run)
+uv run alembic upgrade head
 
-- 🟢 **Easy** (1–2 hours): Good for beginners — type hints, docs, simple tests
-- 🟡 **Medium** (3–6 hours): Some experience — new endpoints, TUI widgets, unit tests
-- 🔴 **Hard** (6+ hours): Advanced — AI integrations, DAW plugins, ML models
+# OPTIONAL: AI agent (offline — requires Ollama)
+ollama pull qwen2.5-coder:7b        # fast, 8GB RAM
+uv run samplemind agent ask "show library stats"
+
+# OPTIONAL: Set up CLAP environment (separate conda env due to numpy<2.0)
+conda create -n samplemind-clap python=3.11
+conda activate samplemind-clap
+pip install "numpy<2.0" torch torchaudio laion-clap
+```
+
+### Daily Workflow
+
+```bash
+# Python
+uv run samplemind --help
+uv run pytest tests/ -m "not slow" -v
+uv run pytest tests/test_audio_analysis.py::test_bpm -v  # single test
+uv run pytest tests/ --hypothesis-seed=0 -v              # fixed seed for reproducibility
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
+uv run pyright src/                                       # type checking
+uv run alembic check                                      # schema drift check
+
+# Rust + Tauri
+cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings
+cd app && pnpm tauri dev             # Tauri with HMR
+```
+
+### Branch Naming
+
+```text
+phase-02/batch-import
+phase-03/sqlmodel-migration
+fix/classifier-hihat-threshold
+docs/update-phase-05
+```
 
 ### Code Conventions
 
-```python
-# Python style
-# - Black (line length 88) + isort + ruff
-# - mypy strict — always add type annotations to new functions
-# - Async: all audio I/O and AI calls must be async or run in ThreadPoolExecutor
-# - Never: time.sleep() in Textual handlers, asyncio.run() inside Textual
-# - Lazy imports at module level for heavy libraries (torch, librosa)
+- **Python:** ruff ≥0.15 only (not black, flake8, isort, pylint)
+- **Type hints:** required on all new public functions — pyright-compatible
+- **Type checking:** `uv run pyright src/` — must be clean before PR
+- **Imports:** `from samplemind.analyzer.audio_analysis import analyze_file` (src-layout)
+- **Rust:** owned types in async commands (`String`, not `&str`); all clippy warnings fixed
+- **IPC:** JSON → stdout; human text → stderr; **never mix** (this breaks Tauri IPC)
+- **Audio tests:** synthetic WAV fixtures only; never commit real audio files
+- **AI tests:** use `pydantic-ai TestModel` — no real API calls in CI
+- **Dependencies:** `uv add <package>` (not `pip install`)
+- **Frontend:** `pnpm` in `app/` (not npm)
+- **Agents:** always return Pydantic models from tools; no raw string outputs
 
-# Run before every PR
-make quality   # ruff + mypy + bandit
-make test      # pytest with coverage
-```
+### Task Difficulty
 
-### Key Links
+- **Easy (1–2h):** Add type hints, expand conftest fixtures, write a single test
+- **Medium (3–6h):** New CLI command, Flask endpoint, Svelte component
+- **Hard (6h+):** SQLModel migration, Tauri command + Svelte binding, JUCE C++ work
 
-- **Repository:** https://github.com/lchtangen/SampleMind-AI---Beta
-- **Source code:** `src/samplemind/`
-- **TUI source:** `src/samplemind/interfaces/tui/`
-- **Integrations:** `src/samplemind/integrations/`
-- **Tests:** `tests/`
-- **Docs:** `docs/v3/`
+### Key Files
 
----
-
-## Key New Dependencies to Add
-
-```toml
-# Add to pyproject.toml [tool.poetry.dependencies]
-
-# AI Models
-faster-whisper = "^1.1.0"      # Faster offline transcription
-openai-agents = "^0.0.5"       # OpenAI Agents SDK
-langchain = "^0.3.0"           # LangChain
-langgraph = "^0.2.0"           # LangGraph workflows
-
-# Audio Analysis
-madmom = "^0.16.1"             # Beat tracking (multi-algorithm)
-essentia = "^2.1b6"            # Audio analysis suite
-aubio = "^0.4.9"               # Onset/beat detection
-
-# Database
-beanie = "^1.26.0"             # MongoDB ODM
-
-# Performance
-sounddevice = "^0.5.0"         # Audio playback in TUI
-numba = "^0.59.0"              # JIT compilation (already listed)
-
-# Security
-detect-secrets = "^1.5.0"     # Secret scanning
-python-multipart = "^0.0.17"   # File upload
-```
+| File | Role |
+| --- | --- |
+| `src/samplemind/cli/app.py` | Typer app — all CLI commands registered here |
+| `src/samplemind/analyzer/audio_analysis.py` | librosa feature extraction |
+| `src/samplemind/analyzer/classifier.py` | energy/mood/instrument classifiers |
+| `src/samplemind/core/models/sample.py` | Sample SQLModel + SampleCreate/Update/Public |
+| `src/samplemind/core/models/user.py` | User SQLModel + auth schemas |
+| `src/samplemind/data/orm.py` | SQLModel engine, WAL PRAGMAs, init_orm() |
+| `src/samplemind/data/repositories/sample_repository.py` | SampleRepository (CRUD + search) |
+| `src/samplemind/data/repositories/user_repository.py` | UserRepository (auth CRUD) |
+| `src/samplemind/core/auth/` | JWT, bcrypt, RBAC, FastAPI dependencies |
+| `src/samplemind/api/routes/auth.py` | FastAPI auth routes (/register /login /me) |
+| `app/src-tauri/src/main.rs` | Tauri entry point, IPC commands, JWT token store |
+| `migrations/versions/` | Alembic migration history |
+| `tests/conftest.py` | WAV fixtures, in-memory SQLite, auth fixtures |
+| `tests/test_auth.py` | 24 auth tests (JWT, RBAC, bcrypt) |
+| `.github/workflows/python-lint.yml` | CI: ruff + pyright + pytest + alembic check |
+| `ARCHITECTURE.md` | System diagram and IPC contracts |
+| `ROADMAP.md` | Full phase roadmap (all 13+ phases) |
+| `CLAUDE.md` | Claude Code project guide |
 
 ---
 
-*SampleMind AI — The Future of Intelligent Music Production*  
-*Roadmap consolidated from: `docs/v3/ROADMAP.md`, `docs/archive/legacy/PROJECT_ROADMAP.md`, `docs/archive/legacy/NEXT_PHASES_ROADMAP.md`, `docs/archive/phases/10-PHASE-10-PLANNED/PHASE_10_ROADMAP.md`, `docs/archive/legacy/03-business/SAMPLEMIND_TECHNICAL_IMPLEMENTATION_ROADMAP_2025-2027.md`, `docs/archive/legacy/03-business/06_SampleMind_Implementation_Roadmap.md`*
+*SampleMind AI — Analyze. Organize. Semantically Search. Automate with Agents. Ship.*
+*Last updated: 2026-03-25 — v0.2.0*

@@ -1,0 +1,11 @@
+# Skill: analyze_audio
+name: analyze_audio
+description: Analyze audio files for BPM, key, energy, mood, instrument, and fingerprint.
+agent: analyzer
+command: uv run samplemind analyze {path}
+inputs:
+  - path: Path to audio file or directory
+outputs:
+  - analysis: JSON with extracted features
+examples:
+  - uv run samplemind analyze tests/fixtures/kick.wav

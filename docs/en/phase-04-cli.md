@@ -118,14 +118,15 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from rich.table import Table
 
 from samplemind.analyzer.audio_analysis import analyze_file
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
-from samplemind.models import SampleCreate
+from samplemind.core.models.sample import SampleCreate
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
-# Use stderr for status messages, stdout for data (JSON)
-# This is critical for Tauri IPC — Rust reads stdout, not stderr
+# Use stderr for all human-readable output (progress bars, warnings, tables).
+# Use stdout ONLY for JSON data — Rust reads stdout, not stderr.
+# Mixing them corrupts Tauri IPC silently and is very hard to debug.
 console = Console(stderr=True)
-stdout = Console(force_terminal=False)   # No ANSI codes in JSON output
+stdout = Console(force_terminal=False)   # No ANSI escape codes in JSON output
 
 
 def import_cmd(
@@ -146,8 +147,9 @@ def import_cmd(
         console.print("[yellow]No WAV files found.[/yellow]")
         raise typer.Exit(0)
 
-    init_db()
-    repo = SampleRepository()
+    # init_orm() creates all SQLModel tables if they don't exist (idempotent).
+    # Must be called before the first SampleRepository operation.
+    init_orm()
     results = []
 
     # Rich progress bar (shown only when NOT --json)
@@ -157,7 +159,7 @@ def import_cmd(
         BarColumn(),
         TaskProgressColumn(),
         console=console,
-        disable=json_output,   # Hide progress in JSON mode
+        disable=json_output,   # hide progress bar in JSON mode (stdout must be clean JSON)
     ) as progress:
         task = progress.add_task(f"Analysing {len(wav_files)} files...", total=len(wav_files))
 
@@ -166,10 +168,12 @@ def import_cmd(
                 analysis = analyze_file(str(wav))
                 data = SampleCreate(
                     filename=wav.name,
-                    path=str(wav.resolve()),
+                    path=str(wav.resolve()),  # store absolute path (survives CWD changes)
                     **analysis,
                 )
-                sample = repo.upsert(data)
+                # upsert() inserts new or updates auto-detected fields only;
+                # if the user already tagged this file, genre/tags are preserved.
+                sample = SampleRepository.upsert(data)
                 results.append({"id": sample.id, "filename": sample.filename, **analysis})
             except Exception as e:
                 console.print(f"[red]Error: {wav.name} — {e}[/red]")
@@ -178,11 +182,11 @@ def import_cmd(
 
     # Output: JSON to stdout (for Tauri), table to stderr (for humans)
     if json_output:
-        # Rust reads this from stdout via Command::new("samplemind")
+        # Rust reads this from stdout via Command::new("samplemind").args(["import", path, "--json"])
         print(json.dumps({"imported": len(results), "samples": results}))
     else:
         _print_results_table(results, console)
-        console.print(f"\n[green]✔ Imported {len(results)} / {len(wav_files)} samples.[/green]")
+        console.print(f"\n[green]Imported {len(results)} / {len(wav_files)} samples.[/green]")
 
 
 def _print_results_table(results: list[dict], console: Console):
@@ -221,8 +225,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
 console = Console(stderr=True)
 
@@ -236,18 +240,19 @@ def search_cmd(
                                               help="Instrument type: kick, snare, bass..."),
     bpm_min: Optional[float] = typer.Option(None, "--bpm-min", help="Minimum BPM"),
     bpm_max: Optional[float] = typer.Option(None, "--bpm-max", help="Maximum BPM"),
-    json_output: bool = typer.Option(False, "--json", help="JSON output"),
+    json_output: bool = typer.Option(False, "--json", help="JSON output for Tauri IPC"),
 ):
-    """Search the sample library with one or more filters."""
-    init_db()
-    repo = SampleRepository()
-    results = repo.search(
+    """Search the sample library with one or more filters. All filters are optional."""
+    init_orm()
+    results = SampleRepository.search(
         query=query, key=key, genre=genre, energy=energy,
         instrument=instrument, bpm_min=bpm_min, bpm_max=bpm_max,
     )
 
     if json_output:
-        # Output format used by Tauri frontend
+        # stdout ONLY — this is the format Tauri reads.
+        # Use SamplePublic.model_validate() for safe serialisation in future;
+        # for now, build the dict explicitly to control the key names.
         data = [
             {
                 "id": s.id, "filename": s.filename, "path": s.path,
@@ -281,7 +286,7 @@ def search_cmd(
             s.genre or "", s.energy or "", s.mood or "",
         )
     console.print(table)
-    console.print(f"\n{len(results)} result(s) | {repo.count()} total")
+    console.print(f"\n{len(results)} result(s) | {SampleRepository.count()} total")
 
 
 def list_cmd(
@@ -290,7 +295,7 @@ def list_cmd(
     bpm_max: Optional[float] = typer.Option(None, "--bpm-max"),
     json_output: bool = typer.Option(False, "--json"),
 ):
-    """List all samples in the library."""
+    """List all samples in the library (equivalent to search with no filters)."""
     return search_cmd(key=key, bpm_min=bpm_min, bpm_max=bpm_max, json_output=json_output)
 ```
 
@@ -304,11 +309,11 @@ def list_cmd(
 from typing import Optional
 import typer
 from rich.console import Console
-from samplemind.data.db import init_db
-from samplemind.data.repository import SampleRepository
-from samplemind.models import SampleUpdate
+from samplemind.core.models.sample import SampleUpdate
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
 
-console = Console()
+console = Console(stderr=True)   # always stderr — tag command has no JSON output
 
 
 def tag_cmd(
@@ -319,21 +324,26 @@ def tag_cmd(
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated free tags"),
 ):
     """Tag a sample with genre, mood, energy, or custom tags."""
-    init_db()
+    init_orm()
 
     if energy and energy not in {"low", "mid", "high"}:
         console.print(f"[red]Invalid energy '{energy}'. Choose: low, mid, high[/red]")
         raise typer.Exit(1)
 
-    repo = SampleRepository()
-    sample = repo.get_by_name(name)
+    # get_by_name() does a LIKE search on filename — partial names work.
+    # "kick" matches "dark_kick_128.wav", "kick_trap_01.wav", etc.
+    sample = SampleRepository.get_by_name(name)
 
     if not sample:
-        console.print(f"[red]No sample matches '{name}'. Run 'samplemind list' to see what's imported.[/red]")
+        console.print(
+            f"[red]No sample matches '{name}'. "
+            f"Run 'samplemind list' to see what's imported.[/red]"
+        )
         raise typer.Exit(1)
 
+    # SampleUpdate only writes non-None fields — fields not supplied here are untouched.
     update = SampleUpdate(genre=genre, mood=mood, energy=energy, tags=tags)
-    repo.tag(sample.path, update)
+    SampleRepository.tag(sample.path, update)
 
     console.print(f"[green]Tagged:[/green] {sample.filename}")
     if genre:  console.print(f"  Genre:  {genre}")
@@ -359,11 +369,17 @@ def serve_cmd(
     port: int = typer.Option(5000, "--port", "-p", help="Port for the web UI"),
     debug: bool = typer.Option(False, "--debug", help="Flask debug mode"),
 ):
-    """Start the web UI at localhost."""
-    from samplemind.web.app import create_app
-    from samplemind.data.db import init_db
+    """Start the Flask web UI (http://localhost:5000 by default).
 
-    init_db()
+    Tauri spawns this on port 5174 during development.
+    The standalone 'samplemind serve' command uses port 5000.
+    """
+    from samplemind.data.orm import init_orm
+    from samplemind.web.app import create_app
+
+    # init_orm() creates all SQLModel tables if they don't exist.
+    # Must be called before create_app() so the DB is ready when Flask handles requests.
+    init_orm()
     app = create_app()
 
     console.print(f"[bold green]SampleMind AI Web UI → http://localhost:{port}[/bold green]")
@@ -568,43 +584,65 @@ stdout = Console(force_terminal=False)
 
 ### `stats` Command
 
+**Status: Planned — Phase 5.** `get_stats()` does not exist yet. The implementation
+below shows the correct approach using `SampleRepository` rather than a raw `database.py`
+function. The `by_instrument`, `by_mood`, and `by_energy` breakdowns are derived from
+`SampleRepository.get_all()` in memory until an aggregate SQL query is added in Phase 5.
+
 ```python
-# src/samplemind/cli/commands/stats.py
+# src/samplemind/cli/commands/stats.py  (Phase 5 target)
 import json
 import typer
+from collections import Counter
+from rich.console import Console
 from rich.table import Table
-from rich import print as rprint
-from samplemind.data.database import get_stats
+
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
+
+console = Console(stderr=True)
 
 
 def stats_command(
-    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON to stdout"),
 ) -> None:
-    """Show library statistics."""
-    data = get_stats()
+    """Show library statistics — total samples, breakdown by instrument, mood, energy."""
+    init_orm()
+
+    # Fetch all samples and compute breakdowns in Python.
+    # Phase 5 will replace this with aggregate SQL for large libraries.
+    all_samples = SampleRepository.get_all()
+    total = len(all_samples)
+    by_instrument = Counter(s.instrument for s in all_samples if s.instrument)
+    by_mood       = Counter(s.mood       for s in all_samples if s.mood)
+    by_energy     = Counter(s.energy     for s in all_samples if s.energy)
+
+    data = {
+        "total": total,
+        "by_instrument": dict(by_instrument),
+        "by_mood":       dict(by_mood),
+        "by_energy":     dict(by_energy),
+    }
 
     if json_output:
-        import sys
-        print(json.dumps(data), file=sys.stdout)
+        print(json.dumps(data))   # stdout only — Tauri reads this
         return
 
-    # Rich table output
     table = Table(title="Library Statistics")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="white")
 
-    table.add_row("Total samples", str(data["total"]))
-    table.add_row("Kicks", str(data["by_instrument"].get("kick", 0)))
-    table.add_row("Snares", str(data["by_instrument"].get("snare", 0)))
-    table.add_row("Hihats", str(data["by_instrument"].get("hihat", 0)))
-    table.add_row("Bass", str(data["by_instrument"].get("bass", 0)))
-    table.add_row("Pads", str(data["by_instrument"].get("pad", 0)))
-    table.add_row("Dark mood", str(data["by_mood"].get("dark", 0)))
-    table.add_row("Bright mood", str(data["by_mood"].get("bright", 0)))
-    table.add_row("High energy", str(data["by_energy"].get("high", 0)))
-    table.add_row("Avg duration", f"{data['avg_duration']:.2f}s")
+    table.add_row("Total samples", str(total))
+    for instrument in ("kick", "snare", "hihat", "bass", "pad", "lead", "loop", "sfx"):
+        count = by_instrument.get(instrument, 0)
+        if count:
+            table.add_row(instrument.capitalize() + "s", str(count))
+    table.add_row("Dark mood",   str(by_mood.get("dark", 0)))
+    table.add_row("Chill mood",  str(by_mood.get("chill", 0)))
+    table.add_row("High energy", str(by_energy.get("high", 0)))
+    table.add_row("Low energy",  str(by_energy.get("low", 0)))
 
-    rprint(table)
+    console.print(table)
 ```
 
 Example output:
@@ -627,39 +665,81 @@ Example output:
 
 ### `duplicates` Command
 
+**Status: Planned — Phase 5.** `samplemind.analyzer.fingerprint` and `get_all_paths()`
+do not exist yet. The implementation below uses `SampleRepository.get_all()` (which
+is live) to iterate paths, and a simple SHA-256 fingerprint of the first 64 KB of each
+file (no external deps — stdlib only). The `find_duplicates()` helper will live in
+`analyzer/fingerprint.py` once Phase 5 scaffolds it.
+
 ```python
-# src/samplemind/cli/commands/duplicates.py
+# src/samplemind/cli/commands/duplicates.py  (Phase 5 target)
+import hashlib
+import json
+from pathlib import Path
+
 import typer
 from rich.console import Console
-from samplemind.analyzer.fingerprint import find_duplicates
-from samplemind.data.database import get_all_paths
 
-console = Console()
+from samplemind.data.orm import init_orm
+from samplemind.data.repositories.sample_repository import SampleRepository
+
+console = Console(stderr=True)
+
+
+def _fingerprint(path: Path, chunk_size: int = 65536) -> str:
+    """SHA-256 of the first `chunk_size` bytes — fast enough for duplicate detection.
+    Two files with identical headers and length are almost certainly the same sample.
+    """
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        h.update(f.read(chunk_size))
+    return h.hexdigest()
 
 
 def duplicates_command(
-    remove: bool = typer.Option(False, "--remove", help="Delete duplicate files (keep first)"),
+    remove: bool = typer.Option(False, "--remove", help="Delete duplicate files (keeps first seen)"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Find duplicate samples by audio fingerprint (SHA-256 of first 64KB)."""
-    all_paths = get_all_paths()
-    dupes = find_duplicates(all_paths)
+    """Find duplicate samples by SHA-256 fingerprint of the first 64 KB."""
+    init_orm()
+
+    # get_all() returns all Sample rows ordered by imported_at DESC.
+    # We use the stored path — the file may not exist on disk any more (moved/deleted).
+    all_samples = SampleRepository.get_all()
+    fingerprints: dict[str, list[str]] = {}
+
+    for sample in all_samples:
+        p = Path(sample.path)
+        if not p.exists():
+            continue   # skip missing files silently
+        fp = _fingerprint(p)
+        fingerprints.setdefault(fp, []).append(sample.path)
+
+    # Keep only groups that have more than one file (genuine duplicates)
+    dupes = {fp: paths for fp, paths in fingerprints.items() if len(paths) > 1}
 
     if not dupes:
-        console.print("[green]No duplicates found.[/green]")
+        if json_output:
+            print(json.dumps({"duplicates": 0, "groups": []}))
+        else:
+            console.print("[green]No duplicates found.[/green]")
         return
 
-    total_dupes = sum(len(ps) - 1 for ps in dupes.values())
-    console.print(f"[yellow]Found {len(dupes)} duplicate groups ({total_dupes} redundant files)[/yellow]")
+    total_redundant = sum(len(ps) - 1 for ps in dupes.values())
 
+    if json_output:
+        print(json.dumps({"duplicates": total_redundant, "groups": list(dupes.values())}))
+        return
+
+    console.print(f"[yellow]Found {len(dupes)} duplicate groups ({total_redundant} redundant files)[/yellow]")
     for fp, paths in dupes.items():
         console.print(f"\n[dim]{fp[:16]}...[/dim]")
         for i, path in enumerate(paths):
             marker = "[green]KEEP[/green]" if i == 0 else "[red]DUPE[/red]"
             console.print(f"  {marker} {path}")
             if remove and i > 0:
-                path.unlink()
-                console.print(f"    [dim]deleted[/dim]")
+                Path(path).unlink(missing_ok=True)
+                console.print("    [dim]deleted[/dim]")
 ```
 
 ### `--workers` Flag on Import and Analyze

@@ -1,0 +1,12 @@
+# Skill: run_tests
+name: run_tests
+description: Run all Python and Rust tests with coverage and report results.
+agent: test-runner
+command: uv run pytest --cov=samplemind && cargo test --manifest-path app/src-tauri/Cargo.toml
+inputs: []
+outputs:
+  - pytest: Python test results
+  - cargo: Rust test results
+examples:
+  - uv run pytest --cov=samplemind
+  - cargo test --manifest-path app/src-tauri/Cargo.toml

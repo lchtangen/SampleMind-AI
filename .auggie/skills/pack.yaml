@@ -1,0 +1,74 @@
+name: pack
+description: >
+  Create, import, verify, or list .smpack sample pack files.
+  .smpack is a ZIP archive with a manifest.json and audio files.
+  Phase 9 feature — checks that packs/ module exists before running.
+agent: phase-09-sample-packs
+commands:
+  create: "uv run samplemind pack create {name} {slug} {filters}"
+  import: "uv run samplemind pack import {path}"
+  verify: "uv run samplemind pack verify {path}"
+  list: "uv run samplemind pack list {path}"
+inputs:
+  - name: action
+    type: enum
+    values: [create, import, verify, list]
+    required: true
+  - name: name
+    type: string
+    description: Display name for the pack (e.g. "Trap Kicks Vol 1")
+    required: for create
+  - name: slug
+    type: string
+    description: URL-safe identifier (e.g. trap-kicks-v1)
+    required: for create
+  - name: path
+    type: path
+    description: Path to .smpack file (for import/verify/list)
+    required: for import/verify/list
+  - name: instrument
+    type: enum
+    values: [loop, hihat, kick, snare, bass, pad, lead, sfx, unknown]
+    required: false
+  - name: energy
+    type: enum
+    values: [low, mid, high]
+    required: false
+  - name: mood
+    type: enum
+    values: [dark, chill, aggressive, euphoric, melancholic, neutral]
+    required: false
+  - name: author
+    type: string
+    description: Pack author name
+    required: false
+outputs:
+  create:
+    - pack_path: Path to generated .smpack file
+    - count: Number of samples included
+    - size_mb: Pack file size
+    - sha256: SHA-256 of the pack file
+  import:
+    - imported: Count of samples imported
+    - skipped: Count of duplicates skipped
+    - errors: Files that failed
+  verify:
+    - status: PASS or FAIL
+    - issues: List of validation errors
+  list:
+    - manifest: Pack metadata (name, version, author, description)
+    - samples: Table of all samples in the pack
+smpack_format:
+  type: ZIP archive
+  contents:
+    - manifest.json (name, slug, version, author, description, sample list)
+    - samples/ (WAV files with relative paths)
+pre_check:
+  - exists: src/samplemind/packs/
+  - message_if_missing: "Phase 9 not yet implemented. See docs/en/phase-09-sample-packs.md"
+examples:
+  - "uv run samplemind pack create 'Trap Kicks' trap-kicks-v1 --instrument kick --energy high"
+  - "uv run samplemind pack import ~/Downloads/trap-pack.smpack"
+  - "uv run samplemind pack verify my-pack.smpack"
+  - "uv run samplemind pack list my-pack.smpack"
+

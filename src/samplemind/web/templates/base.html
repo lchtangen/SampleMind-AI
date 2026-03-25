@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}SampleMind AI{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* ── Auth-specific styles ─────────────────────────────────────────── */
+    .auth-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: var(--bg, #1a1a2e);
+    }
+    .auth-box {
+      background: var(--surface, #16213e);
+      border: 1px solid var(--border, #0f3460);
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      width: 100%;
+      max-width: 420px;
+    }
+    .auth-logo {
+      font-size: 1.8rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.25rem;
+      color: var(--accent, #e94560);
+    }
+    .auth-subtitle {
+      text-align: center;
+      color: var(--muted, #888);
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+    }
+    .auth-field {
+      margin-bottom: 1.1rem;
+    }
+    .auth-field label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted, #aaa);
+      margin-bottom: 0.35rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .auth-field input {
+      width: 100%;
+      padding: 0.6rem 0.85rem;
+      background: var(--input-bg, #0d1117);
+      border: 1px solid var(--border, #30363d);
+      border-radius: 6px;
+      color: var(--text, #e6edf3);
+      font-size: 0.95rem;
+      box-sizing: border-box;
+    }
+    .auth-field input:focus {
+      outline: none;
+      border-color: var(--accent, #e94560);
+    }
+    .auth-btn {
+      width: 100%;
+      padding: 0.7rem;
+      background: var(--accent, #e94560);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+    .auth-btn:hover { opacity: 0.9; }
+    .auth-link {
+      text-align: center;
+      margin-top: 1.25rem;
+      font-size: 0.875rem;
+      color: var(--muted, #888);
+    }
+    .auth-link a { color: var(--accent, #e94560); text-decoration: none; }
+    .auth-error {
+      background: rgba(220, 53, 69, 0.15);
+      border: 1px solid rgba(220, 53, 69, 0.4);
+      color: #ff6b6b;
+      border-radius: 6px;
+      padding: 0.6rem 0.85rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+    .auth-success {
+      background: rgba(40, 167, 69, 0.15);
+      border: 1px solid rgba(40, 167, 69, 0.4);
+      color: #6bff8a;
+      border-radius: 6px;
+      padding: 0.6rem 0.85rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% block body %}{% endblock %}
+</body>
+</html>
+

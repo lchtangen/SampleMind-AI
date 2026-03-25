@@ -1,0 +1,25 @@
+repos:
+  # ── Ruff: lint + format (replaces black, isort, flake8) ─────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ── General file hygiene ────────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: check-added-large-files
+        args: [--maxkb=500]       # block accidental audio file commits
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]

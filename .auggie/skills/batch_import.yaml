@@ -1,0 +1,11 @@
+# Skill: batch_import
+name: batch_import
+description: Import and analyze a batch of audio samples in parallel.
+agent: analyzer
+command: uv run samplemind import {folder} --workers 4
+inputs:
+  - folder: Path to folder of audio files
+outputs:
+  - result: Import summary (count, errors)
+examples:
+  - uv run samplemind import samples/ --workers 4

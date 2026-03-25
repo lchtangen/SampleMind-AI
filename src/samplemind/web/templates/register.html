@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Register — SampleMind AI{% endblock %}
+
+{% block body %}
+<div class="auth-container">
+  <div class="auth-box">
+    <div class="auth-logo">🎧 SampleMind AI</div>
+    <div class="auth-subtitle">Create your sample library account</div>
+
+    {% if error %}
+    <div class="auth-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/register">
+      <div class="auth-field">
+        <label for="email">Email Address</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          required
+          value="{{ email or '' }}"
+        />
+      </div>
+
+      <div class="auth-field">
+        <label for="username">Username</label>
+        <input
+          id="username"
+          name="username"
+          type="text"
+          placeholder="djname_123"
+          autocomplete="username"
+          required
+          minlength="3"
+          maxlength="50"
+          pattern="[a-zA-Z0-9_]+"
+          title="Letters, digits, and underscores only"
+          value="{{ username or '' }}"
+        />
+      </div>
+
+      <div class="auth-field">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          placeholder="Min 8 chars, upper + lower + digit"
+          autocomplete="new-password"
+          required
+          minlength="8"
+        />
+      </div>
+
+      <div class="auth-field">
+        <label for="confirm_password">Confirm Password</label>
+        <input
+          id="confirm_password"
+          name="confirm_password"
+          type="password"
+          placeholder="Repeat your password"
+          autocomplete="new-password"
+          required
+        />
+      </div>
+
+      <button class="auth-btn" type="submit">Create Account</button>
+    </form>
+
+    <div class="auth-link">
+      Already have an account? <a href="/login">Sign in</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

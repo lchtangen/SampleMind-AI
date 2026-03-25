@@ -6,7 +6,8 @@
 
 ## System Layers
 
-```
+ 
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  Layer 4 — DAW Integration                                      │
 │  ┌─────────────────────┐   ┌──────────────────────────────────┐ │
@@ -62,6 +63,7 @@
 │  │  Application        │   │  (WAV, original paths preserved) │ │
 │  │  Support/SampleMind │   │                                  │ │
 │  └─────────────────────┘   └──────────────────────────────────┘ │
+
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -69,6 +71,7 @@
 
 ## Data Flow
 
+ 
 ```
 WAV file on disk
      │
@@ -88,46 +91,78 @@ Feature extraction (8 features per file)
      │
      ▼
 Classification (3 independent classifiers)
-  classify_energy()     → "low" | "medium" | "high"
-  classify_mood()       → "dark" | "neutral" | "bright"
-  classify_instrument() → "kick" | "snare" | "hihat" | "bass" | ...
+  classify_energy()     → "low" | "mid" | "high"
+  classify_mood()       → "dark" | "chill" | "aggressive" | "euphoric" | "melancholic" | "neutral"
+  classify_instrument() → "kick" | "snare" | "hihat" | "bass" | "pad" | "lead" | "loop" | "sfx" | "unknown"
      │
      ▼
-SampleRepository.upsert()
-     │
+SampleRepository.upsert()  ← data/repositories/sample_repository.py (SQLModel)
+     │                            Auto-detected fields only; user tags are never
+     │                            overwritten on re-import (genre, tags preserved)
      ▼
-SQLite (SQLModel + SQLAlchemy 2.0)
-  samples table: id, filename, path, bpm, key, instrument, mood,
-                 energy, duration, tags, created_at, updated_at
+SQLite (platformdirs path: ~/Library/Application Support/SampleMind/samplemind.db)
+  users table:   id, email, role, hashed_password, is_active, created_at
+  samples table: id, filename, path, bpm, key, mood, genre,
+                 energy, tags, instrument, imported_at
+  WAL mode + performance PRAGMAs applied on every connection via SQLAlchemy event
      │
      ├──► Typer CLI (stdout JSON for Tauri IPC)
      ├──► Flask Web UI (HTMX partials, SSE progress)
      ├──► Tauri Desktop App (invoke() commands)
      ├──► FL Studio export (filesystem, clipboard, MIDI)
      ├──► JUCE Plugin (via Python sidecar socket)
-     └──► .smpack pack export/import
-```
+    └──► .smpack pack export/import
+  ```
 
 ---
 
 ## IPC Contract Table
 
-All communication between Rust (Tauri) and Python uses `stdout` JSON.
-Python prints status/progress to `stderr`; JSON data always goes to `stdout`.
+### Current State (Phase 1–4 runtime)
+
+The Tauri app currently loads the Flask web UI in a WebView at `http://127.0.0.1:5174`.
+Rust commands handle OS-level tasks and auth token storage; Python logic runs over HTTP
+(not direct subprocess calls yet — that comes with the Svelte frontend in Phase 7).
+
+| Tauri Command (Rust) | Purpose | Return type |
+|---|---|---|
+| `pick_folder` | Native folder picker dialog (tauri-plugin-dialog) | `Option<String>` (path or null) |
+| `is_directory` | Check if a path is a directory on disk | `bool` |
+| `store_token` | Store a JWT access token in `AuthTokenStore` (Mutex-protected) | `()` |
+| `get_token` | Retrieve the stored token, if any | `Option<String>` |
+| `clear_token` | Clear the stored token (logout) | `()` |
+
+Flask serves the library UI at port 5174 (Tauri-spawned) or 5000 (standalone `samplemind serve`).
+
+### Target State (Phase 6+ — Svelte frontend replaces WebView)
+
+Once the Svelte 5 frontend is built, Tauri will call Python via subprocess stdout JSON:
 
 | Tauri Command (Rust) | Python CLI Invocation | JSON Response Schema |
 |---|---|---|
-| `import_folder` | `samplemind import <path> --json` | `{"imported": N, "errors": M, "samples": [...]}` |
-| `search_samples` | `samplemind search --query X --json` | `{"samples": [...]}` |
-| `analyze_file` | `samplemind analyze <path> --json` | `{"bpm": F, "key": S, "instrument": S, ...}` |
-| `get_library_stats` | `samplemind list --stats --json` | `{"total": N, "by_instrument": {...}}` |
-| `export_pack` | `samplemind pack create NAME SLUG --json` | `{"pack_path": S, "sample_count": N}` |
-| `focus_fl_studio` | `osascript -e 'tell app "FL Studio" to activate'` | *(macOS only, no JSON)* |
+| `import_folder` | `samplemind import <path> --json` | `{"imported": N, "errors": M}` |
+| `search_samples` | `samplemind search <query> --json` | `[{"filename": S, "bpm": F, ...}]` |
+| `analyze_file` | `samplemind analyze <path> --json` | `{"bpm": F, "key": S, "energy": S, "mood": S, "instrument": S}` |
+| `get_stats` | `samplemind list --json` | `[{"filename": S, ...}]` |
 
-### Sample JSON Schema
+### `analyze_file` JSON Output (actual — Phase 1 runtime)
 
-All commands that return sample data use this schema:
+`samplemind analyze <path> --json` returns exactly these 5 fields:
 
+ 
+```json
+{
+  "bpm": 128.0,
+  "key": "C min",
+  "energy": "mid",
+  "mood": "dark",
+  "instrument": "kick"
+}
+```
+
+### Database Row Schema (actual — `~/.samplemind/library.db`)
+
+ 
 ```json
 {
   "id": 42,
@@ -135,20 +170,23 @@ All commands that return sample data use this schema:
   "path": "/Users/name/Music/Samples/kick_128bpm.wav",
   "bpm": 128.0,
   "key": "C min",
-  "instrument": "kick",
   "mood": "dark",
-  "energy": "high",
-  "duration": 0.45,
-  "tags": ["trap", "808"],
-  "created_at": "2025-10-01T12:00:00Z"
+  "genre": "trap",
+  "energy": "mid",
+  "tags": "808,heavy",
+  "instrument": "kick",
+  "imported_at": "2026-03-25T12:00:00"
 }
 ```
+
+> **Note:** `energy` values are `low` / `mid` / `high`. Tags are stored as a comma-separated string, not a JSON array. There is no `duration` field in the current schema.
 
 ### Python Sidecar Socket Protocol (JUCE Plugin)
 
 Length-prefixed JSON over a Unix domain socket (`~/tmp/samplemind.sock`):
 
-```
+ 
+```text
 Request:  [4-byte big-endian int: length] [UTF-8 JSON bytes]
 Response: [4-byte big-endian int: length] [UTF-8 JSON bytes]
 
@@ -162,31 +200,40 @@ Supported actions:
 
 ## Component Responsibilities
 
-| Component | Location | Responsibility |
-|---|---|---|
-| **Audio Analyzer** | `src/samplemind/analyzer/` | librosa feature extraction and classification |
-| **Sample Repository** | `src/samplemind/data/repository.py` | All SQLite read/write via SQLModel |
-| **Alembic Migrations** | `alembic/versions/` | Schema changes without data loss |
-| **Typer CLI** | `src/samplemind/cli/` | User-facing commands + JSON output for Tauri |
-| **Flask Web UI** | `src/samplemind/web/` | Browser-based library management (HTMX) |
-| **Svelte Frontend** | `app/src/` | Desktop app UI (reactive, Runes) |
-| **Tauri Core** | `app/src-tauri/src/` | Rust commands, system tray, native dialogs |
-| **FL Studio Integration** | `src/samplemind/integrations/` | Export, clipboard, AppleScript, MIDI |
-| **Pack System** | `src/samplemind/packs/` | .smpack export/import with SHA-256 integrity |
-| **Python Sidecar** | `src/samplemind/sidecar/server.py` | Socket server for JUCE plugin communication |
-| **JUCE Plugin** | `plugin/src/` | VST3/AU plugin, UI, sidecar lifecycle |
+| Component | Location | Status | Responsibility |
+|---|---|---|---|
+| **Audio Analyzer** | `src/samplemind/analyzer/audio_analysis.py` | ✅ Live | librosa BPM + key detection; 8 feature vectors |
+| **Classifier** | `src/samplemind/analyzer/classifier.py` | ✅ Live | Rule-based energy (low/mid/high), mood (dark/chill/aggressive/euphoric/melancholic/neutral), instrument (kick/snare/hihat/bass/pad/lead/loop/sfx/unknown) |
+| **SQLModel ORM** | `src/samplemind/data/orm.py` | ✅ Live | Shared engine; WAL + PRAGMAs via SQLAlchemy event; `get_session()` context manager |
+| **SampleRepository** | `src/samplemind/data/repositories/sample_repository.py` | ✅ Live | All sample CRUD (upsert, search, tag, get_by_name/path/id, count, get_all) |
+| **UserRepository** | `src/samplemind/data/repositories/user_repository.py` | ✅ Live | User CRUD (create, get_by_email, get_by_id) |
+| **Auth (JWT + RBAC)** | `src/samplemind/core/auth/` | ✅ Live | JWT access + refresh tokens; bcrypt hashing; viewer/owner/admin RBAC |
+| **FastAPI routes** | `src/samplemind/api/routes/auth.py` | ✅ Live | /register /login /refresh /me /change-password |
+| **Typer CLI** | `src/samplemind/cli/` | ✅ Live | 8 commands: version, import, analyze, list, search, tag, serve, api; `--json` on all |
+| **Flask Web UI** | `src/samplemind/web/app.py` | ✅ Live | 10+ routes; library view, search, tag, audio streaming, auth-gated pages |
+| **Tauri Core** | `app/src-tauri/src/main.rs` | ✅ Live | 5 Rust commands: pick_folder, is_directory, store_token, get_token, clear_token; system tray |
+| **Svelte Frontend** | `app/src/` | 📋 Phase 7 | Not built yet — Tauri currently loads Flask WebView at port 5174 |
+| **FL Studio Integration** | `src/samplemind/integrations/` | 📋 Phase 8 | Planned: filesystem export, AppleScript, MIDI |
+| **Pack System** | `src/samplemind/packs/` | 📋 Phase 10 | Planned: .smpack ZIP format with SHA-256 integrity |
+| **Python Sidecar** | `src/samplemind/sidecar/` | 📋 Phase 9 | Planned: Unix socket server for JUCE plugin IPC |
+| **JUCE Plugin** | `plugin/src/` | 📋 Phase 9 | Planned: VST3/AU plugin for FL Studio |
 
 ---
 
 ## Technology Decision Log
 
 | Technology | Replaces | Rationale |
-|---|---|---|
+| --- | --- | --- |
 | **uv** | pip + venv | 10–100× faster installs; single tool for packages, virtual envs, and scripts |
 | **pyproject.toml** | requirements.txt | PEP 621 standard; one file for deps, scripts, and tool config |
 | **src-layout** | flat layout | Prevents accidental imports of the source tree instead of the installed package |
-| **SQLModel** | raw sqlite3 | Type-safe ORM backed by Pydantic + SQLAlchemy 2.0; less boilerplate |
-| **Alembic** | `_migrate()` function | Proper migration history; reversible; works in CI |
+| **SQLModel** | raw sqlite3 | Type-safe ORM: SQLAlchemy 2.0 + Pydantic v2 in one class; `Sample` and `User` tables live |
+| **Alembic** | `_migrate()` function | Versioned, reversible schema migrations; `migrations/versions/0001` (users) + `0002` (samples) applied |
+| **bcrypt (direct)** | passlib[bcrypt] | passlib 1.7.x cannot parse bcrypt 4.x/5.x version strings; use `bcrypt` package directly |
+| **FastAPI** | Flask (for API) | Async request handling; auto OpenAPI docs at `/docs`; Pydantic v2 native validation |
+| **python-jose** | PyJWT | Supports both HS256 and RS256; used for JWT access + refresh tokens |
+| **StaticPool** in tests | thread-local pools | Keeps in-memory SQLite on one connection across all threads — required for FastAPI test client |
+| **expire_on_commit=False** | default Session | Prevents `DetachedInstanceError` when accessing fields on ORM objects returned from `get_session()` |
 | **Typer + Rich** | argparse | Type annotations = automatic `--help` and validation; Rich = beautiful terminal output |
 | **HTMX** | custom JS fetch | Replaces 80% of hand-written JavaScript with HTML attributes; simpler to maintain |
 | **SSE (Server-Sent Events)** | polling | One-way streaming from server to browser; no WebSocket overhead |
@@ -204,6 +251,7 @@ Supported actions:
 
 ### Development (Windows WSL2)
 
+ 
 ```
 Windows 11
 └── WSL2 (Ubuntu 24.04)
@@ -218,6 +266,7 @@ NOTE: Do NOT store code under /mnt/c/ (NTFS is 5–10× slower for git/Python)
 
 ### Production (macOS)
 
+ 
 ```
 macOS 12+ (Apple Silicon preferred)
 └── SampleMind.app  (Tauri bundle, ~15 MB)
@@ -237,95 +286,91 @@ FL Studio plugins:
 Sample library:
     ~/Music/SampleMind/    ← organized by instrument/mood
     ~/Library/Application Support/SampleMind/samplemind.db  ← SQLite
-```
+  ```
 
 ---
 
 ## Repository Structure
 
+ 
 ```
 SampleMind-AI/
 ├── src/samplemind/              ← Python package (src-layout)
-│   ├── __init__.py              ← __version__
-│   ├── __main__.py              ← python -m samplemind
-│   ├── models.py                ← SQLModel Sample class
+│   ├── __init__.py              ← __version__ = "0.2.0"
+│   ├── __main__.py              ← python -m samplemind entry point
 │   ├── cli/
-│   │   ├── app.py               ← Typer main app
-│   │   └── commands/            ← import_, search, tag, serve, export, pack
+│   │   ├── app.py               ← Typer main app; registers all 8 commands
+│   │   └── commands/
+│   │       ├── import_.py       ← samplemind import <folder> [--json]
+│   │       ├── analyze.py       ← samplemind analyze <file> [--json]
+│   │       ├── library.py       ← samplemind list / search [filters] [--json]
+│   │       ├── tag.py           ← samplemind tag <name> [--genre] [--mood] ...
+│   │       └── serve.py         ← samplemind serve / api
 │   ├── analyzer/
-│   │   ├── audio_analysis.py    ← librosa feature extraction
-│   │   └── classifier.py        ← energy/mood/instrument classification
+│   │   ├── audio_analysis.py    ← librosa feature extraction: analyze_file()
+│   │   └── classifier.py        ← rule-based classifiers (energy/mood/instrument)
+│   ├── core/
+│   │   ├── config.py            ← Settings (pydantic-settings, env vars, platformdirs)
+│   │   ├── auth/
+│   │   │   ├── jwt_handler.py   ← create_access_token(), create_refresh_token(), decode_token()
+│   │   │   ├── password.py      ← hash_password(), verify_password() via bcrypt
+│   │   │   ├── rbac.py          ← UserRole enum, Permission enum, ROLE_PERMISSIONS map
+│   │   │   └── dependencies.py  ← FastAPI Depends helpers: get_current_user(), require_role()
+│   │   └── models/
+│   │       ├── user.py          ← User SQLModel table + UserCreate/UserUpdate/UserPublic
+│   │       └── sample.py        ← Sample SQLModel table + SampleCreate/SampleUpdate/SamplePublic
 │   ├── data/
-│   │   ├── db.py                ← engine setup, platformdirs path
-│   │   └── repository.py        ← SampleRepository class
-│   ├── web/
-│   │   ├── app.py               ← Flask create_app() factory
-│   │   ├── blueprints/          ← library, import (SSE)
-│   │   ├── templates/           ← Jinja2 + HTMX partials
-│   │   └── static/              ← CSS, wavesurfer.js
-│   ├── integrations/
-│   │   ├── paths.py             ← FL Studio path detection
-│   │   ├── filesystem.py        ← export_to_fl_studio()
-│   │   ├── clipboard.py         ← copy_sample_path()
-│   │   ├── applescript.py       ← macOS automation
-│   │   ├── midi.py              ← python-rtmidi CC messages
-│   │   └── naming.py            ← FL Studio filename conventions
-│   ├── packs/
-│   │   ├── manifest.py          ← PackManifest Pydantic model
-│   │   ├── exporter.py          ← export_pack()
-│   │   └── importer.py          ← import_pack()
-│   └── sidecar/
-│       └── server.py            ← Unix socket server (for JUCE plugin)
+│   │   ├── orm.py               ← get_engine(), init_orm(), get_session() context manager; WAL PRAGMAs
+│   │   ├── database.py          ← legacy sqlite3 functions (superseded by orm.py — kept for reference)
+│   │   └── repositories/
+│   │       ├── user_repository.py    ← UserRepository (create, get_by_email, get_by_id)
+│   │       └── sample_repository.py  ← SampleRepository (upsert, search, tag, get_by_*, count, get_all)
+│   ├── api/
+│   │   ├── main.py              ← FastAPI app factory
+│   │   └── routes/
+│   │       └── auth.py          ← /register /login /refresh /me /change-password
+│   └── web/
+│       ├── app.py               ← Flask app; library view, search, tag, audio streaming, auth
+│       ├── templates/           ← Jinja2 templates (index.html, login.html, register.html)
+│       └── static/              ← CSS, JS
 ├── app/                         ← Tauri desktop application
-│   ├── src/                     ← Svelte 5 frontend
-│   │   └── lib/
-│   │       ├── components/      ← SampleTable, ImportPanel, WaveformPlayer
-│   │       ├── stores/          ← library.svelte.ts ($state)
-│   │       └── api/             ← tauri.ts (typed invoke() wrappers)
 │   ├── src-tauri/
 │   │   ├── src/
-│   │   │   ├── main.rs          ← app entry, tray, setup
-│   │   │   └── commands/        ← import, search, applescript
-│   │   ├── Cargo.toml
-│   │   ├── tauri.conf.json
-│   │   ├── entitlements.plist   ← macOS sandbox entitlements
-│   │   └── resources/           ← samplemind-sidecar binary (PyInstaller)
-│   ├── package.json
-│   └── vite.config.ts
-├── plugin/                      ← JUCE VST3/AU plugin (C++)
-│   ├── CMakeLists.txt
-│   └── src/
-│       ├── PluginProcessor.h/.cpp
-│       ├── PluginEditor.h/.cpp
-│       ├── PythonSidecar.h/.cpp
-│       └── IPCSocket.h/.cpp
-├── alembic/                     ← Database migrations
-│   ├── alembic.ini
+│   │   │   └── main.rs          ← app entry; 5 Rust commands; system tray; AuthTokenStore
+│   │   ├── Cargo.toml           ← tauri 2.x, tauri-plugin-dialog, serde_json
+│   │   ├── tauri.conf.json      ← bundle targets: dmg, msi, appimage
+│   │   └── entitlements.plist   ← macOS sandbox entitlements (outgoing-network, etc.)
+│   └── package.json             ← pnpm workspace; @tauri-apps/cli, @tauri-apps/api
+├── migrations/                  ← Alembic schema history
+│   ├── env.py                   ← async-aware env; render_as_batch=True for SQLite
+│   ├── script.py.mako
 │   └── versions/
-│       └── 0001_initial.py
-├── tests/                       ← pytest test suite
-│   ├── conftest.py              ← WAV fixtures, DB fixtures
-│   ├── test_audio_analysis.py
-│   ├── test_classifier.py
-│   ├── test_repository.py
-│   ├── test_cli.py
-│   ├── test_web.py
-│   └── test_packs.py
+│       ├── 0001_create_users_table.py   ← users schema baseline
+│       └── 0002_create_samples_table.py ← samples schema (+ ix_samples_filename index)
+├── tests/                       ← pytest test suite (33 tests)
+│   ├── conftest.py              ← WAV fixtures (silent/kick/hihat), orm_engine, test_user, access_token
+│   ├── test_audio_analysis.py   ← BPM, key, feature extraction tests
+│   ├── test_classifier.py       ← energy, mood, instrument classifier tests
+│   ├── test_auth.py             ← 24 tests: JWT, bcrypt, RBAC, FastAPI auth routes
+│   ├── test_cli.py              ← Typer CliRunner tests
+│   └── test_web.py              ← Flask test client tests
 ├── docs/
+│   ├── FIRST_SAMPLEMIND_PROJECT_ROADMAP.md  ← master engineering + product vision
 │   ├── no/                      ← Norwegian phase docs
-│   └── en/                      ← English phase docs
+│   └── en/                      ← English phase docs (phase-01 through phase-06)
 ├── scripts/
-│   ├── setup-dev.sh             ← Bootstrap for new contributors
-│   ├── bump-version.sh          ← Sync version across 4 files
-│   ├── build-sidecar.sh         ← PyInstaller build
-│   └── release-pack.sh          ← GitHub Release for .smpack
+│   ├── setup-dev.sh             ← bootstrap for new contributors
+│   ├── bump-version.sh          ← sync version across pyproject.toml + Cargo.toml
+│   ├── build-sidecar.sh         ← PyInstaller build (Phase 11)
+│   └── release-pack.sh          ← GitHub Release for .smpack (Phase 10)
 ├── .github/workflows/
-│   ├── ci.yml                   ← pytest + ruff + clippy
-│   └── release.yml              ← macOS sign + notarize + Windows build
-├── pyproject.toml               ← Python package config (uv)
-├── samplemind-sidecar.spec      ← PyInstaller spec
-├── ARCHITECTURE.md              ← This file
-├── ROADMAP.md
+│   ├── python-lint.yml          ← ruff + pyright + pytest + alembic check
+│   └── release.yml              ← macOS sign + notarize + Windows build (Phase 11)
+├── pyproject.toml               ← Python package config (uv); version 0.2.0
+├── alembic.ini                  ← points to migrations/ and samplemind.db
+├── samplemind-sidecar.spec      ← PyInstaller spec (Phase 11)
+├── ARCHITECTURE.md              ← this file
+├── ROADMAP.md                   ← all 13+ phases
 └── README.md
 ```
 
@@ -341,6 +386,7 @@ Feature extraction → Classification pipeline details:
 - **Model targets:** audio fingerprint similarity search for "find similar sounds" feature (Phase 2+)
 - **ProcessPoolExecutor:** used for batch imports — each worker runs `analyze_file()` independently
 
+ 
 ```
 Batch import flow:
 files[]
@@ -369,18 +415,21 @@ files[]
 | Sidecar startup | < 3s | PyInstaller one-file bundle |
 | VST3 UI open | < 200ms | JUCE editor open, cached socket |
 
-**Current bottlenecks (Phase 1 state):**
-- Single file: ~800ms (librosa cold import overhead)
-- Batch: sequential (no workers yet — Phase 2 task)
-- Search: full table scan (no FTS5 yet — Phase 3 task)
+**Current bottlenecks (Phase 4 state — v0.2.0):**
+- Single file: ~800ms (librosa cold-import overhead on first call; subsequent calls are faster)
+- Batch: sequential (no workers yet — `--workers N` planned for Phase 5)
+- Search: full table scan via SQLModel `WHERE ... LIKE` (FTS5 virtual table planned for Phase 5)
+- Analysis results are not yet cached by `mtime`/`size`; every re-import re-runs librosa
 
 ---
 
 ## Security Model
 
-- **No network access required** — SampleMind is a fully local application
-- **macOS sandbox entitlements:** minimum required set only (no broad disk access)
-- **No credentials stored** — SQLite database is a plain user-owned file
+- **No mandatory network access** — all analysis, storage, and search run locally; cloud APIs are opt-in
+- **macOS sandbox entitlements:** minimum required set only in `app/src-tauri/entitlements.plist` (outgoing-network for optional API calls, no broad disk access)
+- **Credentials:** JWT tokens (access + refresh) stored in `AuthTokenStore` (Mutex-protected, in-memory only) in the Rust Tauri process; never written to disk; cleared on `clear_token` IPC call
+- **Passwords:** bcrypt-hashed (cost factor 12+) before storage; plaintext never persisted or logged
+- **SQLite:** plain user-owned file; no encryption (user's own sample library data, not PII); protected by OS file permissions
 - **Sidecar binary:** PyInstaller one-file bundle; SHA-256 checksum verified at Tauri startup before execution
 - **Code signing:**
   - macOS: Apple Developer ID Application certificate + notarization via `xcrun notarytool`
@@ -404,6 +453,7 @@ files[]
 - **CLI `--verbose` flag:** enables `DEBUG` logging for troubleshooting
 - **Tauri:** `tauri::api::log` for Rust-side events; forwarded to system console
 
+ 
 ```python
 # Correct logging pattern — stderr only:
 import logging
@@ -417,6 +467,7 @@ logger.debug("analyze: path=%s duration_ms=%d", path, elapsed_ms)
 
 ## Sidecar v2 Architecture (Phase 8+)
 
+ 
 ```
 JUCE Plugin                    Python Sidecar (PyInstaller bundle)
 ┌─────────────────┐            ┌──────────────────────────────────────┐

@@ -1,0 +1,105 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Auggie CLI — Debug Configurations
+# Maps to .vscode/launch.json configs. Tells Auggie how to debug each layer.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: debug
+description: >
+  Debug configurations for Python CLI, Flask web UI, FastAPI server, pytest,
+  and Rust Tauri. All mapped to VSCode launch configs (F5).
+
+# ── Python debugger (using debugpy via uv) ─────────────────────────────────────
+python:
+  interpreter: "${workspaceFolder}/.venv/bin/python"
+  module_mode: true    # prefer -m over script path (src-layout safe)
+  env_vars:
+    PYTHONDONTWRITEBYTECODE: "1"
+    SAMPLEMIND_LOG_LEVEL: debug
+
+  configs:
+    samplemind_cli:
+      name: "Debug: samplemind CLI"
+      module: samplemind
+      args: ["list", "--json"]   # swap to test other commands
+      cwd: "${workspaceFolder}"
+
+    flask_web:
+      name: "Debug: Flask web UI"
+      module: samplemind
+      args: ["serve", "--port", "5000"]
+      cwd: "${workspaceFolder}"
+      env:
+        FLASK_DEBUG: "1"
+
+    fastapi:
+      name: "Debug: FastAPI server"
+      module: samplemind
+      args: ["api", "--reload"]
+      cwd: "${workspaceFolder}"
+
+    pytest_all:
+      name: "Debug: pytest (all tests)"
+      module: pytest
+      args: ["tests/", "-v", "--tb=short", "--no-header"]
+      cwd: "${workspaceFolder}"
+
+    pytest_file:
+      name: "Debug: pytest (current file)"
+      module: pytest
+      args: ["${file}", "-v", "--tb=short"]
+      cwd: "${workspaceFolder}"
+
+    pytest_single:
+      name: "Debug: pytest (single test)"
+      module: pytest
+      args: ["${file}::${selectedText}", "-v", "--tb=long", "-s"]
+      cwd: "${workspaceFolder}"
+
+# ── Breakpoint tips ────────────────────────────────────────────────────────────
+breakpoints:
+  set_in_code: "import debugpy; debugpy.breakpoint()    # programmatic breakpoint"
+  vscode: "Click in gutter or press F9 on the line"
+  conditional: "Right-click gutter → Add Conditional Breakpoint"
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  framework: structlog
+  level_env: SAMPLEMIND_LOG_LEVEL
+  levels: [debug, info, warning, error]
+  format: "JSON structured (production) or pretty-printed (development)"
+  note: "Never use print() in committed code — use structlog"
+
+# ── Common debug scenarios ────────────────────────────────────────────────────
+scenarios:
+  import_error:
+    symptom: "ModuleNotFoundError: No module named 'samplemind'"
+    fix: "Run: uv sync. Check: python.defaultInterpreterPath = .venv/bin/python"
+
+  wrong_classifier:
+    symptom: "Sample classified as X but expected Y"
+    action: "auggie workflow debug-classifier path=<file.wav>"
+
+  db_not_found:
+    symptom: "No such file or directory: '~/.samplemind/library.db'"
+    fix: "Run: uv run python -c 'from samplemind.data.database import init_db; init_db()'"
+
+  ipc_broken:
+    symptom: "Tauri shows raw text instead of parsed JSON"
+    fix: "Check Python CLI isn't printing debug text to stdout. Run with --json and inspect."
+
+  sidecar_silent:
+    symptom: "JUCE plugin not responding"
+    fix: "Check socket: ls -la /tmp/samplemind.sock — restart: uv run python src/samplemind/sidecar/server.py &"
+
+  jwt_expired:
+    symptom: "401 Unauthorized on API calls"
+    fix: "POST /api/v1/auth/refresh with {refresh_token} to get new access_token"
+
+# ── Rust / Tauri debug ────────────────────────────────────────────────────────
+rust:
+  extension: rust-lang.rust-analyzer
+  lldb_extension: vadimcn.vscode-lldb
+  debug_command: "F5 → Rust (Tauri)" # configured in launch.json
+  cargo_flags: --manifest-path app/src-tauri/Cargo.toml
+  log_env: RUST_LOG=debug
+
