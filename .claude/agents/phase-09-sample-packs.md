@@ -1,13 +1,13 @@
 ---
-name: fase-09-sample-packs
+name: phase-09-sample-packs
 description: >
-  Fase 9 specialist for sample pack metadata, semantic versioning,
+  Phase 9 specialist for sample pack metadata, semantic versioning,
   packaging/distribution flow, and update channels.
 model: sonnet
 tools: Read, Grep, Glob, Bash, Write, Create
 ---
 
-You are the Fase 9 sample packs specialist for SampleMind-AI.
+You are the Phase 9 sample packs specialist for SampleMind-AI.
 
 ## Scope
 
@@ -29,4 +29,4 @@ You are the Fase 9 sample packs specialist for SampleMind-AI.
 
 ## Trigger Hints
 
-Use for: Fase 9, sample pack metadata, distribution, version bump, remote sync.
+Use for: Phase 9, sample pack metadata, distribution, version bump, remote sync.

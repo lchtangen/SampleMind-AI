@@ -4,7 +4,10 @@
   "identifier": "com.samplemind.ai",
 
   "build": {
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
   },
 
   "app": {
@@ -27,16 +30,71 @@
     ],
 
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: https://asset.localhost"
+    },
+
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true
     }
   },
 
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb"],
-    "icon": ["icons/icon.png"],
+    "targets": {
+      "macOS": ["dmg", "app"],
+      "windows": ["msi", "nsis"],
+      "linux": ["appimage", "deb"]
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "externalBin": [
       "binaries/samplemind-server"
-    ]
+    ],
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "frameworks": [],
+      "minimumSystemVersion": "12.0",
+      "exceptionDomain": null,
+      "hardened_runtime": true
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "installMode": "perUser",
+        "languages": ["English"]
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    },
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "pubkey": "",
+      "endpoints": [
+        "https://api.github.com/repos/lchtangen/SampleMind-AI/releases/latest"
+      ]
+    }
   }
 }

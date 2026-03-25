@@ -4,15 +4,15 @@ This directory contains routing agents used to specialize implementation by phas
 
 ## Phase Agents
 
-- fase-02-audio-testing
-- fase-03-database
-- fase-04-cli
-- fase-05-web
-- fase-06-desktop
-- fase-07-fl-studio
-- fase-08-vst-plugin
-- fase-09-sample-packs
-- fase-10-production
+- phase-02-audio-testing
+- phase-03-database
+- phase-04-cli
+- phase-05-web
+- phase-06-desktop
+- phase-07-fl-studio
+- phase-08-vst-plugin
+- phase-09-sample-packs
+- phase-10-production
 
 ## Cross-Cutting Agents
 

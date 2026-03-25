@@ -2,7 +2,7 @@
 name: doc-writer
 description: >
   Use this agent automatically for ANY task involving: writing or updating documentation,
-  the docs/en/ or docs/no/ directories, phase docs (phase-NN-*.md / fase-NN-*.md),
+  the docs/en/ or docs/no/ directories, phase docs (phase-NN-*.md),
   ARCHITECTURE.md, CLAUDE.md, README.md, CONTRIBUTING.md, creating a new phase document,
   translating docs to Norwegian, adding troubleshooting entries, updating the 7-section
   phase doc structure, or any request that starts with "document", "write a doc", "add to the docs",

@@ -16,7 +16,7 @@ Create a new phase document pair for SampleMind-AI. Arguments: $ARGUMENTS
 
 **Step 1 — Parse arguments:**
 Extract phase number (N) and title from $ARGUMENTS.
-- Norwegian filename: `docs/no/fase-NN-<slug>.md`
+- Norwegian filename: `docs/no/phase-NN-<slug>.md`
 - English filename: `docs/en/phase-NN-<slug>.md`
 - Slug: title in lowercase, spaces → hyphens, remove special chars
 
@@ -46,7 +46,7 @@ Every SampleMind phase doc has these 7 sections:
 - Norwegian doc: headings in Norwegian, prose in Norwegian (informal "du"), code identical to English version
 
 **Step 5 — Write the files:**
-Create both `docs/en/phase-NN-<slug>.md` and `docs/no/fase-NN-<slug>.md`.
+Create both `docs/en/phase-NN-<slug>.md` and `docs/no/phase-NN-<slug>.md`.
 The Norwegian doc mirrors the English doc with translated headings and prose.
 Code blocks are identical in both versions.
 
