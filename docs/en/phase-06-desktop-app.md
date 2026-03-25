@@ -776,5 +776,233 @@ Generate signing keys for the updater:
 # Generate key pair (run once, save private key securely):
 pnpm tauri signer generate -w ~/.tauri/samplemind.key
 # Output: public key (add to tauri.conf.json) + private key (use in GitHub Actions)
+
+---
+
+## 10. System Tray Integration
+
+Keep SampleMind running in the background as a menubar/tray app.
+The tray icon provides quick access to import, search, and library stats.
+
+```bash
+cd app && pnpm add @tauri-apps/plugin-tray
+cargo add tauri-plugin-tray --manifest-path app/src-tauri/Cargo.toml
+```
+
+```rust
+// app/src-tauri/src/tray.rs
+/// System tray menu for SampleMind-AI.
+///
+/// Menu items:
+///   Show Window       → bring main window to front
+///   Quick Import...   → open folder picker and import
+///   ─────────────────
+///   Library Stats     → show sample count in menu item title
+///   ─────────────────
+///   Quit              → exit application
+use tauri::{AppHandle, Manager};
+use tauri_plugin_tray::{TrayIconBuilder, MenuBuilder, MenuItem};
+
+pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let show  = MenuItem::with_id(app, "show",   "Show SampleMind", true, None::<&str>)?;
+    let import = MenuItem::with_id(app, "import", "Quick Import...", true, None::<&str>)?;
+    let sep1  = MenuItem::new_separator(app)?;
+    let stats = MenuItem::with_id(app, "stats",  "Loading library...", false, None::<&str>)?;
+    let sep2  = MenuItem::new_separator(app)?;
+    let quit  = MenuItem::with_id(app, "quit",   "Quit SampleMind", true, None::<&str>)?;
+
+    let menu = MenuBuilder::new(app)
+        .items(&[&show, &import, &sep1, &stats, &sep2, &quit])
+        .build()?;
+
+    let _tray = TrayIconBuilder::with_id("samplemind-tray")
+        .tooltip("SampleMind — AI Sample Library")
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show"   => { if let Some(w) = app.get_webview_window("main") { let _ = w.show(); let _ = w.set_focus(); } }
+            "import" => { let _ = app.get_webview_window("main").map(|w| w.emit("tray-import", ())); }
+            "quit"   => app.exit(0),
+            _ => {}
+        })
+        .build(app)?;
+
+    Ok(())
+}
+```
+
+Register in `main.rs`:
+
+```rust
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_tray::init())
+        .setup(|app| {
+            tray::build_tray(&app.handle())?;
+            Ok(())
+        })
+        // ...
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+```
+
+---
+
+## 11. Global Keyboard Shortcuts
+
+```bash
+cargo add tauri-plugin-global-shortcut --manifest-path app/src-tauri/Cargo.toml
+```
+
+```rust
+// app/src-tauri/src/shortcuts.rs
+/// Global keyboard shortcuts (work even when window is hidden).
+///
+/// ⌘⇧S / Ctrl+Shift+S  → Show/hide SampleMind window
+/// ⌘⇧I / Ctrl+Shift+I  → Quick import — opens folder picker
+/// ⌘⇧F / Ctrl+Shift+F  → Focus search bar
+use tauri::AppHandle;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+pub fn register_shortcuts(app: &AppHandle) {
+    let shortcuts = [
+        ("CmdOrCtrl+Shift+S", "toggle_window"),
+        ("CmdOrCtrl+Shift+I", "quick_import"),
+        ("CmdOrCtrl+Shift+F", "focus_search"),
+    ];
+
+    for (accelerator, action) in shortcuts {
+        let app_handle = app.clone();
+        let action = action.to_string();
+        let _ = app.global_shortcut().on_shortcut(accelerator, move |_, _, state| {
+            if state == ShortcutState::Pressed {
+                let _ = app_handle.get_webview_window("main")
+                    .map(|w| w.emit("global-shortcut", &action));
+            }
+        });
+    }
+}
+```
+
+Svelte handler:
+
+```svelte
+<!-- app/src/App.svelte -->
+<script lang="ts">
+  import { listen } from '@tauri-apps/api/event';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
+
+  listen<string>('global-shortcut', async ({ payload }) => {
+    const win = getCurrentWindow();
+    switch (payload) {
+      case 'toggle_window':
+        (await win.isVisible()) ? win.hide() : (win.show(), win.setFocus());
+        break;
+      case 'quick_import':
+        triggerImport();
+        break;
+      case 'focus_search':
+        document.querySelector<HTMLInputElement>('#search-input')?.focus();
+        break;
+    }
+  });
+</script>
+```
+
+---
+
+## 12. Drag and Drop from Desktop App to DAW
+
+Tauri 2 supports native drag-and-drop initiation from the app window.
+Users can drag a sample card from SampleMind and drop it directly into
+FL Studio, Ableton Live, or any DAW.
+
+```rust
+// app/src-tauri/src/commands.rs
+/// Start a native drag-and-drop operation for a sample file.
+/// The OS takes over and the user can drop the file into any app.
+#[tauri::command]
+pub async fn drag_sample(path: String, app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_drag::DragItem;
+    let item = DragItem::Files(vec![std::path::PathBuf::from(&path)]);
+    app.drag_and_drop(item).map_err(|e| e.to_string())
+}
+```
+
+```svelte
+<!-- app/src/SampleCard.svelte -->
+<script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
+  let { sample } = $props();
+
+  async function startDrag() {
+    // Initiate OS-level drag — user drops file into DAW
+    await invoke('drag_sample', { path: sample.path });
+  }
+</script>
+
+<div class="sample-card"
+     draggable="true"
+     on:dragstart={startDrag}
+     title="Drag to DAW">
+  <span class="instrument-badge">{sample.instrument}</span>
+  <span class="filename">{sample.filename}</span>
+  <span class="bpm">{sample.bpm} BPM</span>
+</div>
+```
+
+---
+
+## 13. Native Notifications and Auto-Start on Login
+
+```bash
+cargo add tauri-plugin-autostart --manifest-path app/src-tauri/Cargo.toml
+```
+
+```rust
+// Auto-start on login (macOS LaunchAgent, Windows Registry):
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+
+app.autostart_manager()
+    .enable()
+    .expect("failed to enable autostart");
+
+// Show a native notification when import completes:
+use tauri_plugin_notification::NotificationExt;
+app.notification()
+    .builder()
+    .title("SampleMind Import Complete")
+    .body(format!("{imported} samples added to library"))
+    .show()
+    .unwrap();
+```
+
+Add to `tauri.conf.json`:
+
+```json
+{
+  "plugins": {
+    "notification": {},
+    "autostart": {
+      "args": ["--hidden"]
+    }
+  }
+}
+```
+
+Capability (`capabilities/default.json`):
+
+```json
+{
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
+  ]
+}
+```
 ```
 

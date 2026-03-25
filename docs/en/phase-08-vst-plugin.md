@@ -644,5 +644,207 @@ codesign --deep --force --options runtime \
 # Verify signing:
 codesign --verify --verbose ~/Library/Audio/Plug-Ins/Components/SampleMind.component
 spctl --assess --type execute ~/Library/Audio/Plug-Ins/Components/SampleMind.component
+
+---
+
+## 8. Plugin State Save/Restore
+
+DAWs save plugin parameters with the project file. SampleMind stores
+the current search query, selected filters, and last-played sample.
+
+```cpp
+// plugin/Source/PluginProcessor.cpp
+
+/**
+ * getStateInformation — called by the DAW when saving the project.
+ *
+ * We serialize a simple JSON blob using JUCE's MemoryOutputStream.
+ * JUCE's XmlElement is simpler but JSON matches our sidecar protocol.
+ *
+ * State schema:
+ *   {
+ *     "version": 1,
+ *     "query": "trap kick",
+ *     "filters": {"instrument": "kick", "energy": "high"},
+ *     "last_sample_id": 42,
+ *     "volume": 0.8
+ *   }
+ */
+void SampleMindAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
+{
+    juce::DynamicObject::Ptr state = new juce::DynamicObject();
+    state->setProperty("version",        1);
+    state->setProperty("query",          currentQuery);
+    state->setProperty("last_sample_id", lastSampleId);
+    state->setProperty("volume",         masterVolume);
+
+    // Build filters object
+    auto* filters = new juce::DynamicObject();
+    filters->setProperty("instrument", filterInstrument);
+    filters->setProperty("energy",     filterEnergy);
+    state->setProperty("filters", juce::var(filters));
+
+    juce::MemoryOutputStream stream(destData, false);
+    juce::JSON::writeToStream(stream, juce::var(state.get()));
+}
+
+/**
+ * setStateInformation — called by the DAW when loading a saved project.
+ *
+ * Must be robust: if the state is malformed or from an old version,
+ * fall back to sensible defaults rather than crash.
+ */
+void SampleMindAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
+{
+    juce::String jsonStr(static_cast<const char*>(data), (size_t)sizeInBytes);
+    juce::var parsed = juce::JSON::parse(jsonStr);
+
+    if (!parsed.isObject()) {
+        DBG("SampleMind: invalid state JSON — using defaults");
+        return;
+    }
+
+    int version = parsed["version"];
+    if (version > 1) {
+        DBG("SampleMind: state version " << version << " > 1 — may be missing fields");
+    }
+
+    currentQuery    = parsed["query"].toString();
+    lastSampleId    = (int) parsed["last_sample_id"];
+    masterVolume    = (float) parsed["volume"];
+
+    if (auto* filters = parsed["filters"].getDynamicObject()) {
+        filterInstrument = filters->getProperty("instrument").toString();
+        filterEnergy     = filters->getProperty("energy").toString();
+    }
+
+    // Notify editor to refresh UI with restored state
+    if (auto* editor = dynamic_cast<SampleMindAudioProcessorEditor*>(getActiveEditor()))
+        editor->refreshFromState();
+}
+```
+
+---
+
+## 9. Preset Management
+
+Allow users to save and recall plugin presets (saved search configurations).
+
+```cpp
+// plugin/Source/PresetManager.h
+/**
+ * PresetManager — save/load named plugin configurations.
+ *
+ * Presets are stored as JSON files in:
+ *   macOS: ~/Library/Application Support/SampleMind/Presets/
+ *   Win:   %APPDATA%\SampleMind\Presets\
+ *
+ * Each preset file:
+ *   {
+ *     "name": "Trap Production Kit",
+ *     "version": 1,
+ *     "query": "trap",
+ *     "filters": { "instrument": "kick", "energy": "high" },
+ *     "tags": ["trap", "production", "808"]
+ *   }
+ */
+class PresetManager
+{
+public:
+    explicit PresetManager(SampleMindAudioProcessor& processor);
+
+    // Returns list of preset names available on disk
+    juce::StringArray getPresetNames() const;
+
+    // Save current processor state as a named preset
+    void savePreset(const juce::String& name);
+
+    // Load a named preset and apply to processor
+    bool loadPreset(const juce::String& name);
+
+    // Delete a preset file
+    bool deletePreset(const juce::String& name);
+
+private:
+    SampleMindAudioProcessor& mProcessor;
+    juce::File getPresetsDir() const;
+    juce::File getPresetFile(const juce::String& name) const;
+};
+```
+
+```cpp
+// plugin/Source/PresetManager.cpp
+juce::File PresetManager::getPresetsDir() const
+{
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("SampleMind").getChildFile("Presets");
+}
+
+void PresetManager::savePreset(const juce::String& name)
+{
+    juce::MemoryBlock stateData;
+    mProcessor.getStateInformation(stateData);
+
+    auto presetFile = getPresetFile(name);
+    getPresetsDir().createDirectory();
+    presetFile.replaceWithData(stateData.getData(), stateData.getSize());
+    DBG("Preset saved: " << presetFile.getFullPathName());
+}
+
+bool PresetManager::loadPreset(const juce::String& name)
+{
+    auto presetFile = getPresetFile(name);
+    if (!presetFile.existsAsFile()) return false;
+
+    juce::MemoryBlock data;
+    if (!presetFile.loadFileAsData(data)) return false;
+
+    mProcessor.setStateInformation(data.getData(), (int) data.getSize());
+    return true;
+}
+```
+
+---
+
+## 10. Plugin MIDI Output — Send Sample BPM to DAW
+
+When a sample is selected in the plugin, send MIDI notes/CC to the DAW
+so the tempo track can be updated automatically.
+
+```cpp
+// plugin/Source/PluginProcessor.cpp
+
+/**
+ * processBlock — runs on the audio thread. MUST NOT block.
+ *
+ * MIDI output strategy:
+ *   CC #14 = BPM integer part (0-127 → 60-187 BPM range)
+ *   CC #15 = BPM fractional part × 100 (e.g. 140.5 → CC14=80, CC15=50)
+ *   CC #16 = energy (0=low, 64=mid, 127=high)
+ *   Note-on C3 (36) = "sample loaded" signal for DAW automation
+ *
+ * All MIDI is added to midiMessages output buffer — DAW routes it freely.
+ */
+void SampleMindAudioProcessor::processBlock(
+    juce::AudioBuffer<float>& buffer,
+    juce::MidiBuffer& midiMessages)
+{
+    buffer.clear();  // SampleMind is FX plugin — passes audio through
+
+    if (pendingSampleLoad.exchange(false)) {
+        // Send BPM CC pair at sample position 0
+        int bpm_int  = juce::jlimit(60, 187, (int)currentBpm);
+        int bpm_frac = juce::jlimit(0, 99, (int)((currentBpm - bpm_int) * 100));
+        int energy_cc = (filterEnergy == "high") ? 127 : (filterEnergy == "mid") ? 64 : 0;
+
+        midiMessages.addEvent(juce::MidiMessage::controllerEvent(1, 14, bpm_int - 60), 0);
+        midiMessages.addEvent(juce::MidiMessage::controllerEvent(1, 15, bpm_frac), 1);
+        midiMessages.addEvent(juce::MidiMessage::controllerEvent(1, 16, energy_cc), 2);
+        // Note-on to signal "sample loaded" — velocity = sample ID mod 127
+        midiMessages.addEvent(juce::MidiMessage::noteOn(1, 36, (uint8)(lastSampleId % 127 + 1)), 3);
+        midiMessages.addEvent(juce::MidiMessage::noteOff(1, 36, (uint8)0), 24);
+    }
+}
+```
 ```
 

@@ -1,0 +1,119 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Skill: generate_sample
+# AI-powered audio sample generation from text descriptions.
+# Owner: phase-16-ai-generation
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: generate_sample
+description: >
+  Generate new audio samples from text descriptions, BPM targets, key signatures,
+  and instrument types. Uses AudioCraft (Meta MusicGen) or Stable Audio Open.
+  Generated samples are analyzed, quality-checked, and optionally auto-imported.
+agent: phase-16-ai-generation
+
+commands:
+  generate:
+    cli: "uv run samplemind generate '{prompt}' [--bpm {bpm}] [--key '{key}'] [--import] [--json]"
+    api: "POST /api/v1/generate"
+    tauri: "invoke('generate_sample', { prompt, bpm, key, model })"
+  list_models:
+    cli: "uv run samplemind generate --list-models"
+
+inputs:
+  prompt:
+    type: str
+    required: true
+    examples:
+      - "dark trap kick at 140 BPM"
+      - "ambient pad in A minor, slow attack"
+      - "punchy hi-hat shuffle, 135 BPM"
+      - "808 bass slide, sub, C minor"
+  target_bpm:
+    type: float
+    optional: true
+    note: "BPM tolerance for validation: ±5 BPM"
+  target_key:
+    type: str
+    optional: true
+    format: "'A min', 'C maj', 'G# min'"
+  duration_seconds:
+    type: float
+    default: 2.0
+    note: "Loops: use 4 × 4 × (60/BPM) for BPM-aligned length"
+  instrument:
+    type: str
+    optional: true
+    values: [kick, snare, hihat, bass, pad, lead, loop, sfx]
+  model:
+    type: str
+    default: "audiocraft/musicgen-small"
+    options:
+      audiocraft/musicgen-small:  "300M params, fast, ~2GB VRAM"
+      audiocraft/musicgen-medium: "1.5B params, balanced, ~6GB VRAM"
+      audiocraft/musicgen-large:  "3.3B params, best quality, ~12GB VRAM"
+      stable-audio:               "Optimized for one-shots and loops"
+      mock:                       "Sine wave — for testing only"
+  n_variations:
+    type: int
+    default: 1
+    note: "Generate N, pick best by RMS energy"
+
+outputs:
+  path:               "Absolute path to generated WAV file"
+  duration:           "Actual duration in seconds"
+  bpm_detected:       "BPM detected by Phase 2 analyzer"
+  key_detected:       "Key detected"
+  instrument_classified: "Instrument classified"
+  energy_classified:  "Energy: low/mid/high"
+  bpm_match:          "True if detected BPM within ±5 of target"
+  key_match:          "True if detected key == target"
+  instrument_match:   "True if classified == requested"
+  clipping:           "True if peak > 0.98 (warning)"
+  imported:           "True if auto-imported into library"
+  sample_id:          "SQLite ID if imported"
+
+quality_flags:
+  bpm_match:      "abs(detected - target) <= 5.0 BPM"
+  key_match:      "exact string match"
+  instrument_match: "exact match of classifier output"
+  clipping:       "max(abs(audio)) > 0.98"
+
+model_selection_guide:
+  one_shots: "stable-audio or audiocraft/audiogen-medium"
+  loops:     "audiocraft/musicgen-large (best tempo consistency)"
+  melodic:   "audiocraft/musicgen-medium"
+  sfx:       "stable-audio"
+  testing:   "mock (always available, no downloads)"
+
+trigger_keywords:
+  - generate sample, AudioCraft, MusicGen, Stable Audio, text-to-audio
+  - AI generation, synthesize, generation pipeline, auto-import generated
+  - Phase 16, model backend, BPM-aligned loop, generate kick
+
+trigger_files:
+  - "src/samplemind/generation/**/*.py"
+  - "src/samplemind/cli/commands/generate_cmd.py"
+  - "tests/test_generation.py"
+
+related_skills:
+  - analyze_audio    # post-generation analysis uses same analyzer
+  - semantic_search  # generated samples added to FAISS index
+  - import_samples   # auto-import pipeline
+
+related_workflows:
+  - add-audio-feature  # when adding new generation model or feature
+  - ci-check
+
+examples:
+  - command: "uv run samplemind generate 'dark trap kick' --bpm 140 --import"
+    description: "Generate a kick drum, analyze, import into library"
+
+  - command: "uv run samplemind generate 'lo-fi pad A minor' --model stable-audio --n 5"
+    description: "Generate 5 variations with Stable Audio, pick best"
+
+  - command: "uv run samplemind generate 'test' --model mock --json"
+    description: "Test the pipeline with mock backend (no downloads)"
+
+  - command: "uv run samplemind generate 'trap loop' --bpm 140 --instrument loop --duration 8"
+    description: "Generate BPM-aligned 4-bar loop (4×4×(60/140) = 6.86s)"
+

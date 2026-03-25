@@ -806,5 +806,252 @@ source.onmessage = (e) => {
   if (data.done) { source.close(); return; }
   updateProgressBar(data.completed, data.total);
 };
+
+---
+
+## 8. WebSocket Real-Time Updates
+
+While SSE works for import progress, **WebSocket** enables full bidirectional
+communication — the server can push updates when any client changes data.
+
+```bash
+uv add flask-socketio eventlet
+```
+
+```python
+# src/samplemind/web/socketio_ext.py
+"""
+Flask-SocketIO extension for real-time library updates.
+
+Events emitted by server → client:
+  sample_imported   → new sample added {id, filename, instrument, mood}
+  sample_tagged     → metadata updated {id, field, value}
+  import_progress   → {current, total, filename}
+  import_complete   → {imported, duplicates, errors}
+
+Events received from client → server:
+  subscribe_library → start streaming updates to this client
+  search            → {query} → server emits search_results
+"""
+from flask_socketio import SocketIO, emit, join_room
+
+socketio = SocketIO(cors_allowed_origins="*", async_mode="eventlet")
+
+
+def push_sample_imported(sample_dict: dict) -> None:
+    """Push to all connected clients when a sample is imported."""
+    socketio.emit("sample_imported", sample_dict, room="library")
+
+
+def push_import_progress(current: int, total: int, filename: str) -> None:
+    socketio.emit("import_progress",
+                  {"current": current, "total": total, "filename": filename},
+                  room="library")
+
+
+@socketio.on("subscribe_library")
+def on_subscribe():
+    """Client asks to join the library room for live updates."""
+    join_room("library")
+    emit("subscribed", {"room": "library"})
+
+
+@socketio.on("search")
+def on_search(data: dict):
+    """Client sends a search query; server responds with results."""
+    from samplemind.data.fts import fts_search
+    query = data.get("query", "")
+    results = fts_search(query, limit=50) if query else []
+    emit("search_results", {"query": query, "results": results})
+```
+
+Frontend JavaScript (add to `static/app.js`):
+
+```javascript
+// Real-time library updates via Socket.IO
+const socket = io();
+
+socket.on('connect', () => {
+  socket.emit('subscribe_library');
+});
+
+socket.on('sample_imported', (sample) => {
+  // Prepend new sample card to the library grid
+  const card = buildSampleCard(sample);
+  document.querySelector('#sample-grid').prepend(card);
+  showToast(`Imported: ${sample.filename}`);
+});
+
+socket.on('import_progress', ({current, total, filename}) => {
+  const pct = Math.round((current / total) * 100);
+  document.querySelector('#progress-bar').style.width = pct + '%';
+  document.querySelector('#progress-label').textContent = `${current}/${total} — ${filename}`;
+});
+
+socket.on('import_complete', ({imported, duplicates, errors}) => {
+  showToast(`Done: ${imported} imported, ${duplicates} duplicates, ${errors} errors`, 'success');
+  document.querySelector('#progress-bar').style.width = '0%';
+});
+
+// Live search via WebSocket
+document.querySelector('#search-input').addEventListener('input', (e) => {
+  socket.emit('search', { query: e.target.value });
+});
+
+socket.on('search_results', ({results}) => {
+  renderSamples(results);
+});
+```
+
+---
+
+## 9. Playlist Builder
+
+Drag samples into a playlist, reorder, and export as M3U, JSON, or FL Studio `.fst`.
+
+```python
+# src/samplemind/web/routes/playlist.py
+"""
+Playlist CRUD routes.
+
+Playlists are stored in the `playlists` and `playlist_items` tables.
+Each playlist has an ordered list of sample IDs.
+
+Routes:
+  GET  /playlists              → list all playlists
+  POST /playlists              → create {name, description}
+  GET  /playlists/<id>         → get playlist with samples
+  POST /playlists/<id>/add     → add sample {sample_id, position}
+  POST /playlists/<id>/reorder → {items: [{id, position}]}
+  DELETE /playlists/<id>       → delete playlist
+  GET  /playlists/<id>/export  → ?format=m3u|json|fst
+"""
+from flask import Blueprint, request, jsonify, Response
+from samplemind.data.repositories.playlist_repository import PlaylistRepository
+
+bp = Blueprint("playlists", __name__, url_prefix="/playlists")
+
+
+@bp.route("", methods=["GET"])
+def list_playlists():
+    return jsonify(PlaylistRepository.get_all())
+
+
+@bp.route("", methods=["POST"])
+def create_playlist():
+    data = request.get_json()
+    playlist = PlaylistRepository.create(
+        name=data["name"],
+        description=data.get("description", ""),
+    )
+    return jsonify(playlist), 201
+
+
+@bp.route("/<int:playlist_id>/export")
+def export_playlist(playlist_id: int):
+    fmt = request.args.get("format", "json")
+    playlist = PlaylistRepository.get_with_samples(playlist_id)
+    if not playlist:
+        return jsonify({"error": "not found"}), 404
+
+    if fmt == "m3u":
+        lines = ["#EXTM3U", f"#PLAYLIST:{playlist['name']}"]
+        for item in playlist["items"]:
+            lines.append(f"#EXTINF:-1,{item['filename']}")
+            lines.append(item["path"])
+        return Response("\n".join(lines), mimetype="audio/x-mpegurl",
+                        headers={"Content-Disposition": f"attachment; filename={playlist['name']}.m3u"})
+
+    return jsonify(playlist)
+```
+
+HTMX drag-and-drop for reordering (using Sortable.js):
+
+```html
+<!-- templates/playlist.html -->
+<ul id="playlist-items"
+    hx-post="/playlists/{{ playlist.id }}/reorder"
+    hx-trigger="end"
+    hx-swap="none">
+  {% for item in playlist.items %}
+  <li class="draggable" data-id="{{ item.id }}">
+    <span class="drag-handle">⠿</span>
+    <span class="filename">{{ item.filename }}</span>
+    <span class="meta">{{ item.instrument }} · {{ item.bpm }} BPM</span>
+    <button hx-delete="/playlists/{{ playlist.id }}/items/{{ item.id }}"
+            hx-target="closest li" hx-swap="outerHTML">✕</button>
+  </li>
+  {% endfor %}
+</ul>
+<script>
+  Sortable.create(document.getElementById('playlist-items'), {
+    handle: '.drag-handle',
+    animation: 150,
+    onEnd() {
+      const items = [...document.querySelectorAll('#playlist-items li')]
+        .map((el, i) => ({ id: el.dataset.id, position: i }));
+      htmx.trigger('#playlist-items', 'end', { items });
+    }
+  });
+</script>
+```
+
+---
+
+## 10. Waveform Visualizer
+
+Render sample waveforms in the browser using **WaveSurfer.js** — no server-side
+processing needed; WaveSurfer streams audio directly from `/audio/<id>`.
+
+```html
+<!-- templates/sample_card.html -->
+<div id="waveform-{{ sample.id }}" class="waveform-container"></div>
+<div class="waveform-controls">
+  <button onclick="ws_{{ sample.id }}.playPause()">▶/⏸</button>
+  <button onclick="ws_{{ sample.id }}.stop()">⏹</button>
+  <span class="time" id="time-{{ sample.id }}">0:00</span>
+</div>
+
+<script type="module">
+import WaveSurfer from 'https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.esm.js';
+
+const ws_{{ sample.id }} = WaveSurfer.create({
+  container: '#waveform-{{ sample.id }}',
+  url: '/audio/{{ sample.id }}',
+  waveColor: '#6366f1',       // indigo
+  progressColor: '#a5b4fc',   // lighter indigo
+  height: 48,
+  barWidth: 2,
+  barGap: 1,
+  interact: true,
+  normalize: true,
+});
+
+ws_{{ sample.id }}.on('timeupdate', (t) => {
+  const m = Math.floor(t / 60);
+  const s = String(Math.floor(t % 60)).padStart(2, '0');
+  document.getElementById('time-{{ sample.id }}').textContent = `${m}:${s}`;
+});
+</script>
+```
+
+Flask audio streaming with HTTP range request support (for seeking):
+
+```python
+@app.route("/audio/<int:sample_id>")
+@login_required
+def stream_audio(sample_id: int):
+    """
+    Stream WAV file with HTTP Range support.
+    WaveSurfer requires Range requests for large files.
+    Flask's send_file with conditional=True enables this automatically.
+    """
+    from samplemind.data.repositories.sample_repository import SampleRepository
+    sample = SampleRepository.get_by_id(sample_id)
+    if not sample or not Path(sample.path).exists():
+        abort(404)
+    return send_file(sample.path, mimetype="audio/wav", conditional=True,
+                     etag=True, last_modified=Path(sample.path).stat().st_mtime)
+```
 ```
 

@@ -882,3 +882,418 @@ code --install-extension rust-lang.rust-analyzer
 Verify extensions are running in WSL (not Windows) in the Extensions panel:
 look for the "WSL: Ubuntu" badge next to each extension.
 
+---
+
+## 11. Structured Logging with structlog
+
+Replace bare `print()` and `logging.basicConfig()` with **structlog** for
+machine-readable JSON logs that Sentry, Datadog, and Grafana can ingest.
+
+```bash
+uv add structlog rich
+```
+
+```python
+# src/samplemind/core/logging.py
+"""
+Structured logging configuration for SampleMind-AI.
+
+Uses structlog with two renderers:
+  - Development: rich-colored human-readable output  (to stderr)
+  - Production:  JSON lines, one log entry per line   (to stderr)
+Machine-parseable JSON output goes to stdout for IPC consumers (Tauri/Rust).
+"""
+import sys
+import structlog
+from samplemind.core.config import get_settings
+
+
+def configure_logging() -> None:
+    """Call once at application startup before any other imports."""
+    settings = get_settings()
+
+    shared_processors = [
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+    ]
+
+    if settings.log_format == "json":
+        # Production: JSON lines → pipe to log aggregator
+        processors = shared_processors + [
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ]
+    else:
+        # Development: colored Rich output
+        processors = shared_processors + [
+            structlog.dev.ConsoleRenderer(colors=True),
+        ]
+
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.make_filtering_bound_logger(
+            getattr(__import__("logging"), settings.log_level.upper(), 20)
+        ),
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+        cache_logger_on_first_use=True,
+    )
+
+
+def get_logger(name: str) -> structlog.BoundLogger:
+    return structlog.get_logger(name)
+```
+
+Usage in any module:
+
+```python
+from samplemind.core.logging import get_logger
+log = get_logger(__name__)
+
+# Structured key=value context attached to every subsequent log in this block:
+with structlog.contextvars.bound_contextvars(sample_id=42, path="/tmp/kick.wav"):
+    log.info("analyzing", bpm=140.0)
+    log.warning("low_rms", rms=0.001, threshold=0.015)
+```
+
+Environment variables:
+
+```bash
+SAMPLEMIND_LOG_LEVEL=debug   # debug / info / warning / error
+SAMPLEMIND_LOG_FORMAT=json   # json (prod) / console (dev)
+```
+
+---
+
+## 12. Environment Validation with pydantic-settings
+
+Catch missing or malformed config at startup — never silently use defaults
+in production.
+
+```bash
+uv add pydantic-settings
+```
+
+```python
+# src/samplemind/core/config.py
+"""
+Single source of truth for all SampleMind configuration.
+
+Load order (later overrides earlier):
+  1. Hardcoded defaults below
+  2. ~/.samplemind/config.toml        (user config file)
+  3. .env file in project root        (dev convenience)
+  4. Environment variables            (CI / production)
+
+Validation happens at startup: if SECRET_KEY is missing in production,
+the app raises immediately with a clear error instead of silently using
+an insecure default.
+"""
+from __future__ import annotations
+from pathlib import Path
+from typing import Literal
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+import platformdirs
+
+
+class Settings(BaseSettings):
+    # ── Database ──────────────────────────────────────────────────────────
+    database_url: str = Field(
+        default_factory=lambda: f"sqlite:///{platformdirs.user_data_dir('SampleMind', 'SampleMind-AI')}/samplemind.db",
+        description="SQLAlchemy connection string. Use sqlite:// for in-memory testing.",
+    )
+
+    # ── Authentication ────────────────────────────────────────────────────
+    secret_key: str = Field(
+        default="CHANGE-ME-IN-PRODUCTION-use-secrets-token-hex-32",
+        description="JWT signing key. Generate: python -c \"import secrets; print(secrets.token_hex(32))\"",
+    )
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
+
+    # ── Web servers ───────────────────────────────────────────────────────
+    flask_host: str = "127.0.0.1"
+    flask_port: int = 5000
+    flask_secret_key: str = Field(default="CHANGE-ME-FLASK")
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
+    cors_origins: list[str] = ["tauri://localhost", "http://localhost:5174", "http://localhost:5000"]
+
+    # ── Audio analysis ────────────────────────────────────────────────────
+    workers: int = 0              # 0 = auto (cpu_count)
+    sample_rate: int = 22050      # librosa default
+    max_file_size_mb: int = 500   # reject files larger than this
+
+    # ── Logging ───────────────────────────────────────────────────────────
+    log_level: Literal["debug", "info", "warning", "error"] = "info"
+    log_format: Literal["console", "json"] = "console"
+
+    # ── Optional integrations ─────────────────────────────────────────────
+    sentry_dsn: str | None = Field(default=None, description="Sentry DSN — opt-in crash reporting")
+    anthropic_api_key: str | None = Field(default=None, description="Auggie CLI integration")
+    openai_api_key: str | None = Field(default=None, description="Optional LLM features (Phase 12+)")
+
+    model_config = SettingsConfigDict(
+        env_prefix="SAMPLEMIND_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @field_validator("secret_key")
+    @classmethod
+    def warn_insecure_secret(cls, v: str) -> str:
+        if v.startswith("CHANGE-ME"):
+            import warnings
+            warnings.warn(
+                "SAMPLEMIND_SECRET_KEY is using the insecure default. "
+                "Set it to a random 32-byte hex string in production.",
+                stacklevel=2,
+            )
+        return v
+
+    @model_validator(mode="after")
+    def ensure_db_dir_exists(self) -> "Settings":
+        if self.database_url.startswith("sqlite:///"):
+            path = Path(self.database_url.replace("sqlite:///", ""))
+            path.parent.mkdir(parents=True, exist_ok=True)
+        return self
+
+
+_settings: Settings | None = None
+
+def get_settings() -> Settings:
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+def override_settings(**kwargs) -> Settings:
+    """Test helper — returns a new Settings with overrides, does not touch global."""
+    return Settings(**kwargs)
+```
+
+---
+
+## 13. Health Check System
+
+Every service exposes `/health` or `/api/v1/health`. The Tauri app polls this
+on startup to confirm Python services are live before showing the UI.
+
+```python
+# src/samplemind/core/health.py
+"""
+Health check aggregator.
+
+Each check is a callable returning (name, ok, detail).
+The overall status is 'ok' only if ALL checks pass.
+"""
+from __future__ import annotations
+import time
+import sqlite3
+from pathlib import Path
+from typing import NamedTuple
+from samplemind.core.config import get_settings
+
+
+class HealthResult(NamedTuple):
+    name: str
+    ok: bool
+    detail: str
+    latency_ms: float
+
+
+def check_database() -> HealthResult:
+    start = time.perf_counter()
+    try:
+        settings = get_settings()
+        db_path = settings.database_url.replace("sqlite:///", "")
+        conn = sqlite3.connect(db_path, timeout=2.0)
+        conn.execute("SELECT COUNT(*) FROM samples").fetchone()
+        conn.close()
+        ok, detail = True, f"samples table accessible at {db_path}"
+    except Exception as e:
+        ok, detail = False, str(e)
+    return HealthResult("database", ok, detail, (time.perf_counter() - start) * 1000)
+
+
+def check_audio_libraries() -> HealthResult:
+    start = time.perf_counter()
+    try:
+        import librosa, soundfile, numpy  # noqa: F401
+        ok, detail = True, f"librosa {librosa.__version__}"
+    except ImportError as e:
+        ok, detail = False, str(e)
+    return HealthResult("audio_libs", ok, detail, (time.perf_counter() - start) * 1000)
+
+
+def run_all_checks() -> dict:
+    import importlib.metadata
+    checks = [check_database(), check_audio_libraries()]
+    all_ok = all(c.ok for c in checks)
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "version": importlib.metadata.version("samplemind"),
+        "checks": [
+            {"name": c.name, "ok": c.ok, "detail": c.detail,
+             "latency_ms": round(c.latency_ms, 1)}
+            for c in checks
+        ],
+    }
+```
+
+FastAPI health endpoint (registered in `api/main.py`):
+
+```python
+from fastapi import APIRouter
+from samplemind.core.health import run_all_checks
+
+router = APIRouter(tags=["Health"])
+
+@router.get("/health")
+async def health() -> dict:
+    """
+    Health check endpoint.
+    Returns 200 + {"status": "ok"} if all subsystems healthy.
+    Returns 200 + {"status": "degraded"} with check details if any fail.
+    Tauri polls this at startup before showing the main window.
+    """
+    return run_all_checks()
+```
+
+---
+
+## 14. Configuration File Support (~/.samplemind/config.toml)
+
+Users can persist preferences without environment variables.
+`pydantic-settings` reads TOML natively in Python 3.11+.
+
+```toml
+# ~/.samplemind/config.toml  (created by: uv run samplemind config init)
+[samplemind]
+workers = 4
+log_level = "info"
+log_format = "console"
+max_file_size_mb = 200
+
+[samplemind.database]
+url = "sqlite:///~/.samplemind/library.db"
+
+[samplemind.fl_studio]
+# Override FL Studio export path (optional)
+export_path = "~/Documents/Image-Line/FL Studio 21/Data/Patches/Samples/SampleMind"
+```
+
+CLI command to create the default config:
+
+```python
+# src/samplemind/cli/commands/config_cmd.py
+import typer, tomllib, tomli_w
+from pathlib import Path
+from rich.console import Console
+
+app = typer.Typer(help="Manage SampleMind configuration")
+console = Console(stderr=True)
+CONFIG_PATH = Path.home() / ".samplemind" / "config.toml"
+
+@app.command()
+def init(force: bool = typer.Option(False, "--force", help="Overwrite existing config")):
+    """Create default config file at ~/.samplemind/config.toml"""
+    if CONFIG_PATH.exists() and not force:
+        console.print(f"[yellow]Config already exists:[/yellow] {CONFIG_PATH}")
+        console.print("Use --force to overwrite.")
+        raise typer.Exit()
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(DEFAULT_TOML)
+    console.print(f"[green]Created:[/green] {CONFIG_PATH}")
+
+@app.command()
+def show():
+    """Show current effective configuration"""
+    from samplemind.core.config import get_settings
+    import json, sys
+    settings = get_settings()
+    print(json.dumps(settings.model_dump(exclude={"secret_key", "flask_secret_key"}), indent=2),
+          file=sys.stdout)
+
+DEFAULT_TOML = """\
+[samplemind]
+workers = 0          # 0 = auto (cpu_count)
+log_level = "info"
+log_format = "console"
+"""
+```
+
+---
+
+## 15. Sentry Integration (Opt-In Crash Reporting)
+
+```bash
+uv add sentry-sdk[fastapi,flask]
+```
+
+```python
+# src/samplemind/core/sentry.py
+"""
+Opt-in crash reporting via Sentry.
+
+Enabled only if SAMPLEMIND_SENTRY_DSN is set in environment.
+Never collects audio data or file paths — only exception tracebacks.
+"""
+from samplemind.core.config import get_settings
+from samplemind.core.logging import get_logger
+
+log = get_logger(__name__)
+
+
+def init_sentry() -> bool:
+    """Initialize Sentry if DSN is configured. Returns True if enabled."""
+    settings = get_settings()
+    if not settings.sentry_dsn:
+        log.debug("sentry_disabled", reason="SAMPLEMIND_SENTRY_DSN not set")
+        return False
+
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.flask import FlaskIntegration
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        integrations=[FastApiIntegration(), FlaskIntegration()],
+        traces_sample_rate=0.1,   # 10% of transactions for performance
+        profiles_sample_rate=0.1,
+        environment="production" if settings.log_format == "json" else "development",
+        # Privacy: strip file paths from breadcrumbs
+        before_breadcrumb=lambda crumb, _hint: (
+            None if crumb.get("category") == "httplib" else crumb
+        ),
+        # Never send audio data
+        before_send=_strip_audio_data,
+    )
+    log.info("sentry_enabled", dsn=settings.sentry_dsn[:20] + "...")
+    return True
+
+
+def _strip_audio_data(event: dict, _hint: dict) -> dict:
+    """Remove any audio-related data from Sentry events before sending."""
+    # Strip file paths from exception values for privacy
+    if "exception" in event:
+        for exc in event["exception"].get("values", []):
+            for frame in exc.get("stacktrace", {}).get("frames", []):
+                frame.pop("vars", None)  # remove local variable values
+    return event
+```
+
+Call at startup in both Flask and FastAPI entry points:
+
+```python
+# In api/main.py create_app() and web/app.py:
+from samplemind.core.sentry import init_sentry
+init_sentry()   # no-op if SAMPLEMIND_SENTRY_DSN not set
+```
+

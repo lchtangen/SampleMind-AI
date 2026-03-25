@@ -770,3 +770,219 @@ uv run samplemind import ~/Music/ --workers 1           # single-threaded (debug
 The `--workers 0` default uses `os.cpu_count()` automatically — recommended for most machines.
 Use `--workers 1` for debugging analysis issues (easier to read stack traces).
 
+---
+
+## 11. Watch Mode — Live Folder Monitoring
+
+Monitor a folder in real-time and auto-import new files as they arrive.
+Uses **watchdog** to detect `IN_CREATE` events without polling.
+
+```bash
+uv add watchdog
+```
+
+```python
+# src/samplemind/cli/commands/watch_cmd.py
+"""
+Live folder watcher — auto-import new WAV/AIFF files.
+
+Usage:
+  uv run samplemind watch ~/Music/Samples/ --workers 4
+  uv run samplemind watch ~/Music/ --recursive --filter "*.wav,*.aiff"
+
+Events handled:
+  FILE_CREATED  → analyze + import (deduplicated by SHA-256)
+  FILE_MOVED    → update path in database
+  FILE_DELETED  → mark as missing (not deleted from DB — keeps metadata)
+
+Press Ctrl+C to stop watching.
+"""
+import time
+import typer
+from pathlib import Path
+from rich.console import Console
+from rich.live import Live
+from rich.table import Table
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileMovedEvent
+
+app = typer.Typer(help="Watch a folder and auto-import new samples")
+console = Console(stderr=True)
+
+AUDIO_EXTENSIONS = {".wav", ".aiff", ".aif", ".flac", ".mp3"}
+
+
+class SampleImportHandler(FileSystemEventHandler):
+    """Handles filesystem events and triggers analysis + import."""
+
+    def __init__(self, workers: int, stats: dict) -> None:
+        self.workers = workers
+        self.stats = stats
+
+    def on_created(self, event: FileCreatedEvent) -> None:
+        path = Path(event.src_path)
+        if event.is_directory or path.suffix.lower() not in AUDIO_EXTENSIONS:
+            return
+        try:
+            from samplemind.analyzer.audio_analysis import analyze_file
+            from samplemind.data.repositories.sample_repository import SampleRepository
+            result = analyze_file(str(path))
+            SampleRepository.upsert(result)
+            self.stats["imported"] += 1
+            console.print(f"[green]+[/green] {path.name} → {result.get('instrument', '?')}")
+        except Exception as e:
+            self.stats["errors"] += 1
+            console.print(f"[red]![/red] {path.name}: {e}", stderr=True)
+
+    def on_moved(self, event: FileMovedEvent) -> None:
+        from samplemind.data.repositories.sample_repository import SampleRepository
+        SampleRepository.update_path(event.src_path, event.dest_path)
+        self.stats["moved"] += 1
+
+
+@app.command()
+def watch(
+    folder: str = typer.Argument(..., help="Folder to watch"),
+    recursive: bool = typer.Option(True, "--recursive/--no-recursive"),
+    workers: int = typer.Option(0, "--workers", "-w"),
+):
+    """Watch a folder and auto-import new WAV/AIFF files."""
+    folder_path = Path(folder).expanduser().resolve()
+    if not folder_path.is_dir():
+        console.print(f"[red]Not a directory:[/red] {folder_path}")
+        raise typer.Exit(1)
+
+    stats = {"imported": 0, "errors": 0, "moved": 0}
+    handler = SampleImportHandler(workers=workers, stats=stats)
+    observer = Observer()
+    observer.schedule(handler, str(folder_path), recursive=recursive)
+    observer.start()
+
+    console.print(f"[bold green]Watching:[/bold green] {folder_path}")
+    console.print("Press [bold]Ctrl+C[/bold] to stop.\n")
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
+    console.print(f"\n[bold]Summary:[/bold] {stats['imported']} imported, {stats['errors']} errors, {stats['moved']} moved")
+```
+
+---
+
+## 12. Shell Completion
+
+Enable tab-completion for all `samplemind` commands in bash, zsh, and fish.
+
+```bash
+# Bash:
+uv run samplemind --install-completion bash >> ~/.bashrc
+
+# Zsh:
+uv run samplemind --install-completion zsh >> ~/.zshrc
+
+# Fish:
+uv run samplemind --install-completion fish > ~/.config/fish/completions/samplemind.fish
+```
+
+Typer generates completion scripts automatically. Add to `app.py`:
+
+```python
+# src/samplemind/cli/app.py
+import typer
+app = typer.Typer(
+    name="samplemind",
+    help="AI-powered sample library manager",
+    add_completion=True,   # enables --install-completion and --show-completion
+    rich_markup_mode="rich",
+    pretty_exceptions_show_locals=False,  # avoid leaking paths in error output
+)
+```
+
+---
+
+## 13. Export Command
+
+Export selected samples to various formats and destinations.
+
+```python
+# src/samplemind/cli/commands/export_cmd.py
+"""
+Export samples from the library to external destinations.
+
+Destinations:
+  fl-studio     → copy to FL Studio Samples/SampleMind/ folder
+  folder        → copy to specified path
+  csv           → export metadata as CSV
+  json          → export metadata as JSON (default for --json flag)
+  playlist-m3u  → create M3U playlist file
+"""
+import csv, json, sys, shutil
+from pathlib import Path
+import typer
+from rich.console import Console
+from rich.progress import track
+
+app = typer.Typer(help="Export samples or metadata")
+console = Console(stderr=True)
+
+
+@app.command()
+def export(
+    dest: str = typer.Argument("fl-studio", help="Destination: fl-studio | folder:<path> | csv | json | playlist-m3u"),
+    ids: str = typer.Option(None, "--ids", help="Comma-separated sample IDs"),
+    instrument: str = typer.Option(None, "--instrument", "-i"),
+    energy: str = typer.Option(None, "--energy", "-e"),
+    mood: str = typer.Option(None, "--mood", "-m"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Export samples to FL Studio, a folder, CSV, or M3U playlist."""
+    from samplemind.data.repositories.sample_repository import SampleRepository
+
+    # Build filter from options
+    filters = {}
+    if ids:
+        filters["ids"] = [int(i) for i in ids.split(",")]
+    if instrument:
+        filters["instrument"] = instrument
+    if energy:
+        filters["energy"] = energy
+    if mood:
+        filters["mood"] = mood
+
+    samples = SampleRepository.search(**filters)
+
+    if dest == "csv":
+        writer = csv.DictWriter(sys.stdout,
+                                fieldnames=["id","filename","bpm","key","instrument","energy","mood","path"])
+        writer.writeheader()
+        writer.writerows([s.model_dump() for s in samples])
+        return
+
+    if dest == "json":
+        print(json.dumps([s.model_dump() for s in samples], indent=2))
+        return
+
+    if dest.startswith("folder:"):
+        out_dir = Path(dest.split(":", 1)[1]).expanduser()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for s in track(samples, description="Exporting...", console=console):
+            if not dry_run:
+                shutil.copy2(s.path, out_dir / Path(s.path).name)
+        console.print(f"[green]Exported {len(samples)} samples to {out_dir}[/green]")
+        return
+
+    if dest == "fl-studio":
+        from samplemind.integrations.fl_studio import get_fl_samples_path, export_to_fl
+        fl_path = get_fl_samples_path()
+        exported = export_to_fl([Path(s.path) for s in samples], fl_path)
+        console.print(f"[green]Exported {len(exported)} samples to {fl_path}[/green]")
+        return
+
+    console.print(f"[red]Unknown destination:[/red] {dest}")
+    raise typer.Exit(1)
+```
+

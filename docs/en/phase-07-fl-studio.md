@@ -734,5 +734,277 @@ import rtmidi
 m = rtmidi.MidiOut()
 print('Available ports:', m.get_ports())
 "
+
+---
+
+## 8. MIDI Clock Sync — Send BPM to FL Studio via MIDI
+
+When a user loads a sample in SampleMind, automatically send MIDI clock
+messages to the IAC Driver so FL Studio locks its tempo to the sample's BPM.
+
+```bash
+uv add python-rtmidi mido
+```
+
+```python
+# src/samplemind/integrations/midi_sync.py
+"""
+MIDI BPM sync from SampleMind to FL Studio via IAC Driver (macOS).
+
+Protocol:
+  - MIDI Clock: 24 pulses per quarter note (PPQ)
+  - To sync 140 BPM: send 24 × 140 = 3360 clock ticks per minute = 56 ticks/sec
+  - Tick interval: 60 / (BPM × 24) seconds
+
+Usage:
+  sync = MidiBpmSync()
+  sync.start(bpm=140.0)    # begins sending MIDI clock
+  sync.stop()               # sends MIDI Stop, closes port
+
+macOS IAC Driver setup:
+  1. Open Audio MIDI Setup.app
+  2. Window → Show MIDI Studio
+  3. Double-click IAC Driver
+  4. Enable "Device is online"
+  5. Add port named "SampleMind Bus"
+"""
+from __future__ import annotations
+import threading
+import time
+import platform
+from typing import ClassVar
+import rtmidi
+
+
+IAC_PORT_NAME = "SampleMind Bus"   # macOS IAC Driver port
+PPQN = 24                           # MIDI standard: 24 pulses per quarter note
+
+
+class MidiBpmSync:
+    """Thread-safe MIDI clock generator. One instance per application."""
+
+    _instance: ClassVar["MidiBpmSync | None"] = None
+
+    def __init__(self) -> None:
+        self._midi_out = rtmidi.MidiOut()
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._bpm: float = 120.0
+
+    def get_available_ports(self) -> list[str]:
+        return self._midi_out.get_ports()
+
+    def _find_iac_port(self) -> int | None:
+        for i, name in enumerate(self._midi_out.get_ports()):
+            if IAC_PORT_NAME.lower() in name.lower() or "iac" in name.lower():
+                return i
+        return None
+
+    def start(self, bpm: float) -> bool:
+        """
+        Start sending MIDI clock at the given BPM.
+        Returns True if IAC port found and clock started.
+        """
+        if platform.system() != "Darwin":
+            return False  # IAC Driver is macOS-only
+
+        port_idx = self._find_iac_port()
+        if port_idx is None:
+            return False
+
+        self.stop()  # stop any existing clock
+        self._bpm = bpm
+        self._stop_event.clear()
+
+        if self._midi_out.is_port_open():
+            self._midi_out.close_port()
+        self._midi_out.open_port(port_idx)
+        self._midi_out.send_message([0xFA])  # MIDI Start
+
+        self._thread = threading.Thread(target=self._clock_loop, daemon=True)
+        self._thread.start()
+        return True
+
+    def update_bpm(self, bpm: float) -> None:
+        """Update BPM without stopping/restarting (smooth transition)."""
+        self._bpm = bpm
+
+    def stop(self) -> None:
+        """Stop MIDI clock and send MIDI Stop message."""
+        self._stop_event.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+        if self._midi_out.is_port_open():
+            self._midi_out.send_message([0xFC])  # MIDI Stop
+            self._midi_out.close_port()
+
+    def _clock_loop(self) -> None:
+        while not self._stop_event.is_set():
+            interval = 60.0 / (self._bpm * PPQN)
+            start = time.perf_counter()
+            self._midi_out.send_message([0xF8])  # MIDI Clock pulse
+            elapsed = time.perf_counter() - start
+            sleep_time = interval - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+```
+
+---
+
+## 9. Windows COM Automation
+
+On Windows, FL Studio exposes no AppleScript equivalent, but we can use
+**win32com** to interact with FL Studio via the Windows COM interface.
+
+```python
+# src/samplemind/integrations/fl_studio_win.py
+"""
+Windows FL Studio automation via win32com / Shell.Application.
+
+Capabilities on Windows:
+  - Focus FL Studio window
+  - Send keyboard shortcuts (F5 = play, F6 = stop, Browser shortcut)
+  - Open sample folder in Windows Explorer
+  - Copy path to clipboard via clip.exe
+
+win32com.shell.Shell requires:
+  pip install pywin32   (Windows only — never install on macOS/Linux)
+"""
+from __future__ import annotations
+import subprocess
+import sys
+from pathlib import Path
+
+
+def is_windows() -> bool:
+    return sys.platform == "win32"
+
+
+def focus_fl_studio_windows() -> bool:
+    """Bring FL Studio window to foreground using win32com."""
+    if not is_windows():
+        return False
+    try:
+        import win32com.client
+        shell = win32com.client.Dispatch("WScript.Shell")
+        # AppActivate returns True if the window was found and activated
+        return bool(shell.AppActivate("FL Studio"))
+    except ImportError:
+        return False
+
+
+def open_samples_folder_windows(fl_path: Path) -> None:
+    """Open the FL Studio SampleMind export folder in Windows Explorer."""
+    if not is_windows():
+        return
+    subprocess.Popen(["explorer", str(fl_path)])
+
+
+def send_key_to_fl_windows(key: str) -> None:
+    """
+    Send a keystroke to FL Studio.
+
+    Common keys:
+      "{F5}"         → Play/Stop
+      "^b"           → Open browser (Ctrl+B)
+      "^+i"          → Open sample browser import
+      "%(RIGHT)"     → Alt+Right (navigate browser)
+    """
+    if not is_windows():
+        return
+    try:
+        import win32com.client
+        shell = win32com.client.Dispatch("WScript.Shell")
+        if shell.AppActivate("FL Studio"):
+            shell.SendKeys(key)
+    except ImportError:
+        pass
+
+
+def copy_to_clipboard_windows(text: str) -> None:
+    """Copy text to Windows clipboard via clip.exe."""
+    subprocess.run("clip", input=text.encode("utf-16-le"), check=True)
+```
+
+---
+
+## 10. FL Studio 21 Channel Rack Integration
+
+FL Studio 21 added a REST-like local HTTP server for external integrations
+(beta, Windows only). SampleMind can push samples directly to the Channel Rack.
+
+```python
+# src/samplemind/integrations/fl21_api.py
+"""
+FL Studio 21 local HTTP API integration (experimental, Windows beta).
+
+FL Studio 21 exposes: http://localhost:9090/fl/
+This API is undocumented and may change between FL Studio updates.
+Always check if the server is running before using it.
+
+Capabilities:
+  - Load sample to Channel Rack slot
+  - Get current project BPM
+  - Set project BPM
+  - Get active pattern info
+"""
+from __future__ import annotations
+import sys
+import urllib.request
+import json
+from pathlib import Path
+
+FL21_API_BASE = "http://localhost:9090/fl"
+
+
+def fl21_available() -> bool:
+    """Check if FL Studio 21 local API is running."""
+    if sys.platform != "win32":
+        return False
+    try:
+        with urllib.request.urlopen(f"{FL21_API_BASE}/health", timeout=0.5) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def load_sample_to_channel(path: Path, channel_slot: int = 0) -> bool:
+    """
+    Load a sample file into FL Studio 21's Channel Rack.
+
+    Args:
+        path:         Absolute path to WAV/AIFF file
+        channel_slot: Channel Rack slot index (0-based)
+
+    Returns:
+        True if loaded successfully, False if API unavailable or error
+    """
+    if not fl21_available():
+        return False
+    try:
+        payload = json.dumps({"path": str(path), "slot": channel_slot}).encode()
+        req = urllib.request.Request(
+            f"{FL21_API_BASE}/channel/load",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=2.0) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def get_project_bpm() -> float | None:
+    """Get current project BPM from FL Studio 21."""
+    if not fl21_available():
+        return None
+    try:
+        with urllib.request.urlopen(f"{FL21_API_BASE}/transport/bpm", timeout=1.0) as r:
+            data = json.loads(r.read())
+            return float(data.get("bpm", 120.0))
+    except Exception:
+        return None
+```
 ```
 

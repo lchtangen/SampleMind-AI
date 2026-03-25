@@ -500,3 +500,175 @@ Version:  {"version": 2, "action": "search", ...} — versioned envelope
 4. Begin health-check ping loop (5s interval)
 5. On editor close: `PluginProcessor::releaseResources()` → `sidecar.shutdown()`
 
+---
+
+## 9. Semantic Search Layer (Phase 11)
+
+```
+User query
+  │
+  ├─ text: "dark trap kick"     → CLAP text encoder → 512-dim vector
+  └─ audio: reference.wav       → CLAP audio encoder → 512-dim vector
+                                         │
+                                         ▼
+                              FAISS IndexFlatIP
+                              ┌─────────────────────┐
+                              │ 512-dim × N samples  │
+                              │ L2-normalized vecs   │
+                              │ Cosine similarity    │
+                              │ < 5ms for 100k rows  │
+                              └─────────────────────┘
+                                         │
+                                         ▼
+                              Top-K results (sample_id + score)
+                                         │
+                                         ▼
+                              SQLite JOIN → full metadata
+```
+
+**Index storage:** `~/.samplemind/vector_index.faiss` + `vector_index_ids.npy`
+**Rebuild trigger:** After every batch import (incremental `add_batch()` for < 100 new samples)
+**ChromaDB alternative:** Available for hybrid vector+metadata queries
+
+---
+
+## 10. AI Curation Agent (Phase 12)
+
+```
+Library Stats (SQLite)
+        │
+        ▼
+  LibrarySnapshot
+  ┌─────────────────────────────┐
+  │ total: 4721                 │
+  │ bpm_histogram: {...}        │
+  │ gap_analysis: [             │
+  │   "Missing: lead, sfx"      │
+  │ ]                           │
+  └─────────────────────────────┘
+        │
+        ▼
+  LiteLLM (Claude / GPT-4o / Ollama)
+  ├── System: music curator prompt
+  ├── Context: library snapshot JSON
+  └── Response: structured JSON actions
+        │
+        ▼
+  ActionExecutor (requires --execute flag)
+  ├── create_playlist
+  ├── tag_sample
+  ├── update_mood
+  └── suggest_imports
+```
+
+**Provider routing:**
+- `SAMPLEMIND_ANTHROPIC_API_KEY` set → `anthropic/claude-sonnet-4-5`
+- No key → `ollama/llama3.2` (free, local, requires Ollama)
+
+---
+
+## 11. Cloud Sync Layer (Phase 13)
+
+```
+Local Library           Cloud Storage           Remote Devices
+(SQLite + files)               │                (SQLite + files)
+       │                       │                       │
+       │── push ──────────────►│◄────────── pull ──────┤
+       │   SHA-256 dedup       │   last-write-wins     │
+       │   R2 upload           │   Supabase upsert     │
+       │                       │                       │
+       │◄── pull ──────────────┤──────────── push ────►│
+```
+
+**File storage:** Cloudflare R2 (S3-compatible API)
+- Key format: `{prefix}/audio/{sha256[:2]}/{sha256}.wav`
+- Dedup: `HeadObject` before upload → skip if exists
+
+**Metadata sync:** Supabase PostgreSQL
+- Table: `synced_samples` (device_id, sha256, metadata, updated_at)
+- Conflict: last-write-wins by `updated_at`
+- Merge: pull inserts records not in local DB by SHA-256
+
+---
+
+## 12. AI Sample Generation (Phase 16)
+
+```
+GenerationRequest
+  ├── prompt: "dark trap kick at 140 BPM"
+  ├── target_bpm: 140.0
+  ├── target_key: "A min"
+  ├── instrument: "kick"
+  └── model: "audiocraft/musicgen-small"
+       │
+       ▼
+  GenerationEngine
+  ├── AudioCraftBackend   (Meta MusicGen / AudioGen)
+  ├── StableAudioBackend  (Stability AI)
+  └── MockBackend         (sine wave — tests)
+       │
+       ▼
+  Generated WAV
+       │
+       ▼
+  Phase 2 Analyzer → BPM, key, instrument, energy, LUFS
+       │
+       ▼
+  Quality Flags: bpm_match, key_match, instrument_match, clipping
+       │
+       ▼
+  SQLite import + FAISS index update (if --import)
+```
+
+**BPM-aligned loops:** `duration = 4 bars × 4 beats × (60/BPM)`
+**Output path:** `~/.samplemind/generated/gen_{slug}_{timestamp}.wav`
+
+---
+
+## 13. Technology Summary Table (Complete)
+
+| Layer | Technology | Purpose | Phase |
+|-------|-----------|---------|-------|
+| Audio analysis | librosa, soundfile, scipy | BPM, key, instrument, LUFS | 2 |
+| Audio embeddings | CLAP (msclap) | 512-dim audio+text embeddings | 11 |
+| Vector search | FAISS IndexFlatIP | cosine similarity, < 5ms | 11 |
+| Vector store alt | ChromaDB | hybrid vector+metadata | 11 |
+| AI curation | LiteLLM + Claude/Ollama | library organization LLM | 12 |
+| File sync | boto3 + Cloudflare R2 | cross-device audio sync | 13 |
+| Metadata sync | Supabase (PostgreSQL) | cross-device metadata | 13 |
+| Analytics | Plotly + pure SQL | BPM/key charts, heatmaps | 14 |
+| Marketplace | Stripe Connect + Supabase | paid pack distribution | 15 |
+| AI generation | AudioCraft + Stable Audio | text-to-audio generation | 16 |
+| Database | SQLite + SQLModel | primary data store | 1–3 |
+| CLI | Typer + Rich | terminal interface | 4 |
+| Web UI | Flask + HTMX + Socket.IO | browser interface | 5 |
+| Desktop | Tauri 2 + Svelte 5 | native desktop app | 6 |
+| FL Studio | Filesystem + AppleScript | DAW integration | 7 |
+| VST/AU | JUCE 8 | plugin interface | 8 |
+| Sample packs | ZIP (.smpack) + registry | pack distribution | 9 |
+| CI/CD | GitHub Actions + uv | build, test, release | 10 |
+
+---
+
+## 14. Feature Flag Map
+
+All post-Phase-10 features are gated by feature flags (see Phase 10 §11):
+
+| Feature | Flag | Default | Notes |
+|---------|------|---------|-------|
+| Semantic search | `semantic_search` | false | Requires CLAP model download |
+| AI curation | `ai_curation` | false | Requires API key or Ollama |
+| Cloud sync | `cloud_sync` | false | Requires R2 + Supabase config |
+| Waveform editor | `waveform_editor` | true | WaveSurfer.js, no server cost |
+| Playlist builder | `playlist_builder` | true | Rule-based, no ML |
+| Pack marketplace | `pack_marketplace` | false (10% rollout) | Stripe required |
+| LUFS analysis | `lufs_analysis` | true | pyloudnorm, lightweight |
+| Stereo analysis | `stereo_analysis` | true | numpy only |
+| MIDI clock sync | `midi_clock_sync` | true | IAC Driver, macOS only |
+| Multi-library | `multi_library` | true | Multiple SQLite DBs |
+
+Toggle any flag locally:
+```bash
+echo '{"semantic_search": {"enabled": true}}' > ~/.samplemind/flags.json
+```
+

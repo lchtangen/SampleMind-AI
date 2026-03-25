@@ -810,5 +810,304 @@ jobs:
           trusted-signing-account-name: samplemind-signing
           certificate-profile-name: SampleMind
           files-folder: app/src-tauri/target/release/bundle/msi/
+
+---
+
+## 11. Feature Flags
+
+Ship features behind flags so you can enable them per-user without a new release.
+Flags are read from a static JSON file on a CDN — updated without deploying code.
+
+```python
+# src/samplemind/core/feature_flags.py
+"""
+Feature flag system for SampleMind-AI.
+
+Flags are loaded from (in priority order):
+  1. Local override file:  ~/.samplemind/flags.json  (dev testing)
+  2. Remote CDN file:      https://cdn.samplemind.io/flags/stable.json
+  3. Built-in defaults:    FLAG_DEFAULTS below
+
+Flag format:
+  {
+    "semantic_search":    { "enabled": false, "rollout_pct": 0 },
+    "ai_curation":        { "enabled": false, "rollout_pct": 0 },
+    "waveform_editor":    { "enabled": true,  "rollout_pct": 100 },
+    "playlist_builder":   { "enabled": true,  "rollout_pct": 100 },
+    "pack_marketplace":   { "enabled": false, "rollout_pct": 10 }
+  }
+
+rollout_pct: 0–100. If < 100, feature is enabled for that % of users
+(based on a hash of the user's machine ID — deterministic, not random).
+"""
+from __future__ import annotations
+import json
+import hashlib
+import urllib.request
+from pathlib import Path
+from typing import Any
+from samplemind.core.logging import get_logger
+
+log = get_logger(__name__)
+
+FLAG_DEFAULTS: dict[str, dict[str, Any]] = {
+    "semantic_search":     {"enabled": False, "rollout_pct": 0},
+    "ai_curation":         {"enabled": False, "rollout_pct": 0},
+    "cloud_sync":          {"enabled": False, "rollout_pct": 0},
+    "waveform_editor":     {"enabled": True,  "rollout_pct": 100},
+    "playlist_builder":    {"enabled": True,  "rollout_pct": 100},
+    "pack_marketplace":    {"enabled": False, "rollout_pct": 10},
+    "lufs_analysis":       {"enabled": True,  "rollout_pct": 100},
+    "stereo_analysis":     {"enabled": True,  "rollout_pct": 100},
+    "midi_clock_sync":     {"enabled": True,  "rollout_pct": 100},
+    "multi_library":       {"enabled": True,  "rollout_pct": 100},
+}
+
+FLAGS_CDN_URL   = "https://cdn.samplemind.io/flags/stable.json"
+FLAGS_LOCAL_PATH = Path.home() / ".samplemind" / "flags.json"
+
+_flags_cache: dict[str, dict] | None = None
+
+
+def _get_machine_id() -> str:
+    """Stable per-machine identifier for deterministic rollout."""
+    import uuid
+    return str(uuid.getnode())  # MAC address as int → hex string
+
+
+def _in_rollout(flag_name: str, rollout_pct: int) -> bool:
+    """Deterministic rollout: same machine always gets same result."""
+    if rollout_pct >= 100:
+        return True
+    if rollout_pct <= 0:
+        return False
+    seed = f"{flag_name}:{_get_machine_id()}"
+    h = int(hashlib.md5(seed.encode()).hexdigest(), 16)
+    return (h % 100) < rollout_pct
+
+
+def load_flags(refresh: bool = False) -> dict[str, dict]:
+    global _flags_cache
+    if _flags_cache is not None and not refresh:
+        return _flags_cache
+
+    flags = dict(FLAG_DEFAULTS)
+
+    # Try local override first (highest priority)
+    if FLAGS_LOCAL_PATH.exists():
+        try:
+            overrides = json.loads(FLAGS_LOCAL_PATH.read_text())
+            flags.update(overrides)
+            log.debug("flags_local_override", path=str(FLAGS_LOCAL_PATH))
+        except Exception as e:
+            log.warning("flags_local_load_failed", error=str(e))
+
+    _flags_cache = flags
+    return flags
+
+
+def is_enabled(flag: str) -> bool:
+    """Check if a feature flag is enabled for this machine."""
+    flags = load_flags()
+    if flag not in flags:
+        log.warning("unknown_flag", flag=flag)
+        return False
+    cfg = flags[flag]
+    if not cfg.get("enabled", False):
+        return False
+    return _in_rollout(flag, cfg.get("rollout_pct", 100))
+
+
+# Convenience API:
+# from samplemind.core.feature_flags import is_enabled
+# if is_enabled("semantic_search"):
+#     show_semantic_search_ui()
+```
+
+---
+
+## 12. Update Channels — stable / beta / nightly
+
+Three release channels with independent update frequencies.
+
+```json
+// app/src-tauri/tauri.conf.json — channel-specific updater config
+{
+  "plugins": {
+    "updater": {
+      "active": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6...",
+      "endpoints": [
+        "https://cdn.samplemind.io/updates/{{channel}}/{{target}}-{{arch}}/latest.json"
+      ],
+      "dialog": true,
+      "headers": {
+        "X-Channel": "{{channel}}"
+      }
+    }
+  }
+}
+```
+
+Channel manifest format (served at CDN endpoint):
+
+```json
+// https://cdn.samplemind.io/updates/stable/darwin-aarch64/latest.json
+{
+  "version": "1.4.0",
+  "notes": "Waveform editor, playlist builder, MIDI clock sync",
+  "pub_date": "2026-03-15T12:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6...",
+      "url": "https://cdn.samplemind.io/releases/stable/SampleMind_1.4.0_aarch64.dmg"
+    },
+    "darwin-x86_64": {
+      "signature": "...",
+      "url": "https://cdn.samplemind.io/releases/stable/SampleMind_1.4.0_x86_64.dmg"
+    },
+    "windows-x86_64": {
+      "signature": "...",
+      "url": "https://cdn.samplemind.io/releases/stable/SampleMind_1.4.0_x86_64-setup.exe"
+    }
+  }
+}
+```
+
+Channel selection in Rust (reads from tauri.conf.json `channel` key):
+
+```rust
+// app/src-tauri/src/updater.rs
+/// Check for updates on the selected channel (stable / beta / nightly).
+/// Called once at startup and every 12 hours thereafter.
+#[tauri::command]
+pub async fn check_for_update(app: tauri::AppHandle, channel: String) -> Result<String, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app
+        .updater_builder()
+        .header("X-Channel", &channel)
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    match update {
+        Some(update) => Ok(format!("Update available: {}", update.version)),
+        None => Ok("Up to date".to_string()),
+    }
+}
+```
+
+---
+
+## 13. Crash Analytics and Error Reporting Pipeline
+
+Even with Sentry, having an offline crash log is essential for debugging
+issues that occur before Sentry can flush its buffer.
+
+```python
+# src/samplemind/core/crash_reporter.py
+"""
+Offline crash log + Sentry-compatible error reporting.
+
+When the app crashes:
+  1. Write crash report to ~/.samplemind/crashes/<timestamp>.json
+  2. On next startup, check for unsubmitted crash reports
+  3. If Sentry DSN configured: submit the crash reports
+  4. If not: keep local copy, notify user in UI
+
+Crash report format:
+  {
+    "version": "1.4.0",
+    "timestamp": "2026-03-15T12:34:56Z",
+    "platform": "darwin",
+    "python_version": "3.13.0",
+    "exception": "RuntimeError: ...",
+    "traceback": "...",
+    "context": {
+      "last_operation": "batch_import",
+      "sample_count": 4721
+    }
+  }
+"""
+from __future__ import annotations
+import json
+import sys
+import traceback
+import importlib.metadata
+from datetime import datetime, timezone
+from pathlib import Path
+from samplemind.core.logging import get_logger
+
+log = get_logger(__name__)
+CRASH_DIR = Path.home() / ".samplemind" / "crashes"
+
+
+def install_crash_handler(context: dict | None = None) -> None:
+    """
+    Install a global uncaught exception handler.
+    Call once at startup: install_crash_handler({"mode": "cli"})
+    """
+    _ctx = context or {}
+
+    def _handler(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, (KeyboardInterrupt, SystemExit)):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        _write_crash_report(exc_type, exc_value, exc_tb, _ctx)
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _handler
+
+
+def _write_crash_report(exc_type, exc_value, exc_tb, context: dict) -> Path:
+    CRASH_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc)
+    report = {
+        "version": importlib.metadata.version("samplemind"),
+        "timestamp": ts.isoformat(),
+        "platform": sys.platform,
+        "python_version": sys.version,
+        "exception": f"{exc_type.__name__}: {exc_value}",
+        "traceback": "".join(traceback.format_tb(exc_tb)),
+        "context": context,
+    }
+    path = CRASH_DIR / f"crash_{ts.strftime('%Y%m%d_%H%M%S')}.json"
+    path.write_text(json.dumps(report, indent=2))
+    log.error("crash_report_written", path=str(path))
+    return path
+
+
+def submit_pending_crashes() -> int:
+    """Submit unsubmitted crash reports on next startup. Returns count submitted."""
+    if not CRASH_DIR.exists():
+        return 0
+    crashes = list(CRASH_DIR.glob("crash_*.json"))
+    if not crashes:
+        return 0
+
+    from samplemind.core.config import get_settings
+    settings = get_settings()
+    submitted = 0
+
+    for crash_file in crashes:
+        try:
+            if settings.sentry_dsn:
+                import sentry_sdk
+                data = json.loads(crash_file.read_text())
+                sentry_sdk.capture_message(
+                    f"Crash report: {data['exception']}",
+                    level="fatal",
+                    extras=data,
+                )
+            # Rename to .submitted so we don't resubmit
+            crash_file.rename(crash_file.with_suffix(".json.submitted"))
+            submitted += 1
+        except Exception as e:
+            log.warning("crash_submit_failed", file=str(crash_file), error=str(e))
+
+    return submitted
 ```
 

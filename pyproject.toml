@@ -115,6 +115,9 @@ markers = [
     "macos: requires macOS — AppleScript, AU plugin, IAC MIDI driver",
     "juce: requires JUCE plugin built and installed",
     "benchmark: performance regression tests (run with: pytest -m benchmark)",
+    "audio: tests that write or read WAV files (slower than pure unit tests)",
+    "cli: tests that invoke Typer CLI commands via CliRunner",
+    "duplicates: tests for the fingerprint/dedup module",
 ]
 
 # ── Coverage ───────────────────────────────────────────────────────────────────
@@ -136,6 +139,7 @@ select = [
     "PERF", # Perflint (avoid unnecessary list copies, use generators, etc.)
     "LOG",  # flake8-logging (correct logging API usage)
     "G",    # flake8-logging-format (no % or f-string in logger calls)
+    "T20",  # flake8-print (ban print() in production code — use structlog or Rich)
 ]
 ignore = [
     "E501",   # line too long — handled by ruff format
@@ -148,7 +152,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "PTH", "ANN"]
+"tests/*" = ["S101", "PTH", "ANN", "T20"]   # assert, os.path, and print() are fine in tests
 "src/main.py" = ["PTH", "E"]
 "migrations/*" = ["ANN", "S"]
 

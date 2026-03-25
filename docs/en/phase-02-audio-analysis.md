@@ -762,3 +762,331 @@ def batch_wav_dir(tmp_path: Path) -> Path:
     return tmp_path
 ```
 
+---
+
+## 9. LUFS Loudness Analysis
+
+**LUFS (Loudness Units relative to Full Scale)** is the broadcast-standard
+loudness metric. Unlike RMS, LUFS is frequency-weighted (K-weighting) to match
+human hearing. Streaming platforms (Spotify −14 LUFS, YouTube −14 LUFS,
+Apple Music −16 LUFS) normalize to these targets.
+
+```bash
+uv add pyloudnorm
+```
+
+```python
+# src/samplemind/analyzer/loudness.py
+"""
+LUFS loudness analysis using pyloudnorm (ITU-R BS.1770-4 compliant).
+
+Outputs:
+  lufs_integrated  — overall loudness (use for normalization target)
+  lufs_short_term  — max 3s window loudness (use for peak detection)
+  lufs_range       — loudness range LRA (dynamic range indicator)
+  true_peak_dbfs   — true peak (must be < -1 dBFS for streaming)
+"""
+from __future__ import annotations
+import numpy as np
+import soundfile as sf
+import pyloudnorm as pyln
+from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class LoudnessResult:
+    lufs_integrated: float   # e.g. -14.2 (negative values, higher = louder)
+    lufs_short_term: float   # peak short-term LUFS
+    lufs_range: float        # loudness range (LRA) in LU
+    true_peak_dbfs: float    # true peak in dBFS
+
+
+STREAMING_TARGETS = {
+    "spotify":       -14.0,
+    "apple_music":   -16.0,
+    "youtube":       -14.0,
+    "tidal":         -14.0,
+    "soundcloud":    -14.0,
+}
+
+
+def analyze_loudness(path: Path) -> LoudnessResult:
+    """
+    Analyze the LUFS loudness of a WAV/AIFF file.
+
+    Requires stereo or mono audio. For stereo, pyloudnorm applies
+    the full ITU-R BS.1770-4 channel weighting (L, R, C, LFE, Ls, Rs).
+
+    Returns LoudnessResult with integrated LUFS and true peak.
+    Short stereo files (<0.4s) return −70 dBFS as a sentinel value
+    (too short for a full loudness measurement window).
+    """
+    data, rate = sf.read(str(path), always_2d=True)
+    meter = pyln.Meter(rate)  # BS.1770-4 meter
+
+    try:
+        lufs_integrated = meter.integrated_loudness(data)
+    except Exception:
+        lufs_integrated = -70.0   # sentinel for too-short files
+
+    # Short-term LUFS: slide 3s window, take max
+    block = int(rate * 3.0)
+    shorts = []
+    for start in range(0, max(1, len(data) - block), block // 2):
+        chunk = data[start: start + block]
+        if len(chunk) < block:
+            break
+        try:
+            shorts.append(meter.integrated_loudness(chunk))
+        except Exception:
+            pass
+    lufs_short_term = max(shorts) if shorts else lufs_integrated
+
+    # True peak (oversample × 4)
+    true_peak_dbfs = float(20 * np.log10(np.max(np.abs(data)) + 1e-10))
+
+    # Loudness range: difference between 95th and 10th percentile LUFS blocks
+    lufs_range = lufs_short_term - lufs_integrated if shorts else 0.0
+
+    return LoudnessResult(
+        lufs_integrated=round(lufs_integrated, 2),
+        lufs_short_term=round(lufs_short_term, 2),
+        lufs_range=round(abs(lufs_range), 2),
+        true_peak_dbfs=round(true_peak_dbfs, 2),
+    )
+
+
+def normalization_gain(current_lufs: float, target: str = "spotify") -> float:
+    """
+    Compute gain in dB to normalize a sample to a streaming target.
+
+    Returns positive value (need to boost) or negative (need to attenuate).
+    """
+    target_lufs = STREAMING_TARGETS.get(target, -14.0)
+    return round(target_lufs - current_lufs, 2)
+```
+
+Add to `analyze_file()` in `audio_analysis.py`:
+
+```python
+from samplemind.analyzer.loudness import analyze_loudness
+
+# Inside analyze_file():
+loudness = analyze_loudness(Path(path))
+result.update({
+    "lufs_integrated": loudness.lufs_integrated,
+    "lufs_short_term": loudness.lufs_short_term,
+    "lufs_range":      loudness.lufs_range,
+    "true_peak_dbfs":  loudness.true_peak_dbfs,
+})
+```
+
+---
+
+## 10. Stereo Field Analysis
+
+Stereo samples need additional features for mix-readiness scoring.
+
+```python
+# src/samplemind/analyzer/stereo.py
+"""
+Stereo field analysis for WAV/AIFF files.
+
+Features extracted:
+  stereo_width   — correlation-based width (0=mono, 1=full stereo, >1=wide/problematic)
+  mid_side_ratio — M/S power balance (>1 = more mid = mono-compatible)
+  phase_issues   — True if left/right correlation < -0.2 (phase cancellation risk)
+  is_mono        — True if L≈R within 0.1% (mono file in stereo container)
+"""
+from __future__ import annotations
+import numpy as np
+import soundfile as sf
+from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class StereoResult:
+    stereo_width: float     # 0.0 (mono) to 1.0+ (wide)
+    mid_side_ratio: float   # M power / S power
+    phase_issues: bool      # True = risk of cancellation on mono playback
+    is_mono: bool           # True = identical or near-identical channels
+
+
+def analyze_stereo(path: Path) -> StereoResult | None:
+    """
+    Returns None for mono files (single channel).
+    Use is_mono=True result for stereo containers with duplicate channels.
+    """
+    data, _ = sf.read(str(path), always_2d=True)
+    if data.shape[1] < 2:
+        return None  # genuinely mono — skip stereo analysis
+
+    left, right = data[:, 0], data[:, 1]
+
+    # Phase correlation: +1=identical, 0=uncorrelated, -1=anti-phase
+    if left.std() < 1e-8 or right.std() < 1e-8:
+        return StereoResult(0.0, 1.0, False, True)
+
+    correlation = float(np.corrcoef(left, right)[0, 1])
+
+    # M/S encoding
+    mid  = (left + right) / 2.0
+    side = (left - right) / 2.0
+    mid_power  = float(np.mean(mid ** 2))
+    side_power = float(np.mean(side ** 2))
+
+    stereo_width   = 1.0 - abs(correlation)
+    mid_side_ratio = mid_power / (side_power + 1e-10)
+    phase_issues   = correlation < -0.2
+
+    # Mono check: RMS of difference channel < 0.1% of mid
+    diff_rms = float(np.sqrt(np.mean((left - right) ** 2)))
+    mid_rms  = float(np.sqrt(np.mean(mid ** 2)))
+    is_mono  = diff_rms < 0.001 * (mid_rms + 1e-10)
+
+    return StereoResult(
+        stereo_width=round(stereo_width, 4),
+        mid_side_ratio=round(mid_side_ratio, 4),
+        phase_issues=phase_issues,
+        is_mono=is_mono,
+    )
+```
+
+---
+
+## 11. Spectral Flux and Transient Sharpness
+
+**Spectral flux** measures frame-to-frame spectral change — high flux = sharp
+transient (kick, snare), low flux = sustained (pad, bass). Use it to improve
+`onset_max` threshold accuracy.
+
+```python
+# src/samplemind/analyzer/transients.py
+"""
+Transient and spectral flux analysis.
+
+spectral_flux         — mean frame-to-frame spectral change (0–1 normalized)
+transient_sharpness   — ratio of onset_max / mean spectral flux
+attack_time_ms        — estimated time in ms from start to first major onset
+"""
+from __future__ import annotations
+import numpy as np
+import librosa
+from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class TransientResult:
+    spectral_flux: float      # normalized, higher = sharper transients
+    transient_sharpness: float
+    attack_time_ms: float
+
+
+def analyze_transients(y: np.ndarray, sr: int) -> TransientResult:
+    """
+    Compute transient features from a pre-loaded audio array.
+
+    Accepts the same (y, sr) pair from librosa.load() — avoids double-loading.
+    """
+    # Spectral flux: L1 norm of positive spectral differences
+    stft = np.abs(librosa.stft(y))
+    flux = np.diff(stft, axis=1)
+    flux_pos = np.maximum(flux, 0)                      # rectified flux
+    flux_mean = float(np.mean(flux_pos))
+
+    # Normalize to 0–1 relative to max amplitude
+    max_amp = np.max(np.abs(stft)) + 1e-10
+    spectral_flux = float(np.clip(flux_mean / max_amp, 0.0, 1.0))
+
+    # Onset envelope
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    onset_max = float(np.max(onset_env))
+    transient_sharpness = onset_max / (flux_mean + 1e-10)
+
+    # Attack time: first frame where onset_env > 20% of max
+    threshold = 0.2 * onset_max
+    attack_frames = np.where(onset_env > threshold)[0]
+    attack_time_ms = (
+        float(attack_frames[0]) * 512 / sr * 1000
+        if len(attack_frames) > 0 else 0.0
+    )
+
+    return TransientResult(
+        spectral_flux=round(spectral_flux, 6),
+        transient_sharpness=round(transient_sharpness, 4),
+        attack_time_ms=round(attack_time_ms, 1),
+    )
+```
+
+---
+
+## 12. Harmonic Complexity
+
+Quantifies tonal complexity — useful for distinguishing melodic samples
+(pads, leads, bass) from percussive/noisy ones (kicks, hihats, sfx).
+
+```python
+# src/samplemind/analyzer/harmony.py
+"""
+Harmonic complexity analysis using chromagram decomposition.
+
+harmonic_complexity  — 0.0 (pure sine) to 1.0 (dense chord / noise)
+key_confidence       — 0.0–1.0 confidence in the detected key
+dominant_pitches     — list of pitch classes with highest chroma energy
+"""
+from __future__ import annotations
+import numpy as np
+import librosa
+from dataclasses import dataclass
+
+
+PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+@dataclass
+class HarmonyResult:
+    harmonic_complexity: float      # 0=simple, 1=complex
+    key_confidence: float           # 0–1
+    key: str                        # e.g. "A min"
+    dominant_pitches: list[str]     # top-3 pitch classes by energy
+
+
+def analyze_harmony(y: np.ndarray, sr: int) -> HarmonyResult:
+    """
+    Separate harmonic content from percussive, then analyze chromagram.
+    Uses librosa HPSS (Harmonic-Percussive Source Separation).
+    """
+    # Harmonic/percussive separation
+    y_harmonic, _ = librosa.effects.hpss(y)
+
+    # Chromagram from harmonic component only
+    chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr)
+    chroma_mean = chroma.mean(axis=1)                       # shape (12,)
+
+    # Harmonic complexity: entropy of chroma distribution
+    chroma_norm = chroma_mean / (chroma_mean.sum() + 1e-10)
+    entropy = float(-np.sum(chroma_norm * np.log2(chroma_norm + 1e-10)))
+    max_entropy = np.log2(12)                               # max entropy with 12 bins
+    harmonic_complexity = float(np.clip(entropy / max_entropy, 0.0, 1.0))
+
+    # Key detection using librosa's key correlation templates
+    keys, scores = librosa.key_estimation.key_correlation(chroma_mean)
+    key_idx = int(np.argmax(scores))
+    key_confidence = float(np.max(scores))
+    key_name = f"{PITCH_CLASSES[key_idx % 12]} {'maj' if key_idx < 12 else 'min'}"
+
+    # Dominant pitch classes (top 3 by chroma energy)
+    top_3 = np.argsort(chroma_mean)[-3:][::-1]
+    dominant_pitches = [PITCH_CLASSES[i] for i in top_3]
+
+    return HarmonyResult(
+        harmonic_complexity=round(harmonic_complexity, 4),
+        key_confidence=round(key_confidence, 4),
+        key=key_name,
+        dominant_pitches=dominant_pitches,
+    )
+```
+

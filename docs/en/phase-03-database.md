@@ -1068,5 +1068,337 @@ def run_optimize_on_shutdown() -> None:
     """Run PRAGMA optimize to update query planner statistics on app exit."""
     with get_engine().connect() as conn:
         conn.exec_driver_sql("PRAGMA optimize")
+
+---
+
+## 8. FTS5 Full-Text Search
+
+SQLite's **FTS5** virtual table enables sub-millisecond full-text search
+across filename, tags, genre, and mood columns — without an external search engine.
+
+```python
+# src/samplemind/data/fts.py
+"""
+FTS5 full-text search for the SampleMind library.
+
+The `samples_fts` virtual table mirrors text columns from `samples` and
+updates automatically via triggers. This enables:
+  - Prefix search: "kic" matches "kick_808_deep"
+  - Multi-column: "trap kick" finds samples with "trap" in genre AND "kick" in instrument
+  - Ranking: BM25 relevance scoring (built into SQLite FTS5)
+
+FTS5 is NOT case-sensitive by default. The unicode61 tokenizer handles
+accented characters and non-ASCII filenames.
+"""
+from __future__ import annotations
+import sqlite3
+from pathlib import Path
+from samplemind.data.orm import get_db_path
+
+
+FTS_CREATE = """
+CREATE VIRTUAL TABLE IF NOT EXISTS samples_fts USING fts5(
+    filename,
+    instrument,
+    mood,
+    genre,
+    tags,
+    energy,
+    content='samples',
+    content_rowid='id',
+    tokenize='unicode61 remove_diacritics 1'
+);
+"""
+
+# Triggers to keep FTS in sync with the main samples table
+FTS_TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS samples_ai AFTER INSERT ON samples BEGIN
+    INSERT INTO samples_fts(rowid, filename, instrument, mood, genre, tags, energy)
+    VALUES (new.id, new.filename, new.instrument, new.mood, new.genre, new.tags, new.energy);
+END;
+
+CREATE TRIGGER IF NOT EXISTS samples_ad AFTER DELETE ON samples BEGIN
+    INSERT INTO samples_fts(samples_fts, rowid, filename, instrument, mood, genre, tags, energy)
+    VALUES ('delete', old.id, old.filename, old.instrument, old.mood, old.genre, old.tags, old.energy);
+END;
+
+CREATE TRIGGER IF NOT EXISTS samples_au AFTER UPDATE ON samples BEGIN
+    INSERT INTO samples_fts(samples_fts, rowid, filename, instrument, mood, genre, tags, energy)
+    VALUES ('delete', old.id, old.filename, old.instrument, old.mood, old.genre, old.tags, old.energy);
+    INSERT INTO samples_fts(rowid, filename, instrument, mood, genre, tags, energy)
+    VALUES (new.id, new.filename, new.instrument, new.mood, new.genre, new.tags, new.energy);
+END;
+"""
+
+
+def init_fts(db_path: str | None = None) -> None:
+    """Create FTS5 table and sync triggers. Safe to call multiple times (IF NOT EXISTS)."""
+    conn = sqlite3.connect(db_path or get_db_path())
+    try:
+        conn.executescript(FTS_CREATE + FTS_TRIGGERS)
+        # Populate FTS from existing data (idempotent)
+        conn.execute("INSERT OR IGNORE INTO samples_fts SELECT id, filename, instrument, mood, genre, tags, energy FROM samples")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def fts_search(query: str, limit: int = 50, db_path: str | None = None) -> list[dict]:
+    """
+    Full-text search across filename, instrument, mood, genre, tags, energy.
+
+    Query syntax (FTS5 native):
+      "trap kick"          → both words present
+      trap*                → prefix match
+      "dark mood" OR bass  → boolean OR
+      -hihat               → exclude hihat
+      instrument:kick      → column-scoped search
+
+    Returns list of dicts ordered by BM25 relevance (best match first).
+    """
+    conn = sqlite3.connect(db_path or get_db_path())
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """
+            SELECT s.*, bm25(samples_fts) AS relevance
+            FROM samples_fts
+            JOIN samples s ON s.id = samples_fts.rowid
+            WHERE samples_fts MATCH ?
+            ORDER BY relevance
+            LIMIT ?
+            """,
+            (query, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.OperationalError as e:
+        # Invalid FTS5 query syntax — return empty rather than crash
+        if "fts5: syntax error" in str(e).lower():
+            return []
+        raise
+    finally:
+        conn.close()
+```
+
+---
+
+## 9. Database Backup and Point-in-Time Restore
+
+SQLite's `backup()` API creates a consistent online backup even while
+the database is being written to. No file-system copy required.
+
+```python
+# src/samplemind/data/backup.py
+"""
+Online database backup using SQLite's built-in backup API.
+
+Features:
+  - Online backup: no read lock needed, safe during writes
+  - Compressed backups (.db.gz) with optional encryption
+  - Automatic rotation: keep N most recent backups
+  - Restore from any backup with validation
+
+Backup naming convention:
+  samplemind_YYYYMMDD_HHMMSS.db.gz
+
+Usage:
+  uv run samplemind backup create
+  uv run samplemind backup list
+  uv run samplemind backup restore samplemind_20260315_142300.db.gz
+"""
+from __future__ import annotations
+import gzip
+import re
+import sqlite3
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from samplemind.data.orm import get_db_path
+from samplemind.core.logging import get_logger
+
+log = get_logger(__name__)
+
+DEFAULT_BACKUP_DIR = Path.home() / ".samplemind" / "backups"
+BACKUP_PATTERN = re.compile(r"samplemind_\d{8}_\d{6}\.db(\.gz)?$")
+
+
+def create_backup(
+    backup_dir: Path = DEFAULT_BACKUP_DIR,
+    compress: bool = True,
+    keep_last: int = 10,
+) -> Path:
+    """
+    Create an online backup of the current library database.
+
+    Args:
+        backup_dir: Directory to store backup files
+        compress:   If True, gzip-compress the backup (saves ~70% space)
+        keep_last:  Rotate old backups, keeping only the N most recent
+
+    Returns:
+        Path to the created backup file
+    """
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    base_name = f"samplemind_{ts}.db"
+    backup_path = backup_dir / (base_name + (".gz" if compress else ""))
+
+    src_path = get_db_path()
+    src_conn = sqlite3.connect(src_path)
+    tmp_path = backup_dir / base_name
+
+    try:
+        # SQLite online backup API — safe during concurrent reads/writes
+        dst_conn = sqlite3.connect(str(tmp_path))
+        src_conn.backup(dst_conn, pages=100)   # pages=-1 for full backup in one go
+        dst_conn.close()
+
+        if compress:
+            with open(tmp_path, "rb") as f_in, gzip.open(str(backup_path), "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+            tmp_path.unlink()
+        else:
+            tmp_path.rename(backup_path)
+
+        log.info("backup_created", path=str(backup_path), compressed=compress)
+    finally:
+        src_conn.close()
+
+    _rotate_backups(backup_dir, keep_last)
+    return backup_path
+
+
+def restore_backup(backup_path: Path, confirm: bool = False) -> None:
+    """
+    Restore the library database from a backup file.
+
+    ⚠ This OVERWRITES the current database. Always create a backup first:
+      uv run samplemind backup create
+    """
+    if not confirm:
+        raise ValueError("Pass confirm=True to restore. This overwrites the current database.")
+
+    db_path = Path(get_db_path())
+    # Safety backup of current DB before overwrite
+    safety = db_path.with_suffix(f".pre-restore-{datetime.now().strftime('%H%M%S')}.db")
+    shutil.copy2(str(db_path), str(safety))
+    log.info("safety_backup", path=str(safety))
+
+    if str(backup_path).endswith(".gz"):
+        with gzip.open(str(backup_path), "rb") as f_in, open(str(db_path), "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+    else:
+        shutil.copy2(str(backup_path), str(db_path))
+
+    # Validate restored database
+    conn = sqlite3.connect(str(db_path))
+    count = conn.execute("SELECT COUNT(*) FROM samples").fetchone()[0]
+    conn.close()
+    log.info("restore_complete", samples_count=count, backup=str(backup_path))
+
+
+def _rotate_backups(backup_dir: Path, keep_last: int) -> None:
+    backups = sorted(
+        [f for f in backup_dir.iterdir() if BACKUP_PATTERN.match(f.name)],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in backups[keep_last:]:
+        old.unlink()
+        log.debug("backup_rotated", deleted=str(old))
+```
+
+---
+
+## 10. Multi-Library Support
+
+Power users often maintain separate libraries (personal, client projects,
+packs). Multi-library support without separate installs.
+
+```python
+# src/samplemind/data/library_manager.py
+"""
+Multi-library manager.
+
+Each library is an independent SQLite database file. Users can:
+  - Create named libraries:  uv run samplemind library create "Client X"
+  - Switch active library:   uv run samplemind library use "Client X"
+  - List libraries:          uv run samplemind library list
+  - Export library:          uv run samplemind library export "Client X" --format json
+
+Active library persists in ~/.samplemind/active_library.
+
+Registry is stored in ~/.samplemind/libraries.json (not in any DB).
+"""
+from __future__ import annotations
+import json
+from pathlib import Path
+from dataclasses import dataclass, asdict
+from datetime import datetime, timezone
+import platformdirs
+
+REGISTRY_PATH = Path(platformdirs.user_config_dir("SampleMind")) / "libraries.json"
+ACTIVE_PATH   = Path(platformdirs.user_config_dir("SampleMind")) / "active_library"
+DATA_DIR      = Path(platformdirs.user_data_dir("SampleMind", "SampleMind-AI"))
+
+
+@dataclass
+class Library:
+    name: str
+    path: str          # absolute path to .db file
+    created_at: str    # ISO 8601
+    description: str = ""
+
+
+class LibraryManager:
+    def __init__(self, registry_path: Path = REGISTRY_PATH) -> None:
+        self.registry_path = registry_path
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _load(self) -> dict[str, Library]:
+        if not self.registry_path.exists():
+            return {}
+        data = json.loads(self.registry_path.read_text())
+        return {k: Library(**v) for k, v in data.items()}
+
+    def _save(self, libs: dict[str, Library]) -> None:
+        self.registry_path.write_text(
+            json.dumps({k: asdict(v) for k, v in libs.items()}, indent=2)
+        )
+
+    def create(self, name: str, description: str = "") -> Library:
+        libs = self._load()
+        if name in libs:
+            raise ValueError(f"Library '{name}' already exists")
+        slug = name.lower().replace(" ", "_")
+        db_path = DATA_DIR / f"library_{slug}.db"
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        lib = Library(name=name, path=str(db_path),
+                      created_at=datetime.now(timezone.utc).isoformat(),
+                      description=description)
+        libs[name] = lib
+        self._save(libs)
+        # Initialize new database schema
+        from samplemind.data.orm import init_orm
+        init_orm(db_url=f"sqlite:///{db_path}")
+        return lib
+
+    def use(self, name: str) -> Library:
+        libs = self._load()
+        if name not in libs:
+            raise ValueError(f"Library '{name}' not found. Create it first.")
+        ACTIVE_PATH.write_text(name)
+        return libs[name]
+
+    def active(self) -> Library | None:
+        libs = self._load()
+        if ACTIVE_PATH.exists():
+            name = ACTIVE_PATH.read_text().strip()
+            return libs.get(name)
+        return None
+
+    def list_all(self) -> list[Library]:
+        return list(self._load().values())
+```
 ```
 

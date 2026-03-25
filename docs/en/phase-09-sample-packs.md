@@ -917,5 +917,272 @@ CLI command to browse registry:
 uv run samplemind pack list          # list available packs from registry
 uv run samplemind pack search trap   # search registry
 uv run samplemind pack install dark-trap-essentials  # download + import
+
+---
+
+## 9. Pack Registry API
+
+A lightweight JSON registry API hosted on GitHub Pages or Cloudflare Workers.
+No backend required — the index is a static JSON file updated via GitHub Actions.
+
+```python
+# src/samplemind/packs/registry.py
+"""
+Public sample pack registry client.
+
+The registry is a static JSON file hosted at:
+  https://samplemind-registry.github.io/registry/index.json
+
+Registry format:
+  {
+    "version": "1",
+    "updated_at": "2026-03-15T12:00:00Z",
+    "packs": [
+      {
+        "slug": "dark-trap-essentials",
+        "name": "Dark Trap Essentials",
+        "version": "1.2.0",
+        "author": "beatmaker99",
+        "description": "808s, dark hi-hats, and trap percussion",
+        "tags": ["trap", "dark", "808"],
+        "instruments": ["kick", "hihat", "snare", "bass"],
+        "sample_count": 120,
+        "size_mb": 45.2,
+        "download_url": "https://cdn.example.com/dark-trap-essentials-1.2.0.smpack",
+        "sha256": "a3f2b1...",
+        "license": "CC BY 4.0",
+        "price": "free"
+      }
+    ]
+  }
+
+Usage:
+  registry = PackRegistry()
+  packs = registry.search("trap kick")
+  registry.install("dark-trap-essentials")
+"""
+from __future__ import annotations
+import json
+import urllib.request
+import hashlib
+from pathlib import Path
+from dataclasses import dataclass
+from samplemind.core.logging import get_logger
+
+log = get_logger(__name__)
+
+REGISTRY_URL = "https://samplemind-registry.github.io/registry/index.json"
+CACHE_DIR    = Path.home() / ".samplemind" / "registry_cache"
+
+
+@dataclass
+class PackEntry:
+    slug: str
+    name: str
+    version: str
+    author: str
+    description: str
+    tags: list[str]
+    instruments: list[str]
+    sample_count: int
+    size_mb: float
+    download_url: str
+    sha256: str
+    license: str
+    price: str
+
+
+class PackRegistry:
+    def __init__(self, registry_url: str = REGISTRY_URL) -> None:
+        self.registry_url = registry_url
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    def fetch_index(self, use_cache: bool = True) -> list[PackEntry]:
+        cache_file = CACHE_DIR / "index.json"
+        if use_cache and cache_file.exists():
+            data = json.loads(cache_file.read_text())
+        else:
+            with urllib.request.urlopen(self.registry_url, timeout=10) as r:
+                data = json.loads(r.read())
+            cache_file.write_text(json.dumps(data, indent=2))
+            log.info("registry_refreshed", pack_count=len(data["packs"]))
+        return [PackEntry(**p) for p in data["packs"]]
+
+    def search(self, query: str = "", instrument: str = "", tag: str = "") -> list[PackEntry]:
+        packs = self.fetch_index()
+        results = []
+        q = query.lower()
+        for pack in packs:
+            if q and q not in pack.name.lower() and q not in pack.description.lower():
+                continue
+            if instrument and instrument not in pack.instruments:
+                continue
+            if tag and tag not in pack.tags:
+                continue
+            results.append(pack)
+        return results
+
+    def install(self, slug: str, dest_dir: Path | None = None) -> Path:
+        """Download, verify SHA-256, and import a pack."""
+        packs = {p.slug: p for p in self.fetch_index()}
+        if slug not in packs:
+            raise ValueError(f"Pack '{slug}' not found in registry")
+
+        pack = packs[slug]
+        download_path = CACHE_DIR / f"{slug}-{pack.version}.smpack"
+
+        if not download_path.exists():
+            log.info("downloading_pack", slug=slug, size_mb=pack.size_mb)
+            urllib.request.urlretrieve(pack.download_url, str(download_path))
+
+        # Verify integrity
+        sha256 = hashlib.sha256(download_path.read_bytes()).hexdigest()
+        if sha256 != pack.sha256:
+            download_path.unlink()
+            raise ValueError(f"SHA-256 mismatch for {slug} — download may be corrupted")
+
+        # Import into library
+        from samplemind.packs.importer import import_pack
+        return import_pack(download_path)
+```
+
+---
+
+## 10. Versioned Pack Updates
+
+Check for newer versions of installed packs and update automatically.
+
+```python
+# src/samplemind/packs/updater.py
+"""
+Pack update checker and auto-updater.
+
+Checks installed pack versions against the registry index.
+Respects semver: only auto-update PATCH versions (1.0.x → 1.0.y).
+MINOR and MAJOR updates require explicit user confirmation.
+
+Usage:
+  uv run samplemind pack update          # check all installed packs
+  uv run samplemind pack update trap-kit  # update specific pack
+  uv run samplemind pack update --auto    # auto-update patch releases
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+from samplemind.packs.registry import PackRegistry
+from samplemind.data.repositories.pack_repository import PackRepository
+
+
+@dataclass
+class UpdateStatus:
+    slug: str
+    installed_version: str
+    latest_version: str
+    update_type: str   # "patch" | "minor" | "major" | "up-to-date"
+    changelog_url: str = ""
+
+
+def check_updates() -> list[UpdateStatus]:
+    """Return update status for all installed packs."""
+    registry = PackRegistry()
+    registry_packs = {p.slug: p for p in registry.fetch_index()}
+    installed = PackRepository.get_all_installed()
+
+    results = []
+    for installed_pack in installed:
+        if installed_pack.slug not in registry_packs:
+            continue  # local-only pack
+        latest = registry_packs[installed_pack.slug]
+        update_type = _semver_update_type(installed_pack.version, latest.version)
+        results.append(UpdateStatus(
+            slug=installed_pack.slug,
+            installed_version=installed_pack.version,
+            latest_version=latest.version,
+            update_type=update_type,
+        ))
+    return results
+
+
+def _semver_update_type(installed: str, latest: str) -> str:
+    """Classify the update type based on semver."""
+    def parse(v: str) -> tuple[int, int, int]:
+        parts = v.lstrip("v").split(".")
+        return tuple(int(x) for x in parts[:3])  # type: ignore
+
+    iv = parse(installed)
+    lv = parse(latest)
+    if iv == lv:   return "up-to-date"
+    if lv[0] > iv[0]: return "major"
+    if lv[1] > iv[1]: return "minor"
+    return "patch"
+```
+
+---
+
+## 11. Pack Commercial Licensing
+
+Sample packs may carry licenses that restrict commercial use. SampleMind
+reads the license field and warns when commercially-restricted samples
+are used in projects.
+
+```python
+# src/samplemind/packs/licensing.py
+"""
+Sample pack license validator.
+
+Supported license types:
+  CC0           → public domain, no restrictions
+  CC BY 4.0     → attribution required, commercial OK
+  CC BY-NC 4.0  → non-commercial only
+  Royalty-Free  → commercial OK, no resale of samples
+  Editorial     → news/documentary only, no music production
+  Custom        → read license_url for terms
+
+The license is stored in the manifest.json and in the samples table.
+SampleMind shows a warning when:
+  - A CC BY-NC sample is used in a commercial export
+  - An Editorial sample is used in music production
+  - A Custom-license sample has no license_url
+"""
+from __future__ import annotations
+from dataclasses import dataclass
+
+
+COMMERCIAL_SAFE = frozenset(["CC0", "CC BY 4.0", "Royalty-Free"])
+REQUIRES_ATTRIBUTION = frozenset(["CC BY 4.0"])
+NON_COMMERCIAL = frozenset(["CC BY-NC 4.0", "CC BY-NC-SA 4.0"])
+
+
+@dataclass
+class LicenseCheck:
+    slug: str
+    license: str
+    commercial_safe: bool
+    requires_attribution: bool
+    warning: str | None
+
+
+def check_license(slug: str, license_str: str) -> LicenseCheck:
+    """Validate a sample pack license for commercial use."""
+    commercial_safe = license_str in COMMERCIAL_SAFE
+    requires_attr   = license_str in REQUIRES_ATTRIBUTION
+    warning = None
+
+    if license_str in NON_COMMERCIAL:
+        warning = (
+            f"Pack '{slug}' uses {license_str} — non-commercial only. "
+            "Do not use in paid releases or commercial sync licenses."
+        )
+    elif license_str == "Editorial":
+        warning = f"Pack '{slug}' is for editorial use only. Not for music production."
+    elif license_str == "Custom":
+        warning = f"Pack '{slug}' has a custom license. Review the terms before commercial use."
+
+    return LicenseCheck(
+        slug=slug, license=license_str,
+        commercial_safe=commercial_safe,
+        requires_attribution=requires_attr,
+        warning=warning,
+    )
+```
 ```
 
