@@ -1,3 +1,8 @@
+---
+name: debug
+description: Debug wrong instrument, energy, or mood classifier labels using feature value inspection
+---
+
 # Skill: debug
 
 Debug audio classification issues: wrong instrument, energy, or mood labels.

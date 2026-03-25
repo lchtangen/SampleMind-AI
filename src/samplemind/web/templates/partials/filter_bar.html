@@ -1,0 +1,51 @@
+{# HTMX live search filter bar — Phase 5 Web UI #}
+{# Rendered inside index.html; all inputs push to #sample-tbody via HTMX. #}
+<div class="filter-bar" style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+
+  <input
+    id="search-input"
+    type="search"
+    name="q"
+    placeholder="Search samples…"
+    value="{{ request.args.get('q', '') }}"
+    hx-get="/samples/partial"
+    hx-trigger="input changed delay:300ms, search"
+    hx-target="#sample-tbody"
+    hx-include="[name='energy'],[name='instrument'],[name='mood']"
+    style="flex:1; min-width:180px;"
+  />
+
+  <select name="energy"
+    hx-get="/samples/partial"
+    hx-trigger="change"
+    hx-target="#sample-tbody"
+    hx-include="#search-input,[name='instrument'],[name='mood']">
+    <option value="">All energy</option>
+    <option value="low" {% if request.args.get('energy')=='low' %}selected{% endif %}>Low</option>
+    <option value="mid" {% if request.args.get('energy')=='mid' %}selected{% endif %}>Mid</option>
+    <option value="high" {% if request.args.get('energy')=='high' %}selected{% endif %}>High</option>
+  </select>
+
+  <select name="instrument"
+    hx-get="/samples/partial"
+    hx-trigger="change"
+    hx-target="#sample-tbody"
+    hx-include="#search-input,[name='energy'],[name='mood']">
+    <option value="">All instruments</option>
+    {% for inst in ['kick','snare','hihat','bass','pad','lead','loop','sfx','unknown'] %}
+    <option value="{{ inst }}" {% if request.args.get('instrument')==inst %}selected{% endif %}>{{ inst|capitalize }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="mood"
+    hx-get="/samples/partial"
+    hx-trigger="change"
+    hx-target="#sample-tbody"
+    hx-include="#search-input,[name='energy'],[name='instrument']">
+    <option value="">All moods</option>
+    {% for mood in ['dark','chill','aggressive','euphoric','melancholic','neutral'] %}
+    <option value="{{ mood }}" {% if request.args.get('mood')==mood %}selected{% endif %}>{{ mood|capitalize }}</option>
+    {% endfor %}
+  </select>
+
+</div>

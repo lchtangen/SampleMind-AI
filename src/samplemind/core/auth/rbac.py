@@ -8,20 +8,20 @@ the RBAC layer exists to support future multi-user / cloud deployments.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import ClassVar
 
 
-class UserRole(str, Enum):
+class UserRole(StrEnum):
     """User role tier — controls feature access."""
 
-    VIEWER = "viewer"    # Read-only access (shared library view)
-    MEMBER = "member"    # Standard single user
-    OWNER = "owner"      # Full local library access
-    ADMIN = "admin"      # Administrative operations
+    VIEWER = "viewer"  # Read-only access (shared library view)
+    MEMBER = "member"  # Standard single user
+    OWNER = "owner"  # Full local library access
+    ADMIN = "admin"  # Administrative operations
 
 
-class Permission(str, Enum):
+class Permission(StrEnum):
     """Granular permission flags."""
 
     # Audio library
@@ -50,25 +50,31 @@ class Permission(str, Enum):
 
 # ── Role → permission mapping ──────────────────────────────────────────────────
 
-_VIEWER_PERMS: frozenset[Permission] = frozenset({
-    Permission.AUDIO_READ,
-    Permission.SEARCH_BASIC,
-})
+_VIEWER_PERMS: frozenset[Permission] = frozenset(
+    {
+        Permission.AUDIO_READ,
+        Permission.SEARCH_BASIC,
+    }
+)
 
-_MEMBER_PERMS: frozenset[Permission] = _VIEWER_PERMS | frozenset({
-    Permission.AUDIO_WRITE,
-    Permission.AUDIO_DELETE,
-    Permission.AUDIO_ANALYZE,
-    Permission.AUDIO_BATCH,
-    Permission.SEARCH_ADVANCED,
-    Permission.PACK_CREATE,
-    Permission.PACK_EXPORT,
-    Permission.API_KEY_CREATE,
-})
+_MEMBER_PERMS: frozenset[Permission] = _VIEWER_PERMS | frozenset(
+    {
+        Permission.AUDIO_WRITE,
+        Permission.AUDIO_DELETE,
+        Permission.AUDIO_ANALYZE,
+        Permission.AUDIO_BATCH,
+        Permission.SEARCH_ADVANCED,
+        Permission.PACK_CREATE,
+        Permission.PACK_EXPORT,
+        Permission.API_KEY_CREATE,
+    }
+)
 
-_OWNER_PERMS: frozenset[Permission] = _MEMBER_PERMS | frozenset({
-    Permission.API_KEY_REVOKE,
-})
+_OWNER_PERMS: frozenset[Permission] = _MEMBER_PERMS | frozenset(
+    {
+        Permission.API_KEY_REVOKE,
+    }
+)
 
 _ADMIN_PERMS: frozenset[Permission] = frozenset(Permission)
 
@@ -113,4 +119,3 @@ class RBACService:
     @classmethod
     def meets_minimum_role(cls, role: UserRole, minimum: UserRole) -> bool:
         return cls._rank.get(role, 0) >= cls._rank.get(minimum, 0)
-

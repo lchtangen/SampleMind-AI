@@ -6,7 +6,7 @@ passlib 1.7.x / bcrypt 4.x incompatibility where passlib cannot read the
 bcrypt version number via the removed ``__about__`` attribute.
 
 Cost factor: 12 rounds (≈ 250 ms on modern hardware — good balance for a
-desktop single-user app).  Increase to 13–14 for a server deployment.
+desktop single-user app).  Increase to 13-14 for a server deployment.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
             plain_password.encode("utf-8"),
             hashed_password.encode("utf-8"),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("Error verifying password: %s", exc)
         return False
 
@@ -55,6 +55,5 @@ def needs_rehash(hashed_password: str) -> bool:
         parts = hashed_password.split("$")
         current_rounds = int(parts[2])
         return current_rounds < _BCRYPT_ROUNDS
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False
-

@@ -12,14 +12,14 @@ OpenAPI docs available at:
 
 from __future__ import annotations
 
-import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+import logging
 
-import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import uvicorn
 
 from samplemind.api import __version__
 from samplemind.api.routes import auth as auth_router
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Application startup / teardown."""
     settings = get_settings()
     logger.info("🚀 SampleMind AI API v%s starting…", __version__)
@@ -41,20 +41,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     init_orm()
     logger.info("✓ SQLModel tables ready (%s)", settings.database_url)
 
-    # ── Legacy sqlite3 database ───────────────────────────────────────────────
-    from samplemind.data.database import init_db
-
-    init_db()
-    logger.info("✓ Legacy samples table ready")
-
     # ── JWT configuration ─────────────────────────────────────────────────────
     configure_jwt(
-        secret_key=settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
-        access_expire_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
-        refresh_expire_days=settings.REFRESH_TOKEN_EXPIRE_DAYS,
+        secret_key=settings.secret_key,
+        algorithm=settings.algorithm,
+        access_expire_minutes=settings.access_token_expire_minutes,
+        refresh_expire_days=settings.refresh_token_expire_days,
     )
-    logger.info("✓ JWT configured (alg=%s, expire=%dm)", settings.ALGORITHM, settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    logger.info(
+        "✓ JWT configured (alg=%s, expire=%dm)",
+        settings.algorithm,
+        settings.access_token_expire_minutes,
+    )
 
     logger.info("✅ Ready — docs at /api/docs")
     yield
@@ -83,7 +81,7 @@ def create_app() -> FastAPI:
     # ── CORS ──────────────────────────────────────────────────────────────────
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.CORS_ORIGINS,
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -94,12 +92,12 @@ def create_app() -> FastAPI:
 
     # ── Health ────────────────────────────────────────────────────────────────
     @app.get("/api/v1/health", tags=["Health"])
-    async def health():
+    async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
 
     # ── Root ──────────────────────────────────────────────────────────────────
     @app.get("/", include_in_schema=False)
-    async def root():
+    async def root() -> JSONResponse:
         return JSONResponse({"name": "SampleMind AI API", "docs": "/api/docs"})
 
     return app
@@ -109,14 +107,15 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def run_server(host: str | None = None, port: int | None = None, reload: bool = False) -> None:
+def run_server(
+    host: str | None = None, port: int | None = None, reload: bool = False
+) -> None:
     """Start the FastAPI server (called from the CLI command)."""
     settings = get_settings()
     uvicorn.run(
         "samplemind.api.main:app",
-        host=host or settings.API_HOST,
-        port=port or settings.API_PORT,
+        host=host or settings.api_host,
+        port=port or settings.api_port,
         reload=reload,
         log_level="info",
     )
-

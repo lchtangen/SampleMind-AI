@@ -3,4 +3,3 @@
 from .user import User, UserCreate, UserPublic, UserUpdate
 
 __all__ = ["User", "UserCreate", "UserPublic", "UserUpdate"]
-

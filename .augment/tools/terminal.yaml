@@ -1,0 +1,83 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Auggie CLI — Terminal Integration
+# Shell aliases, functions, and prompt patterns for SampleMind-AI development.
+# Source these in ~/.bashrc or ~/.zshrc for the best dev experience.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: terminal
+description: >
+  Terminal aliases, shell functions, and command patterns. Auggie uses these
+  to suggest efficient one-liners and to understand the dev workflow.
+
+# ── Shell aliases (add to ~/.bashrc or ~/.zshrc) ───────────────────────────────
+aliases:
+  # Project navigation
+  sm: "cd ~/dev/projects/SampleMind-AI"
+  smcode: "cd ~/dev/projects/SampleMind-AI && code ."
+
+  # Python / samplemind CLI
+  smi: "uv run samplemind import"
+  sma: "uv run samplemind analyze"
+  sms: "uv run samplemind search"
+  sml: "uv run samplemind list"
+  smt: "uv run samplemind tag"
+  smserve: "uv run samplemind serve"
+  smapi: "uv run samplemind api --reload"
+
+  # Testing
+  pt: "uv run pytest tests/ -v --tb=short"
+  ptf: "uv run pytest tests/ -v --tb=short -m 'not slow'"
+  ptc: "uv run pytest tests/ --cov=samplemind --cov-report=term-missing"
+  ptn: "uv run pytest tests/ -n auto"
+
+  # Lint / format
+  rl: "uv run ruff check src/ tests/"
+  rf: "uv run ruff format src/ tests/"
+  rfix: "uv run ruff check --fix src/ tests/ && uv run ruff format src/ tests/"
+
+  # Rust
+  cc: "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+  ct: "cargo test --manifest-path app/src-tauri/Cargo.toml"
+
+  # DB
+  dbcur: "uv run alembic current"
+  dbhist: "uv run alembic history"
+  dbup: "uv run alembic upgrade head"
+
+  # Tauri
+  tdev: "cd app && pnpm tauri dev"
+  tbuild: "cd app && pnpm tauri build"
+
+  # Setup / start
+  smsetup: "bash scripts/setup-dev.sh"
+  smstart: "bash scripts/start.sh"
+
+setup_snippet: |
+  # Add to ~/.bashrc or ~/.zshrc:
+  alias sm="cd ~/dev/projects/SampleMind-AI"
+  alias pt="uv run pytest tests/ -v --tb=short"
+  alias ptf="uv run pytest tests/ -m 'not slow'"
+  alias rl="uv run ruff check src/ tests/"
+  alias rfix="uv run ruff check --fix src/ && uv run ruff format src/"
+  alias smapi="uv run samplemind api --reload"
+  alias smserve="uv run samplemind serve"
+  alias cc="cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+
+# ── Useful one-liners ─────────────────────────────────────────────────────────
+one_liners:
+  count_samples: "uv run samplemind list --json | python -c 'import json,sys; print(len(json.load(sys.stdin))); print(\"samples\")'"
+  find_kicks: "uv run samplemind search --instrument kick --json"
+  high_bpm: "uv run samplemind list --bpm-min 140 --json"
+  db_path: "uv run python -c 'from samplemind.core.config import get_settings; print(get_settings().database_url)'"
+  test_single: "uv run pytest tests/test_classifier.py::test_classify_energy_high -v"
+  watch_tests: "uv run pytest tests/ -f -m 'not slow'    # requires pytest-watch"
+  check_socket: "ls -la /tmp/samplemind.sock 2>/dev/null || echo 'sidecar not running'"
+  api_health: "curl -sf http://localhost:8000/api/v1/health | python -m json.tool"
+
+# ── WSL2-specific terminal setup ─────────────────────────────────────────────
+wsl2:
+  open_vscode: "code ."
+  check_path: "pwd | grep -v /mnt/c || echo 'WARNING: on slow NTFS path!'"
+  git_speed: "git config core.fsmonitor true && git config core.untrackedcache true"
+  terminal_profile: "bash (default) or zsh"
+

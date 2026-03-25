@@ -1,0 +1,97 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflow: build-plugin
+# Build, install, and validate the JUCE 8 VST3/AU plugin on macOS.
+# Agent: phase-08-vst-plugin
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: build-plugin
+description: >
+  Full build pipeline for the JUCE 8 VST3/AU plugin: CMake configure → build →
+  install → auval validation → sidecar connection test.
+agent: phase-08-vst-plugin
+trigger_keywords: [JUCE plugin, build plugin, VST3, AU, auval, CMakeLists]
+
+prerequisites:
+  macos_only: true
+  required:
+    - "Xcode Command Line Tools: xcode-select --install"
+    - "CMake ≥ 3.22: brew install cmake"
+    - "JUCE 8 submodule: git submodule update --init plugin/JUCE"
+  optional:
+    - "FL Studio (for live testing)"
+
+steps:
+  1_verify_prerequisites:
+    name: "Verify build prerequisites"
+    commands:
+      - "cmake --version              # must be ≥ 3.22"
+      - "xcodebuild -version         # Xcode must be installed"
+      - "ls plugin/JUCE/CMakeLists.txt  # JUCE submodule must be present"
+    stop_if: "Any command fails — install missing prerequisite first"
+
+  2_cmake_configure:
+    name: "CMake configure"
+    command: "cd plugin && cmake -B build -DCMAKE_BUILD_TYPE=Release"
+    debug_command: "cd plugin && cmake -B build -DCMAKE_BUILD_TYPE=Debug"
+    expected: "-- Configuring done / -- Build files have been written"
+    common_errors:
+      "JUCE not found": "Run: git submodule update --init plugin/JUCE"
+      "Xcode not found": "Run: sudo xcode-select --switch /Applications/Xcode.app"
+      "cmake version": "Upgrade cmake: brew upgrade cmake"
+
+  3_build:
+    name: "Build plugin"
+    command: "cmake --build plugin/build --config Release -- -j$(sysctl -n hw.ncpu)"
+    expected: "Build succeeded without errors"
+    outputs:
+      vst3: "plugin/build/SampleMind_artefacts/Release/VST3/SampleMind.vst3"
+      au:   "plugin/build/SampleMind_artefacts/Release/AU/SampleMind.component"
+
+  4_install:
+    name: "Install to system plugin directories"
+    command: "cmake --install plugin/build --config Release"
+    installs_to:
+      vst3: "~/Library/Audio/Plug-Ins/VST3/SampleMind.vst3"
+      au:   "~/Library/Audio/Plug-Ins/Components/SampleMind.component"
+
+  5_auval:
+    name: "Validate AU plugin with auval"
+    command: "auval -v aufx SmPl SmAI"
+    expected: "PASS"
+    common_failures:
+      "FAIL: audio unit not found": "Wait 10s and retry — macOS may need to rescan"
+      "FAIL: bus configuration": "Check AudioProcessor::isBusesLayoutSupported()"
+      "FAIL: save/restore state": "Check getStateInformation()/setStateInformation()"
+    note: "Must pass before any AU release. If failing, fix before proceeding."
+
+  6_sidecar_test:
+    name: "Test sidecar IPC connection"
+    commands:
+      - "uv run python src/samplemind/sidecar/server.py --socket /tmp/samplemind.sock &"
+      - "sleep 2"
+      - "echo '{\"version\": 1, \"action\": \"ping\"}' | nc -U /tmp/samplemind.sock"
+      - "pkill -f sidecar/server.py"
+    expected: '{"version": 1, "status": "ok", "action": "pong"}'
+
+  7_fl_studio_test:
+    name: "Manual FL Studio integration test"
+    instructions: |
+      1. Open FL Studio
+      2. Rescan plugins: Options → Manage Plugins → Refresh
+      3. Find 'SampleMind' in plugin browser
+      4. Load into mixer channel
+      5. Verify plugin UI loads without crash
+      6. Test sample search via plugin UI
+    marker: "@pytest.mark.juce  — automated tests require JUCE build"
+
+outputs:
+  vst3_path: "~/Library/Audio/Plug-Ins/VST3/SampleMind.vst3"
+  au_path:   "~/Library/Audio/Plug-Ins/Components/SampleMind.component"
+  auval_result: "PASS or FAIL with error details"
+
+safety_rules:
+  - "macOS only — this workflow cannot run on Linux or Windows"
+  - "auval must PASS before releasing to users"
+  - "No blocking I/O in processBlock() — audio thread must not stall"
+  - "Plugin must degrade gracefully if sidecar /tmp/samplemind.sock not found"
+

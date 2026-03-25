@@ -1,3 +1,8 @@
+---
+name: batch-import
+description: Bulk import and analyze WAV/AIFF files from a folder with deduplication and parallel processing
+---
+
 # Skill: batch-import
 
 Bulk import and analyze WAV/AIFF files from a folder, with deduplication, progress, and parallel processing.

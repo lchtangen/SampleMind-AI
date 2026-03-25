@@ -1,0 +1,98 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflow: generate-sample
+# Generate a new audio sample with AI and import it into the library.
+# Agent: phase-16-ai-generation
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: generate-sample
+description: >
+  Full pipeline: text prompt → AI generation → audio analysis → quality check
+  → (optional) auto-import into library and semantic index update.
+agent: phase-16-ai-generation
+
+steps:
+  - name: test_with_mock_backend
+    description: Verify the pipeline works before downloading real models
+    commands:
+      - "uv run samplemind generate 'test kick' --model mock --json"
+    expected: '{"path": "...gen_test_kick_*.wav", "duration": 2.0, ...}'
+    notes:
+      - "Mock backend requires no downloads — always works"
+      - "Use this to test the pipeline logic without waiting for model download"
+
+  - name: choose_model
+    description: Select appropriate model for the use case
+    model_guide:
+      one_shots:    "stable-audio (best for kicks, snares, hihats)"
+      loops:        "audiocraft/musicgen-large (best tempo consistency)"
+      melodic:      "audiocraft/musicgen-medium (pads, leads)"
+      sfx:          "stable-audio or audiocraft/audiogen-medium"
+      fast:         "audiocraft/musicgen-small (quick iteration)"
+    commands:
+      - "uv run samplemind generate --list-models"
+
+  - name: first_generation
+    description: Generate the first sample (model downloads on first run)
+    commands:
+      - "uv run samplemind generate '{prompt}' --bpm {bpm} --instrument {type} --json"
+    examples:
+      kick: "uv run samplemind generate 'dark trap kick' --bpm 140 --instrument kick --json"
+      pad:  "uv run samplemind generate 'ambient pad A minor' --instrument pad --key 'A min' --json"
+      loop: "uv run samplemind generate 'trap drum loop' --bpm 140 --instrument loop --duration 8"
+    notes:
+      - "First run: audiocraft/musicgen-small downloads ~2GB to ~/.cache/"
+      - "stable-audio: downloads ~3.4GB"
+      - "Set PYTORCH_ENABLE_MPS_FALLBACK=1 on Apple Silicon for MPS speedup"
+
+  - name: check_quality_flags
+    description: Review quality flags in the JSON output
+    check_fields:
+      bpm_match:          "Should be true if BPM target set"
+      key_match:          "Should be true if key target set"
+      instrument_match:   "Should be true for the intended instrument"
+      clipping:           "Should be false — regenerate if true"
+    if_clipping: |
+      Try:
+        - Reduce guidance_scale: --guidance-scale 2.0
+        - Add to prompt: ", soft dynamics, no distortion"
+        - Use Stable Audio instead: --model stable-audio
+
+  - name: generate_variations
+    description: Generate multiple variations and compare
+    commands:
+      - "uv run samplemind generate '{prompt}' --bpm {bpm} --n 5 --json"
+    notes:
+      - "Best variation selected by highest RMS energy automatically"
+      - "All 5 saved to ~/.samplemind/generated/ with timestamps"
+
+  - name: import_to_library
+    description: Import the best generated sample into the library
+    commands:
+      - "uv run samplemind generate '{prompt}' --bpm {bpm} --import --json"
+    expected: '{"imported": true, "sample_id": N}'
+    notes:
+      - "--import runs Phase 2 analysis + imports into SQLite + updates FAISS"
+
+  - name: verify_import
+    description: Confirm the sample appears in library search
+    commands:
+      - "uv run samplemind list --instrument {type} --json | python -c 'import json,sys; d=json.load(sys.stdin); print(d[\"samples\"][0][\"filename\"])'"
+      - "uv run samplemind semantic '{prompt}' --top 3"
+
+  - name: run_tests
+    description: Verify generation tests pass
+    commands:
+      - "uv run pytest tests/test_generation.py -m 'not slow' -v"
+    expected: "All pipeline and mock backend tests pass"
+
+safety_rules:
+  - "Generated files stored in ~/.samplemind/generated/ — never modify originals"
+  - "Clipping audio (peak > 0.98) should be regenerated, not normalized in post"
+  - "BPM tolerance: ±5 BPM; if outside, try different prompt or model"
+  - "Apple Silicon: PYTORCH_ENABLE_MPS_FALLBACK=1 for ~5x speedup"
+
+environment_variables:
+  PYTORCH_ENABLE_MPS_FALLBACK: "1  # Apple Silicon MPS acceleration"
+  HF_HOME: "~/.cache/huggingface  # model cache directory"
+  SAMPLEMIND_GENERATION_DIR: "~/.samplemind/generated  # override output dir"
+

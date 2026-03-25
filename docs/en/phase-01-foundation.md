@@ -466,7 +466,7 @@ Python 3.13.x
 
 # Confirm samplemind package imports correctly
 $ uv run python -c "import samplemind; print(samplemind.__version__)"
-0.1.0
+0.2.0
 
 # Confirm all dependencies are installed
 $ uv run python -c "import librosa, flask, sqlmodel, typer; print('All OK')"

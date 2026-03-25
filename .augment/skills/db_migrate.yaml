@@ -1,0 +1,52 @@
+name: db_migrate
+description: >
+  Generate and apply Alembic database migrations for SQLModel schema changes.
+  Phase 3+ only — checks that Alembic is configured before running.
+agent: phase-03-database
+commands:
+  current: "uv run alembic current"
+  history: "uv run alembic history"
+  generate: "uv run alembic revision --autogenerate -m {description}"
+  upgrade: "uv run alembic upgrade head"
+  downgrade: "uv run alembic downgrade -1"
+  check: "uv run alembic check"
+inputs:
+  - name: description
+    type: string
+    description: Short snake_case migration description, e.g. add_tags_column
+    required: true
+  - name: apply
+    type: flag
+    description: Apply migration immediately after generating
+    default: false
+outputs:
+  - migration_file: Path to generated migration in migrations/versions/
+  - current_revision: Active Alembic revision after upgrade
+requires_confirmation:
+  - upgrade
+  - downgrade
+pre_checks:
+  - exists: alembic.ini
+  - exists: migrations/env.py
+  - message_if_missing: "Alembic not configured — this is Phase 3 work. See docs/en/phase-03-database.md"
+examples:
+  - "uv run alembic revision --autogenerate -m add_tags_column"
+  - "uv run alembic upgrade head"
+  - "uv run alembic current"
+  - "uv run alembic history"
+
+trigger_keywords:
+  - alembic, migration, db migrate, schema change, add column, add table
+  - alembic revision, autogenerate, upgrade head, downgrade, alembic history
+  - SQLModel migration, ORM migration, database column
+
+trigger_files:
+  - "migrations/versions/*.py"
+  - "migrations/env.py"
+  - "alembic.ini"
+  - "src/samplemind/data/orm.py"
+  - "src/samplemind/core/models/sample.py"
+
+related_skills: [db_inspect, run_tests]
+related_workflows: [ci-check]
+

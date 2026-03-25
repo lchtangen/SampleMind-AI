@@ -1,0 +1,170 @@
+# SampleMind-AI — Repository Guidelines
+
+AI-powered audio sample library manager. Analyzes WAV/AIFF with librosa (BPM, key, instrument,
+mood, energy), stores in SQLite, surfaces through CLI, Flask web UI, Tauri desktop app, and JUCE VST3/AU plugin.
+
+---
+
+## Development Environment
+
+- **Dev machine**: Windows 11 + WSL2 (Ubuntu 22.04)
+- **Project root**: `/home/ubuntu/dev/projects/SampleMind-AI/` — always work here (Linux ext4)
+- **Never use**: `/mnt/c/...` — NTFS is 5-10× slower
+- **Production target**: macOS 12+ Universal Binary (arm64 + x86_64)
+
+### Package managers
+- Python: `uv` only — **never** `pip`, `poetry`, or `conda`
+- Node (in `app/`): `pnpm` only — **never** `npm`
+- Lint/format: `ruff` only — **never** `black`, `flake8`, `pylint`, `isort`
+
+### Key commands
+```bash
+uv sync && uv run samplemind --help
+uv run pytest tests/ -v -m "not slow"
+uv run ruff check src/ && uv run ruff format src/
+uv run alembic upgrade head
+cd app && pnpm install && pnpm tauri dev
+cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings
+```
+
+### Service ports
+| Service | Port |
+|---------|------|
+| Flask web UI | 5000 |
+| FastAPI REST | 8000 |
+| Tauri dev | 5174 |
+| Sidecar socket | `/tmp/samplemind.sock` |
+
+---
+
+## Critical Rules — Never Do
+
+- `pip install` → use `uv add`
+- `npm` in `app/` → use `pnpm`
+- Commit real WAV/AIFF/MP3 — use synthetic soundfile fixtures
+- Hardcode home paths → use `platformdirs`
+- Print JSON to stderr or human text to stdout — breaks Tauri IPC
+- Use `sys.path.insert` in new code
+- Commit `.env` files or credentials
+- Add clippy suppressions without a comment
+
+## Critical Rules — Always Do
+
+- Type annotations on all new public functions
+- `cargo clippy -- -D warnings` must pass before commit
+- New Tauri commands: register in `invoke_handler!` AND `capabilities/*.json`
+- New CLI commands: `--json` flag outputs JSON to stdout
+- New audio features: pytest fixture + test + `@pytest.mark.slow` if > 1s
+- Schema changes: Alembic migration file required
+
+---
+
+## Classifier Output Values — Never Deviate
+
+| Field | Valid values |
+|-------|-------------|
+| `energy` | `"low"` `"mid"` `"high"` — ⚠ **NEVER `"medium"`** |
+| `mood` | `"dark"` `"chill"` `"aggressive"` `"euphoric"` `"melancholic"` `"neutral"` |
+| `instrument` | `"loop"` `"hihat"` `"kick"` `"snare"` `"bass"` `"pad"` `"lead"` `"sfx"` `"unknown"` |
+
+### Classifier thresholds (classifier.py) — changing these breaks tests
+
+**Energy** (`classify_energy(rms)`): `>= 0.060` → high · `>= 0.015` → mid · else → low
+
+**Instrument** (first match wins):
+- `loop`: dur > 2.0 AND onset_mean > 0.8
+- `hihat`: flat > 0.2 AND zcr > 0.1 AND rolloff > 0.3 AND dur < 1.0
+- `kick`: lfr > 0.35 AND onset_max > 4.0 AND dur < 0.8 AND zcr < 0.08
+- `snare`: onset_max > 3.0 AND flat > 0.05 AND dur < 0.8 AND lfr < 0.35
+- `bass`: lfr > 0.3 AND flat < 0.05 AND dur > 0.3
+- `pad`: dur > 1.5 AND onset_mean < 1.5 AND centroid > 0.08
+- `lead`: centroid > 0.15 AND flat < 0.1 AND dur < 3.0
+- `sfx`: flat > 0.1
+
+**Mood** (first match wins):
+- `aggressive`: zcr > 0.08 AND onset_mean > 3.0 AND centroid > 0.15
+- `dark`: centroid < 0.12 AND minor_key
+- `melancholic`: minor_key AND rms < 0.03 AND onset_mean < 1.5
+- `chill`: centroid < 0.15 AND rms < 0.05 AND onset_mean < 2.0
+- `euphoric`: major_key AND centroid > 0.12 AND rms > 0.02 · else → `neutral`
+
+---
+
+## Audio Analysis Canonical Patterns
+
+```python
+y, sr = librosa.load(path)                              # default sr=22050
+rms = float(np.sqrt(np.mean(y ** 2)))                   # NOT librosa.feature.rms()
+centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
+centroid_norm = float(centroid.mean()) / (sr / 2)       # normalized 0–1
+zcr = float(librosa.feature.zero_crossing_rate(y).mean())
+bpm, _ = librosa.beat.beat_track(y=y, sr=sr)            # cast to float()
+```
+
+**Fingerprint** (deduplication — SHA-256 of first 64 KB):
+```python
+def fingerprint_file(path: Path) -> str:
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read(65536)).hexdigest()
+```
+
+---
+
+## IPC Contract (stdout/stderr split)
+
+| Stream | Content | Reader |
+|--------|---------|--------|
+| **stdout** | JSON only | Tauri `Command::output()`, sidecar, tests |
+| **stderr** | Human text, Rich progress | Terminal / developer |
+
+```python
+if json_output:
+    print(json.dumps(result))   # stdout only
+else:
+    typer.echo("...", err=True) # human text → stderr
+```
+
+**Sidecar socket** (`/tmp/samplemind.sock`): `{"version": 1, "action": "...", "payload": {...}}`
+Protocol changes **must bump** `version` — never edit v1 in place.
+
+---
+
+## Active Runtime — Use These, Not Legacy
+
+| Use | Not |
+|-----|-----|
+| `init_orm()` | `init_db()` |
+| `SampleRepository` | `save_sample()` / `search_samples()` |
+| `get_session()` | `_connect()` |
+| `src/samplemind/web/app.py` | `src/web/app.py` (legacy, Tauri dev only) |
+| `uv run samplemind <cmd>` | `python src/main.py` (legacy, Tauri dev only) |
+
+---
+
+## Phase Status (2026-03-25)
+
+✅ Complete: Phases 1–5 (Foundation, Audio Analysis, Database, CLI, Web UI)
+🔧 Building: Phases 6–10 (Desktop, FL Studio, VST Plugin, Sample Packs, Production)
+🚀 Designed: Phases 11–16 (Semantic Search, AI Curation, Cloud Sync, Analytics, Marketplace, AI Generation)
+
+---
+
+## Security (JWT + RBAC)
+
+- Algorithm: HS256 · Access TTL: 30 min · Refresh TTL: 7 days
+- Secret: `SAMPLEMIND_SECRET_KEY` env var — **never hardcode**
+- Roles: `viewer` < `member` < `owner` < `admin`
+- First registered account auto-gets `owner` role
+- Auth routes at `POST /api/v1/auth/register|login|refresh`, `GET /api/v1/auth/me`
+
+---
+
+## AI Tool Config Paths
+
+| Tool | Config | Agents | Skills |
+|------|--------|--------|--------|
+| Augment Code | `.augment/rules.md` | `.augment/agents/*.md` | `.augment/skills/*/SKILL.md` |
+| Claude Code | `CLAUDE.md` | `.claude/agents/*.md` | `.claude/commands/*.md` |
+| GitHub Copilot | `.github/copilot-instructions.md` | `.github/agents/*.md` | — |
+| All tools | `AGENTS.md` (root) | — | — |
+

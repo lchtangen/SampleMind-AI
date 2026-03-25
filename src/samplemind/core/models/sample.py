@@ -8,7 +8,6 @@ Pydantic-only schemas (SampleCreate, SampleUpdate) are defined below it.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
@@ -31,28 +30,32 @@ class Sample(SQLModel, table=True):
     overwritten on re-import.
     """
 
-    __tablename__ = "samples"
+    __tablename__ = "samples"  # type: ignore[assignment]
 
     # Primary key — auto-incremented by SQLite
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
     # File identity — path is unique (same file cannot be imported twice)
     filename: str = Field(index=True)
     path: str = Field(unique=True)
 
     # Auto-detected fields (from the audio analysis pipeline)
-    bpm: Optional[float] = Field(default=None)        # beats per minute
-    key: Optional[str] = Field(default=None)          # e.g. "C maj", "F# min"
-    mood: Optional[str] = Field(default=None)         # dark/chill/aggressive/euphoric/melancholic/neutral
-    energy: Optional[str] = Field(default=None)       # low/mid/high
-    instrument: Optional[str] = Field(default=None)   # kick/snare/hihat/bass/pad/lead/loop/sfx/unknown
+    bpm: float | None = Field(default=None)  # beats per minute
+    key: str | None = Field(default=None)  # e.g. "C maj", "F# min"
+    mood: str | None = Field(
+        default=None
+    )  # dark/chill/aggressive/euphoric/melancholic/neutral
+    energy: str | None = Field(default=None)  # low/mid/high
+    instrument: str | None = Field(
+        default=None
+    )  # kick/snare/hihat/bass/pad/lead/loop/sfx/unknown
 
     # Manually tagged fields (from user input — never overwritten on re-import)
-    genre: Optional[str] = Field(default=None)        # e.g. "trap", "lofi", "house"
-    tags: Optional[str] = Field(default=None)         # comma-separated free-form tags
+    genre: str | None = Field(default=None)  # e.g. "trap", "lofi", "house"
+    tags: str | None = Field(default=None)  # comma-separated free-form tags
 
     # Timestamp — set automatically on first insert
-    imported_at: Optional[datetime] = Field(default_factory=_now)
+    imported_at: datetime | None = Field(default_factory=_now)
 
 
 # ── Pydantic request schemas ───────────────────────────────────────────────────
@@ -68,20 +71,20 @@ class SampleCreate(SQLModel):
 
     filename: str
     path: str
-    bpm: Optional[float] = None
-    key: Optional[str] = None
-    mood: Optional[str] = None
-    energy: Optional[str] = None
-    instrument: Optional[str] = None
+    bpm: float | None = None
+    key: str | None = None
+    mood: str | None = None
+    energy: str | None = None
+    instrument: str | None = None
 
 
 class SampleUpdate(SQLModel):
     """Schema for updating manual tags on an existing sample (all fields optional)."""
 
-    genre: Optional[str] = None
-    mood: Optional[str] = None
-    energy: Optional[str] = None
-    tags: Optional[str] = None
+    genre: str | None = None
+    mood: str | None = None
+    energy: str | None = None
+    tags: str | None = None
 
 
 # ── Pydantic response schema ───────────────────────────────────────────────────
@@ -90,17 +93,16 @@ class SampleUpdate(SQLModel):
 class SamplePublic(SQLModel):
     """Safe public representation of a sample — used in API responses and JSON output."""
 
-    id: Optional[int] = None
+    id: int | None = None
     filename: str
     path: str
-    bpm: Optional[float] = None
-    key: Optional[str] = None
-    mood: Optional[str] = None
-    energy: Optional[str] = None
-    instrument: Optional[str] = None
-    genre: Optional[str] = None
-    tags: Optional[str] = None
-    imported_at: Optional[datetime] = None
+    bpm: float | None = None
+    key: str | None = None
+    mood: str | None = None
+    energy: str | None = None
+    instrument: str | None = None
+    genre: str | None = None
+    tags: str | None = None
+    imported_at: datetime | None = None
 
     model_config = {"from_attributes": True}
-

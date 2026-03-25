@@ -577,3 +577,522 @@ Dette er en begrensning ved beat_track() — den gjetter alltid en BPM.
 For samples uten tydelig beat (pads, SFX) vil BPM-verdien ikke være meningsfull.
 Vurder å filtrere BPM-visning basert på instrument-type i UI.
 ```
+
+---
+
+## 7. Avanserte analysefunksjoner (2026)
+
+### Lydfingeravtrykk (`src/samplemind/analyzer/fingerprint.py`)
+
+SHA-256-fingeravtrykk oppdager eksakte duplikater før vi kjører kostbar librosa-analyse:
+
+```python
+# src/samplemind/analyzer/fingerprint.py
+import hashlib
+from pathlib import Path
+
+
+def fingerprint_file(path: Path) -> str:
+    """Beregn SHA-256 av første 64KB — rask duplikatdeteksjon.
+
+    Å lese kun de første 64KB er en bevisst avveining:
+    - Raskt nok til å fingeravtrykke 1000 filer på under 1 sekund
+    - Fanger eksakte duplikater og de fleste nær-duplikater (samme fil, ulik sti)
+    - Fanger IKKE re-enkodede versjoner (ulik bitrate/format)
+    """
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read(65536)).hexdigest()
+
+
+def find_duplicates(paths: list[Path]) -> dict[str, list[Path]]:
+    """Grupper stier etter fingeravtrykk. Grupper med len > 1 er duplikater.
+
+    Returnerer kun grupper som har mer enn én fil.
+    """
+    groups: dict[str, list[Path]] = {}
+    for path in paths:
+        fp = fingerprint_file(path)
+        groups.setdefault(fp, []).append(path)
+    return {fp: ps for fp, ps in groups.items() if len(ps) > 1}
+```
+
+CLI-integrasjon:
+```bash
+uv run samplemind duplicates               # list alle duplikater
+uv run samplemind duplicates --remove      # slett alle unntatt første forekomst
+uv run samplemind analyze file.wav --fingerprint  # fingeravtrykk + sjekk bibliotek
+```
+
+### Batchprosessering (`src/samplemind/analyzer/batch.py`)
+
+Samtidig batchanalyse ved hjelp av `ProcessPoolExecutor` — skalerer med tilgjengelige CPUer:
+
+```python
+# src/samplemind/analyzer/batch.py
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
+from pathlib import Path
+from typing import Callable
+
+from samplemind.analyzer.audio_analysis import analyze_file
+
+
+def analyze_batch(
+    paths: list[Path],
+    workers: int = 0,
+    progress_cb: Callable[[int, int], None] | None = None,
+) -> list[dict]:
+    """Analyser flere filer parallelt.
+
+    Args:
+        paths: Liste over lydfiler som skal analyseres.
+        workers: Antall arbeidsprosesser. 0 = os.cpu_count().
+        progress_cb: Valgfri callback(fullført, totalt) for fremdriftsrapportering.
+
+    Returns:
+        Liste over analyseresultat-dicts, i input-rekkefølge.
+    """
+    workers = workers or os.cpu_count() or 1
+    results: list[dict] = [{}] * len(paths)
+
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        future_to_idx = {pool.submit(analyze_file, p): i for i, p in enumerate(paths)}
+        completed = 0
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                results[idx] = {"error": str(e), "path": str(paths[idx])}
+            completed += 1
+            if progress_cb:
+                progress_cb(completed, len(paths))
+
+    return results
+```
+
+### Dekning-konfigurasjon
+
+Legg til i `pyproject.toml`:
+
+```toml
+[tool.coverage.run]
+source = ["samplemind"]
+omit = ["*/tests/*", "*/__pycache__/*", "*/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"
+```
+
+Kjør med dekning:
+```bash
+uv run pytest tests/ --cov=samplemind --cov-report=term-missing
+uv run pytest tests/ --cov=samplemind --cov-report=html  # htmlcov/index.html
+```
+
+### Lyd-testfiksturer i conftest.py
+
+Alle tre lydfiksturene nedenfor er allerede definert i `tests/conftest.py` og tilgjengelige for
+hver test uten ekstra imports. Bruk dem direkte som funksjonsparametere:
+
+```python
+# tests/conftest.py  (lydfiksturer — fullstendige definisjoner)
+
+@pytest.fixture
+def silent_wav(tmp_path: Path) -> Path:
+    """1 sekund stillhet ved 22050 Hz — baseline null-energi-test."""
+    path = tmp_path / "test.wav"
+    sf.write(str(path), np.zeros(22050, dtype=np.float32), 22050)
+    return path
+
+
+@pytest.fixture
+def kick_wav(tmp_path: Path) -> Path:
+    """Simulert kick: høy amplitude, 60 Hz sinusburst, 0.5 s.
+
+    Hvorfor 60 Hz: Nyquist er 11025 Hz ved sr=22050. Mesteparten av kick-energi
+    ligger under 200 Hz. En 60 Hz sinus gir en veldig klar low_freq_ratio > 0.35
+    slik at klassifisereren pålitelig returnerer instrument='kick'.
+    """
+    t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
+    samples = (0.9 * np.sin(2 * np.pi * 60 * t)).astype(np.float32)
+    path = tmp_path / "kick.wav"
+    sf.write(str(path), samples, 22050)
+    return path
+
+
+@pytest.fixture
+def hihat_wav(tmp_path: Path) -> Path:
+    """Simulert hihat: hvit støy, 0.1 s (2205 samples), seedet RNG.
+
+    Bruk av fast seed (42) holder testen deterministisk på tvers av maskiner og
+    Python-versjoner, slik at forventet instrument='hihat'-assertion er stabil.
+    """
+    rng = np.random.default_rng(seed=42)
+    samples = rng.uniform(-0.3, 0.3, 2205).astype(np.float32)
+    path = tmp_path / "hihat.wav"
+    sf.write(str(path), samples, 22050)
+    return path
+```
+
+For å legge til en **bass**- eller **batch**-fikstur for dine egne utvidelsestester:
+
+```python
+@pytest.fixture
+def bass_wav(tmp_path: Path) -> Path:
+    """Simulert bass: 80 Hz sinus, 2 s, middels amplitude.
+    Forventet: høy low_freq_ratio, instrument='bass' eller 'pad'.
+    """
+    t = np.linspace(0, 2.0, int(22050 * 2.0), dtype=np.float32)
+    samples = (0.5 * np.sin(2 * np.pi * 80 * t)).astype(np.float32)
+    path = tmp_path / "bass.wav"
+    sf.write(str(path), samples, 22050)
+    return path
+
+
+@pytest.fixture
+def batch_wav_dir(tmp_path: Path) -> Path:
+    """Mappe med 5 syntetiske WAV-filer for batchprosesseringstester.
+
+    Frekvenser spenner fra sub-bass til diskant slik at de 5 filene får ulike
+    klassifiseringsetiketter, noe som gjør det enkelt å verifisere batch-resultatmangfold.
+    """
+    for i, freq in enumerate([60, 80, 200, 1000, 5000]):
+        t = np.linspace(0, 0.5, int(22050 * 0.5), dtype=np.float32)
+        samples = (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+        sf.write(str(tmp_path / f"sample_{i:02d}.wav"), samples, 22050)
+    return tmp_path
+```
+
+---
+
+## 9. LUFS-lydstyrkeanalyse
+
+**LUFS (Loudness Units relative to Full Scale)** er kringkastingsstandardens
+lydstyrkemåling. I motsetning til RMS er LUFS frekvensvektet (K-vekting) for å
+matche menneskelig hørsel. Strømmeplattformer (Spotify −14 LUFS, YouTube −14 LUFS,
+Apple Music −16 LUFS) normaliserer til disse målene.
+
+```bash
+uv add pyloudnorm
+```
+
+```python
+# src/samplemind/analyzer/loudness.py
+"""
+LUFS-lydstyrkeanalyse ved hjelp av pyloudnorm (ITU-R BS.1770-4-kompatibel).
+
+Output:
+  lufs_integrated  — total lydstyrke (bruk for normaliseringsmål)
+  lufs_short_term  — maks 3s vindu-lydstyrke (bruk for toppdeteksjon)
+  lufs_range       — lydstyrkeområde LRA (dynamisk områdeindikator)
+  true_peak_dbfs   — sann topp (må være < -1 dBFS for strømming)
+"""
+from __future__ import annotations
+import numpy as np
+import soundfile as sf
+import pyloudnorm as pyln
+from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class LoudnessResult:
+    lufs_integrated: float   # f.eks. -14.2 (negative verdier, høyere = høyere)
+    lufs_short_term: float   # topp korttids-LUFS
+    lufs_range: float        # lydstyrkeområde (LRA) i LU
+    true_peak_dbfs: float    # sann topp i dBFS
+
+
+STREAMING_TARGETS = {
+    "spotify":       -14.0,
+    "apple_music":   -16.0,
+    "youtube":       -14.0,
+    "tidal":         -14.0,
+    "soundcloud":    -14.0,
+}
+
+
+def analyze_loudness(path: Path) -> LoudnessResult:
+    """
+    Analyser LUFS-lydstyrken til en WAV/AIFF-fil.
+
+    Krever stereo eller mono lyd. For stereo bruker pyloudnorm
+    full ITU-R BS.1770-4 kanalvekting (L, R, C, LFE, Ls, Rs).
+
+    Returnerer LoudnessResult med integrert LUFS og sann topp.
+    Korte stereofiler (<0.4s) returnerer −70 dBFS som en sentinel-verdi
+    (for kort for et fullstendig lydstyrkemålingsvindu).
+    """
+    data, rate = sf.read(str(path), always_2d=True)
+    meter = pyln.Meter(rate)  # BS.1770-4 måler
+
+    try:
+        lufs_integrated = meter.integrated_loudness(data)
+    except Exception:
+        lufs_integrated = -70.0   # sentinel for for korte filer
+
+    # Korttids-LUFS: gli 3s vindu, ta maks
+    block = int(rate * 3.0)
+    shorts = []
+    for start in range(0, max(1, len(data) - block), block // 2):
+        chunk = data[start: start + block]
+        if len(chunk) < block:
+            break
+        try:
+            shorts.append(meter.integrated_loudness(chunk))
+        except Exception:
+            pass
+    lufs_short_term = max(shorts) if shorts else lufs_integrated
+
+    # Sann topp (oversample × 4)
+    true_peak_dbfs = float(20 * np.log10(np.max(np.abs(data)) + 1e-10))
+
+    # Lydstyrkeområde: forskjell mellom 95. og 10. persentil LUFS-blokker
+    lufs_range = lufs_short_term - lufs_integrated if shorts else 0.0
+
+    return LoudnessResult(
+        lufs_integrated=round(lufs_integrated, 2),
+        lufs_short_term=round(lufs_short_term, 2),
+        lufs_range=round(abs(lufs_range), 2),
+        true_peak_dbfs=round(true_peak_dbfs, 2),
+    )
+
+
+def normalization_gain(current_lufs: float, target: str = "spotify") -> float:
+    """
+    Beregn gain i dB for å normalisere et sample til et strømmemål.
+
+    Returnerer positiv verdi (må booste) eller negativ (må dempe).
+    """
+    target_lufs = STREAMING_TARGETS.get(target, -14.0)
+    return round(target_lufs - current_lufs, 2)
+```
+
+Legg til i `analyze_file()` i `audio_analysis.py`:
+
+```python
+from samplemind.analyzer.loudness import analyze_loudness
+
+# Inne i analyze_file():
+loudness = analyze_loudness(Path(path))
+result.update({
+    "lufs_integrated": loudness.lufs_integrated,
+    "lufs_short_term": loudness.lufs_short_term,
+    "lufs_range":      loudness.lufs_range,
+    "true_peak_dbfs":  loudness.true_peak_dbfs,
+})
+```
+
+---
+
+## 10. Stereofeltanalyse
+
+Stereosamples trenger tilleggsfunksjoner for miksklar scoring.
+
+```python
+# src/samplemind/analyzer/stereo.py
+"""
+Stereofeltanalyse for WAV/AIFF-filer.
+
+Funksjoner ekstrahert:
+  stereo_width   — korrelasjonsbasert bredde (0=mono, 1=full stereo, >1=bred/problematisk)
+  mid_side_ratio — M/S effektbalanse (>1 = mer mid = mono-kompatibel)
+  phase_issues   — True hvis venstre/høyre korrelasjon < -0.2 (fasekanselleringsrisiko)
+  is_mono        — True hvis L≈R innenfor 0.1% (monofil i stereobeholder)
+"""
+from __future__ import annotations
+import numpy as np
+import soundfile as sf
+from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class StereoResult:
+    stereo_width: float     # 0.0 (mono) til 1.0+ (bred)
+    mid_side_ratio: float   # M effekt / S effekt
+    phase_issues: bool      # True = risiko for kansellering ved mono-avspilling
+    is_mono: bool           # True = identiske eller nesten identiske kanaler
+
+
+def analyze_stereo(path: Path) -> StereoResult | None:
+    """
+    Returnerer None for monofiler (enkelt kanal).
+    Bruk is_mono=True resultat for stereobeholdere med dupliserte kanaler.
+    """
+    data, _ = sf.read(str(path), always_2d=True)
+    if data.shape[1] < 2:
+        return None  # ekte mono — hopp over stereoanalyse
+
+    left, right = data[:, 0], data[:, 1]
+
+    # Fasekorrelasjon: +1=identisk, 0=ukorrelert, -1=anti-fase
+    if left.std() < 1e-8 or right.std() < 1e-8:
+        return StereoResult(0.0, 1.0, False, True)
+
+    correlation = float(np.corrcoef(left, right)[0, 1])
+
+    # M/S-koding
+    mid  = (left + right) / 2.0
+    side = (left - right) / 2.0
+    mid_power  = float(np.mean(mid ** 2))
+    side_power = float(np.mean(side ** 2))
+
+    stereo_width   = 1.0 - abs(correlation)
+    mid_side_ratio = mid_power / (side_power + 1e-10)
+    phase_issues   = correlation < -0.2
+
+    # Mono-sjekk: RMS av differansekanal < 0.1% av mid
+    diff_rms = float(np.sqrt(np.mean((left - right) ** 2)))
+    mid_rms  = float(np.sqrt(np.mean(mid ** 2)))
+    is_mono  = diff_rms < 0.001 * (mid_rms + 1e-10)
+
+    return StereoResult(
+        stereo_width=round(stereo_width, 4),
+        mid_side_ratio=round(mid_side_ratio, 4),
+        phase_issues=phase_issues,
+        is_mono=is_mono,
+    )
+```
+
+---
+
+## 11. Spektral flux og transient-skarphet
+
+**Spektral flux** måler ramme-til-ramme spektral endring — høy flux = skarp
+transient (kick, snare), lav flux = vedvarende (pad, bass). Bruk den til å forbedre
+`onset_max` terskel-nøyaktighet.
+
+```python
+# src/samplemind/analyzer/transients.py
+"""
+Transient- og spektral flux-analyse.
+
+spectral_flux         — gjennomsnittlig ramme-til-ramme spektral endring (0–1 normalisert)
+transient_sharpness   — forhold mellom onset_max / gjennomsnittlig spektral flux
+attack_time_ms        — estimert tid i ms fra start til første store onset
+"""
+from __future__ import annotations
+import numpy as np
+import librosa
+from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class TransientResult:
+    spectral_flux: float      # normalisert, høyere = skarpere transienter
+    transient_sharpness: float
+    attack_time_ms: float
+
+
+def analyze_transients(y: np.ndarray, sr: int) -> TransientResult:
+    """
+    Beregn transient-funksjoner fra en forhåndslastet lydarray.
+
+    Aksepterer samme (y, sr) par fra librosa.load() — unngår dobbel lasting.
+    """
+    # Spektral flux: L1-norm av positive spektrale forskjeller
+    stft = np.abs(librosa.stft(y))
+    flux = np.diff(stft, axis=1)
+    flux_pos = np.maximum(flux, 0)                      # rettet flux
+    flux_mean = float(np.mean(flux_pos))
+
+    # Normaliser til 0–1 relativt til maks amplitude
+    max_amp = np.max(np.abs(stft)) + 1e-10
+    spectral_flux = float(np.clip(flux_mean / max_amp, 0.0, 1.0))
+
+    # Onset-konvolutt
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    onset_max = float(np.max(onset_env))
+    transient_sharpness = onset_max / (flux_mean + 1e-10)
+
+    # Attack-tid: første ramme hvor onset_env > 20% av maks
+    threshold = 0.2 * onset_max
+    attack_frames = np.where(onset_env > threshold)[0]
+    attack_time_ms = (
+        float(attack_frames[0]) * 512 / sr * 1000
+        if len(attack_frames) > 0 else 0.0
+    )
+
+    return TransientResult(
+        spectral_flux=round(spectral_flux, 6),
+        transient_sharpness=round(transient_sharpness, 4),
+        attack_time_ms=round(attack_time_ms, 1),
+    )
+```
+
+---
+
+## 12. Harmonisk kompleksitet
+
+Kvantifiserer tonal kompleksitet — nyttig for å skille melodiske samples
+(pads, leads, bass) fra perkussive/støyende (kicks, hihats, sfx).
+
+```python
+# src/samplemind/analyzer/harmony.py
+"""
+Harmonisk kompleksitetsanalyse ved hjelp av chromagram-dekomposisjon.
+
+harmonic_complexity  — 0.0 (ren sinus) til 1.0 (tett akkord / støy)
+key_confidence       — 0.0–1.0 tillit til detektert toneart
+dominant_pitches     — liste over toneklasser med høyest chroma-energi
+"""
+from __future__ import annotations
+import numpy as np
+import librosa
+from dataclasses import dataclass
+
+
+PITCH_CLASSES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+@dataclass
+class HarmonyResult:
+    harmonic_complexity: float      # 0=enkel, 1=kompleks
+    key_confidence: float           # 0–1
+    key: str                        # f.eks. "A min"
+    dominant_pitches: list[str]     # topp-3 toneklasser etter energi
+
+
+def analyze_harmony(y: np.ndarray, sr: int) -> HarmonyResult:
+    """
+    Separer harmonisk innhold fra perkussivt, deretter analyser chromagram.
+    Bruker librosa HPSS (Harmonic-Percussive Source Separation).
+    """
+    # Harmonisk/perkussiv separasjon
+    y_harmonic, _ = librosa.effects.hpss(y)
+
+    # Chromagram fra kun harmonisk komponent
+    chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr)
+    chroma_mean = chroma.mean(axis=1)                       # form (12,)
+
+    # Harmonisk kompleksitet: entropi av chroma-fordeling
+    chroma_norm = chroma_mean / (chroma_mean.sum() + 1e-10)
+    entropy = float(-np.sum(chroma_norm * np.log2(chroma_norm + 1e-10)))
+    max_entropy = np.log2(12)                               # maks entropi med 12 bins
+    harmonic_complexity = float(np.clip(entropy / max_entropy, 0.0, 1.0))
+
+    # Toneartsdeteksjon ved hjelp av librosas toneartskorrelasjonsmaler
+    keys, scores = librosa.key_estimation.key_correlation(chroma_mean)
+    key_idx = int(np.argmax(scores))
+    key_confidence = float(np.max(scores))
+    key_name = f"{PITCH_CLASSES[key_idx % 12]} {'maj' if key_idx < 12 else 'min'}"
+
+    # Dominerende toneklasser (topp 3 etter chroma-energi)
+    top_3 = np.argsort(chroma_mean)[-3:][::-1]
+    dominant_pitches = [PITCH_CLASSES[i] for i in top_3]
+
+    return HarmonyResult(
+        harmonic_complexity=round(harmonic_complexity, 4),
+        key_confidence=round(key_confidence, 4),
+        key=key_name,
+        dominant_pitches=dominant_pitches,
+    )
+```

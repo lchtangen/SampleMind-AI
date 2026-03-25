@@ -24,6 +24,7 @@ from sqlmodel import SQLModel
 
 # ── Import all ORM models so their tables are included in metadata ─────────────
 # Add any new model modules here when they are created.
+import samplemind.core.models.sample  # noqa: F401  ← registers Sample table
 import samplemind.core.models.user  # noqa: F401  ← registers User table
 
 # ── Alembic Config ────────────────────────────────────────────────────────────

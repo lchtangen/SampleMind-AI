@@ -1,0 +1,42 @@
+# Phase 10 — Production Release Engineering
+# Triggered on version tags (v*.*.*).
+# Builds macOS Universal Binary, signs, notarizes, and attaches to GitHub release.
+# Also builds Windows NSIS installer via cross-compilation on ubuntu runner.
+# TODO: implement in Phase 10 — Production
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  # --- macOS (Universal Binary, sign + notarize) ---
+  build-macos:
+    name: Build macOS (universal)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO — Phase 10
+        run: echo "macOS build not yet implemented (Phase 10)" && exit 1
+
+  # --- Windows ---
+  build-windows:
+    name: Build Windows (NSIS)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO — Phase 10
+        run: echo "Windows build not yet implemented (Phase 10)" && exit 1
+
+  # --- GitHub Release ---
+  create-release:
+    name: Create GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO — Phase 10
+        run: echo "Release creation not yet implemented (Phase 10)" && exit 1

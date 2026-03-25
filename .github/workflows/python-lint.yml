@@ -29,12 +29,19 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check src/ tests/
 
+      - name: Pyright type check
+        run: uv run pyright src/
+
       - name: Run pytest
         run: uv run pytest tests/ -v --tb=short
 
-      - name: Check coverage (warn only)
+      - name: Check coverage
         run: uv run pytest tests/ --cov=samplemind --cov-report=term-missing --cov-fail-under=60
-        continue-on-error: true   # raise threshold as coverage grows
+
+      - name: Alembic migration check (no drift)
+        run: |
+          uv run alembic upgrade head
+          uv run alembic check
 
   # ── Python: Windows matrix ────────────────────────────────────────────────
   python-windows:

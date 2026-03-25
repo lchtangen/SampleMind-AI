@@ -52,6 +52,7 @@ dependencies = [
     "platformdirs>=4.3",
     # ── Structured logging + observability ───────────────────────────────────
     "structlog>=24.4",
+    "pydantic-settings>=2.13.1",
 ]
 
 [project.optional-dependencies]
@@ -122,6 +123,23 @@ markers = [
 
 # ── Coverage ───────────────────────────────────────────────────────────────────
 
+[tool.coverage.run]
+source = ["samplemind"]
+omit = [
+    "tests/*",
+    "migrations/*",
+    "src/main.py",
+    # Legacy sqlite3 module — kept for reference only, replaced by SampleRepository
+    "src/samplemind/data/database.py",
+]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+
+[tool.ruff]
+# Exclude legacy pre-Phase-1 source tree — not linted (still used by Tauri dev mode)
+exclude = ["src/analyzer", "src/cli", "src/data", "src/web"]
 
 [tool.ruff.lint]
 select = [
@@ -146,21 +164,41 @@ ignore = [
     "SIM108", # ternary operator — sometimes less readable than if/else
     "RUF012", # mutable class var annotation — SQLModel uses ClassVar pattern
     "B008",   # do not perform function call in default arg — Typer uses this
-    "ANN101", # missing self type annotation — not required
-    "ANN102", # missing cls type annotation — not required
     "S101",   # assert — fine in tests (overridden per-file below)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "PTH", "ANN", "T20"]   # assert, os.path, and print() are fine in tests
-"src/main.py" = ["PTH", "E"]
+"tests/*" = [
+    "S101",
+    "S105",
+    "S106",
+    "S107",
+    "S108",
+    "PTH",
+    "ANN",
+    "T20",
+    "C408",
+] # test-specific patterns ok
+"src/main.py" = ["PTH", "E", "ANN", "T20"]
 "migrations/*" = ["ANN", "S"]
+# Legacy sqlite3 module — kept for reference only, not used by active code
+"src/samplemind/data/database.py" = ["ANN", "E", "PTH", "RUF", "S", "SIM"]
+# CLI commands intentionally use print() for terminal output (stdout/stderr IPC contract)
+"src/samplemind/cli/commands/*.py" = ["T20", "PTH"]
+# FastAPI route handlers — return types are declared via response_model= decorator
+"src/samplemind/api/routes/*.py" = ["ANN201", "ANN001"]
+# Flask web routes — ANN and PTH are verbose for route handlers
+"src/samplemind/web/app.py" = ["ANN", "PTH"]
+# Flask blueprints — route return types are complex unions; PTH fixed at call sites
+"src/samplemind/web/blueprints/*.py" = ["ANN"]
+# Auth module — string literals for token_type/algorithms are not hardcoded passwords
+"src/samplemind/core/auth/*.py" = ["ANN", "S105", "S106", "S107"]
+# model_loader.py — uses print() for progress output, complex **kwargs type
+"src/samplemind/utils/model_loader.py" = ["T20", "ANN"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["samplemind"]
 force-sort-within-sections = true
-
-
 
 
 [tool.ruff.format]
@@ -180,6 +218,15 @@ reportOptionalMemberAccess = true
 exclude = [
     "migrations/",
     "src/main.py",
+    # Legacy pre-Phase1 source tree — not type-checked (still used by Tauri dev mode)
+    "src/analyzer/",
+    "src/cli/",
+    "src/data/",
+    "src/web/",
+    # Legacy sqlite3 module kept for reference only
+    "src/samplemind/data/database.py",
+    # Optional AI dependency (transformers) not installed in base venv
+    "src/samplemind/utils/model_loader.py",
     "build/",
     "**/node_modules",
     "**/__pycache__",

@@ -10,7 +10,7 @@ The sample is found by partial filename match, so you don't need to type
 the full filename — just enough to identify it uniquely.
 """
 
-from data.database import init_db, get_sample_by_name, tag_sample
+from data.database import get_sample_by_name, init_db, tag_sample
 
 VALID_ENERGY = {"low", "mid", "high"}
 

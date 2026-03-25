@@ -91,7 +91,7 @@ importBtn.addEventListener("click", async () => {
     const res  = await fetch("/api/import", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ path: folderPath }),
+      body:    JSON.stringify({ folder: folderPath }),
     });
     const data = await res.json();
 
@@ -318,7 +318,7 @@ async function handleDrop(paths) {
       const res  = await fetch("/api/import", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ path: paths[0] }),
+        body:    JSON.stringify({ folder: paths[0] }),
       });
       const data = await res.json();
       if (res.ok) {

@@ -10,10 +10,9 @@ Pattern: class with @staticmethod methods — no instance state needed.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import logging
 import uuid
-from datetime import UTC, datetime
-from typing import Optional
 
 from sqlmodel import select
 
@@ -29,23 +28,19 @@ class UserRepository:
     # ── Read ──────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def get_by_id(user_id: str) -> Optional[User]:
+    def get_by_id(user_id: str) -> User | None:
         """Return user by UUID string, or None."""
         with get_session() as session:
-            return session.exec(
-                select(User).where(User.user_id == user_id)
-            ).first()
+            return session.exec(select(User).where(User.user_id == user_id)).first()
 
     @staticmethod
-    def get_by_email(email: str) -> Optional[User]:
+    def get_by_email(email: str) -> User | None:
         """Return user by email (case-sensitive), or None."""
         with get_session() as session:
-            return session.exec(
-                select(User).where(User.email == email.lower())
-            ).first()
+            return session.exec(select(User).where(User.email == email.lower())).first()
 
     @staticmethod
-    def get_by_username(username: str) -> Optional[User]:
+    def get_by_username(username: str) -> User | None:
         """Return user by username (case-insensitive), or None."""
         with get_session() as session:
             return session.exec(
@@ -82,7 +77,7 @@ class UserRepository:
             return user
 
     @staticmethod
-    def update(user_id: str, **fields) -> Optional[User]:
+    def update(user_id: str, **fields: object) -> User | None:
         """
         Update arbitrary fields on a user by UUID.
 
@@ -90,9 +85,7 @@ class UserRepository:
         Returns the updated User or None if not found.
         """
         with get_session() as session:
-            user = session.exec(
-                select(User).where(User.user_id == user_id)
-            ).first()
+            user = session.exec(select(User).where(User.user_id == user_id)).first()
             if user is None:
                 return None
 
@@ -124,4 +117,3 @@ class UserRepository:
     @staticmethod
     def exists_by_username(username: str) -> bool:
         return UserRepository.get_by_username(username) is not None
-

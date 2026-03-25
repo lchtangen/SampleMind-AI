@@ -1,3 +1,8 @@
+---
+name: semantic-search
+description: Find audio samples by natural language or audio similarity using CLAP embeddings and FAISS
+---
+
 # Skill: semantic-search
 
 Find audio samples by natural language description or audio similarity using CLAP embeddings and FAISS vector search.

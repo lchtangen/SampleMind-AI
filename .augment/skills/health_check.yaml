@@ -1,0 +1,62 @@
+name: health_check
+description: >
+  Check the health of all running SampleMind services: FastAPI REST API,
+  Flask web UI, sidecar socket, and database connectivity.
+agent: api-agent
+checks:
+  fastapi:
+    command: "curl -sf http://localhost:8000/api/v1/health"
+    expected: '{"status":"ok"}'
+    port: 8000
+  flask:
+    command: "curl -sf http://localhost:5000/api/status"
+    port: 5000
+  flask_tauri:
+    command: "curl -sf http://localhost:5174/api/status"
+    port: 5174
+    note: "Tauri dev mode Flask instance"
+  sidecar_socket:
+    command: "ls -la /tmp/samplemind.sock 2>/dev/null"
+    note: "Socket file exists = sidecar is running"
+  database:
+    command: "uv run python -c \"from samplemind.data.orm import get_engine; print('DB OK:', get_engine().url)\""
+  db_stats:
+    command: "uv run samplemind list --json | python -c \"import json,sys; d=json.load(sys.stdin); print(f'Samples: {len(d)}')\""
+inputs:
+  - name: service
+    type: enum
+    values: [all, fastapi, flask, sidecar, database]
+    description: Which service to check
+    default: all
+outputs:
+  - fastapi_status: ok | error | not_running
+  - flask_status: ok | error | not_running
+  - sidecar_status: running | not_running
+  - db_status: ok | error
+  - sample_count: Number of samples in library
+reporting:
+  format: "✓/✗ table per service"
+  on_error: "Show exact error message and how to start the service"
+quick_diagnosis:
+  fastapi_down: "Start with: uv run samplemind api --reload"
+  flask_down: "Start with: uv run samplemind serve"
+  sidecar_down: "Start with: uv run python src/samplemind/sidecar/server.py &"
+  db_error: "Check path in core/config.py → Settings.database_url"
+examples:
+  - "curl http://localhost:8000/api/v1/health"
+  - "curl http://localhost:5000/api/status"
+  - "uv run python -c 'from samplemind.data.orm import get_engine; print(get_engine().url)'"
+
+trigger_keywords:
+  - health check, service health, is the API running, is Flask running
+  - health, /api/status, /api/v1/health, sidecar socket, check services
+  - port 8000, port 5000, service down, not responding
+
+trigger_files:
+  - "src/samplemind/api/main.py"
+  - "src/samplemind/web/app.py"
+  - "src/samplemind/sidecar/server.py"
+
+related_skills: [serve_api, serve_web, sidecar, db_inspect]
+related_workflows: [dev-start]
+

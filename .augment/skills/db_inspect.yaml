@@ -1,0 +1,70 @@
+name: db_inspect
+description: >
+  Inspect the SampleMind SQLite database: check schema, count records,
+  view migration state, run ad-hoc queries, and verify PRAGMA settings.
+agent: phase-03-database
+commands:
+  stats: "uv run samplemind list --json | python -c \"import json,sys; d=json.load(sys.stdin); print(f'Total: {len(d)} samples')\""
+  alembic_current: "uv run alembic current"
+  alembic_history: "uv run alembic history"
+  db_path: "uv run python -c \"from samplemind.core.config import get_settings; print(get_settings().database_url)\""
+  schema: |
+    uv run python -c "
+    from samplemind.data.orm import get_engine
+    from sqlalchemy import inspect
+    insp = inspect(get_engine())
+    for t in insp.get_table_names():
+        print(f'\\nTable: {t}')
+        for col in insp.get_columns(t):
+            print(f'  {col[\"name\"]:30} {col[\"type\"]}')
+    "
+  pragma_check: |
+    uv run python -c "
+    from samplemind.data.orm import get_engine
+    with get_engine().connect() as conn:
+        for pragma in ['journal_mode','cache_size','synchronous','temp_store','mmap_size']:
+            r = conn.execute(__import__('sqlalchemy').text(f'PRAGMA {pragma}')).fetchone()
+            print(f'{pragma:20}: {r[0]}')
+    "
+  sample_count: |
+    uv run python -c "
+    from samplemind.data.orm import get_engine
+    from sqlalchemy import text
+    with get_engine().connect() as c:
+        print('samples:', c.execute(text('SELECT COUNT(*) FROM samples')).scalar())
+        print('users:  ', c.execute(text('SELECT COUNT(*) FROM users')).scalar())
+    "
+outputs:
+  - table_names: List of all tables in the database
+  - sample_count: Number of samples
+  - user_count: Number of registered users
+  - alembic_revision: Current migration revision
+  - pragma_values: Active SQLite PRAGMAs
+expected_tables:
+  - samples    # legacy sqlite3 + SQLModel (auto-detected fields)
+  - users      # SQLModel auth (created by Alembic migration 0001)
+  - alembic_version  # Alembic revision tracking
+pragma_targets:
+  journal_mode: WAL       # concurrent reads during writes
+  cache_size: -64000      # 64 MB page cache
+  synchronous: NORMAL     # safe + fast
+  temp_store: MEMORY      # in-RAM temp tables
+  mmap_size: 268435456    # 256 MB memory-mapped I/O
+examples:
+  - "uv run alembic current"
+  - "uv run python -c 'from samplemind.core.config import get_settings; print(get_settings().database_url)'"
+
+trigger_keywords:
+  - DB inspect, database schema, alembic current, PRAGMA, SQLite stats
+  - table counts, db path, database stats, db-inspect, inspect database
+  - alembic history, alembic version, schema, database URL
+
+trigger_files:
+  - "src/samplemind/data/orm.py"
+  - "src/samplemind/data/database.py"
+  - "migrations/env.py"
+  - "alembic.ini"
+
+related_skills: [db_migrate, health_check]
+related_workflows: [dev-start]
+

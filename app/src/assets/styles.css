@@ -1,0 +1,14 @@
+/* Phase 6 — Tauri Desktop App */
+/* Global CSS for the SampleMind desktop app. */
+/* Design tokens mirror the Flask web UI (base.html CSS variables) */
+/* for visual consistency across web and desktop surfaces. */
+/* TODO: implement in Phase 6 — Tauri Desktop App */
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --accent: #e94560;
+  --text: #e0e0e0;
+  --text-muted: #888;
+  --border: #333;
+}

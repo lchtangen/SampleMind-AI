@@ -20,4 +20,3 @@ def serve_api(host: str = "127.0.0.1", port: int = 8000, reload: bool = False) -
     print(f"🚀 SampleMind AI API → http://{host}:{port}", file=sys.stderr)
     print(f"   OpenAPI docs   → http://{host}:{port}/api/docs", file=sys.stderr)
     run_server(host=host, port=port, reload=reload)
-

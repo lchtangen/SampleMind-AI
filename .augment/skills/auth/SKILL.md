@@ -1,3 +1,8 @@
+---
+name: auth
+description: Manage JWT authentication: register, login, refresh tokens, and RBAC role checks
+---
+
 # Skill: auth
 
 Manage user authentication: register accounts, obtain JWT tokens, refresh tokens,

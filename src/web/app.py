@@ -17,14 +17,21 @@ Flask concepts:
 - send_file() streams a file back to the browser
 """
 
-import sys
 import os
+import sys
 
 # Make sure imports from src/ work when running from inside src/web/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from flask import Flask, render_template, request, jsonify, send_file
-from data.database import init_db, search_samples, tag_sample, get_all_samples, count_samples
+from flask import Flask, jsonify, render_template, request, send_file
+
+from data.database import (
+    count_samples,
+    get_all_samples,
+    init_db,
+    search_samples,
+    tag_sample,
+)
 
 app = Flask(__name__)
 
@@ -118,7 +125,9 @@ def api_import():
         return jsonify({"error": f"Not a directory: {folder}"}), 400
 
     # Capture importer output by redirecting stdout temporarily
-    import io, contextlib
+    import contextlib
+    import io
+
     from cli.importer import import_samples
 
     buf = io.StringIO()
@@ -147,7 +156,9 @@ def api_import_files():
     if not paths:
         return jsonify({"error": "paths list is required"}), 400
 
-    import io, contextlib
+    import contextlib
+    import io
+
     from analyzer.audio_analysis import analyze_file
     from data.database import init_db, save_sample
 

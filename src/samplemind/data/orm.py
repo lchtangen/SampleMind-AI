@@ -36,7 +36,7 @@ def _apply_sqlite_pragmas(dbapi_conn, _connection_record) -> None:  # noqa: ANN0
     """
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA cache_size=-64000")   # negative = kilobytes → 64 MB
+    cursor.execute("PRAGMA cache_size=-64000")  # negative = kilobytes → 64 MB
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA temp_store=MEMORY")
     cursor.execute("PRAGMA mmap_size=268435456")  # 256 MB
@@ -45,7 +45,7 @@ def _apply_sqlite_pragmas(dbapi_conn, _connection_record) -> None:  # noqa: ANN0
 
 def get_engine() -> Engine:
     """Return the shared SQLAlchemy engine, creating it on first call."""
-    global _engine  # noqa: PLW0603
+    global _engine
     if _engine is None:
         from samplemind.core.config import get_settings
 
@@ -68,15 +68,15 @@ def init_orm() -> None:
     calling ``create_all``.  Safe to call multiple times — idempotent.
     """
     # Import models to register them in SQLModel.metadata before create_all
-    import samplemind.core.models.user   # noqa: F401
-    import samplemind.core.models.sample  # noqa: F401
+    import samplemind.core.models.sample
+    import samplemind.core.models.user  # noqa: F401
 
     engine = get_engine()
     SQLModel.metadata.create_all(engine)
 
 
 @contextmanager
-def get_session() -> Generator[Session, None, None]:
+def get_session() -> Generator[Session]:
     """
     Yield a SQLModel session, committing on success or rolling back on error.
 
@@ -91,4 +91,3 @@ def get_session() -> Generator[Session, None, None]:
         except Exception:
             session.rollback()
             raise
-

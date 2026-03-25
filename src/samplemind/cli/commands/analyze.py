@@ -14,7 +14,7 @@ def analyze_samples(folder: str, json_output: bool = False) -> None:
             print(json.dumps({"error": f"Folder not found: {folder}"}))
         else:
             print(f"❌ Folder not found: {folder}", file=sys.stderr)
-        return
+        sys.exit(1)
 
     wav_files = [f for f in os.listdir(folder) if f.lower().endswith(".wav")]
     if not wav_files:
@@ -40,13 +40,13 @@ def analyze_samples(folder: str, json_output: bool = False) -> None:
             results.append({"filename": file, "path": os.path.abspath(file_path), **r})
             if not json_output:
                 print(
-                    f"  {file:<36} {str(r['bpm']):<7} {r['key']:<10} "
+                    f"  {file:<36} {r['bpm']!s:<7} {r['key']:<10} "
                     f"{r['energy']:<7} {r['mood']:<12} {r['instrument']}",
                     file=sys.stderr,
                 )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not json_output:
                 print(f"  ❌ {file} — failed: {e}", file=sys.stderr)
 
     if json_output:
-        print(json.dumps({"samples": results}))
+        print(json.dumps(results))

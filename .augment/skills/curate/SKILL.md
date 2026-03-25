@@ -1,3 +1,8 @@
+---
+name: curate
+description: AI-powered library curation using LLMs to organize samples and generate smart playlists
+---
+
 # Skill: curate
 
 AI-powered library curation using LLMs — organize, analyze gaps, generate smart playlists.

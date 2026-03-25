@@ -1,0 +1,61 @@
+name: serve_api
+description: >
+  Launch the FastAPI REST API server with JWT auth, OpenAPI docs, and uvicorn.
+  Used for machine-to-machine integrations, mobile clients, and future multi-user.
+agent: api-agent
+command: "uv run samplemind api --host {host} --port {port}"
+inputs:
+  - name: host
+    type: string
+    description: Bind host address
+    default: "127.0.0.1"
+  - name: port
+    type: int
+    description: Bind port
+    default: 8000
+  - name: reload
+    type: flag
+    description: Enable uvicorn auto-reload (development only)
+    default: false
+outputs:
+  - url: "http://{host}:{port}"
+  - docs: "http://{host}:{port}/api/docs"
+  - redoc: "http://{host}:{port}/api/redoc"
+  - openapi: "http://{host}:{port}/api/openapi.json"
+endpoints:
+  health: "GET  /api/v1/health          → {status: ok, version: x.y.z}"
+  register: "POST /api/v1/auth/register → create account (returns UserPublic)"
+  login: "POST /api/v1/auth/login    → OAuth2PasswordRequestForm → TokenResponse"
+  refresh: "POST /api/v1/auth/refresh  → {refresh_token} → new access token"
+  logout: "POST /api/v1/auth/logout   → client-side hint (stateless JWT)"
+  me: "GET  /api/v1/auth/me        → current user profile"
+  me_put: "PUT  /api/v1/auth/me        → update username"
+  change_pw: "POST /api/v1/auth/change-password → change password"
+cors_origins:
+  - http://localhost:5174    # Tauri dev
+  - http://localhost:5000    # Flask dev
+  - http://localhost:8000    # FastAPI dev
+  - tauri://localhost        # Tauri production
+auth_flow: |
+  1. POST /api/v1/auth/login  → {access_token, refresh_token, token_type: bearer}
+  2. Add header: Authorization: Bearer <access_token>
+  3. Refresh: POST /api/v1/auth/refresh with {refresh_token}
+examples:
+  - "uv run samplemind api"
+  - "uv run samplemind api --reload"
+  - "uv run samplemind api --host 0.0.0.0 --port 8000"
+  - "uv run uvicorn samplemind.api.main:app --reload"
+  - "curl http://localhost:8000/api/v1/health"
+
+trigger_keywords:
+  - serve API, start API, FastAPI, uvicorn, API server, port 8000
+  - samplemind api, api --reload, serve_api, REST API server
+  - /api/docs, /api/v1/health, OpenAPI, Swagger
+
+trigger_files:
+  - "src/samplemind/api/main.py"
+  - "src/samplemind/api/routes/*.py"
+
+related_skills: [health_check, auth, serve_web]
+related_workflows: [dev-start, ci-check]
+

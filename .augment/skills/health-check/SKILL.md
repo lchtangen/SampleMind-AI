@@ -1,3 +1,8 @@
+---
+name: health-check
+description: Check the health of all running SampleMind services: FastAPI, Flask web UI, and sidecar
+---
+
 # Skill: health-check
 
 Check the health of all running SampleMind services: FastAPI, Flask web UI,

@@ -1,25 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
+mod state;
+
+use commands::{clear_token, get_token, is_directory, pick_folder, store_token};
+use state::AuthTokenStore;
+
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
-
-// ── Auth token store ─────────────────────────────────────────────────────────
-//
-// In-process storage for the JWT access token issued by the FastAPI auth layer.
-// The token is stored here so Rust commands can include it in direct HTTP
-// calls to the FastAPI server (/api/v1/…) without going through the WebView.
-//
-// For the Flask web UI (loaded in the WebView), auth is handled via session
-// cookies automatically — no token bridging is needed there.
-//
-// Security note: tokens are held only in process memory, never written to disk.
-
-#[derive(Default)]
-struct AuthTokenStore(Mutex<Option<String>>);
 
 const FLASK_PORT: u16 = 5174;
 const FLASK_URL: &str = "http://127.0.0.1:5174";
@@ -57,13 +49,11 @@ fn main_py(root: &PathBuf) -> PathBuf {
 fn resolve_server(app: &tauri::AppHandle) -> (PathBuf, Option<PathBuf>) {
     #[cfg(debug_assertions)]
     {
-        // Debug: use venv python + src/main.py
         let root = repo_root();
         (python_exe(&root), Some(main_py(&root)))
     }
     #[cfg(not(debug_assertions))]
     {
-        // Release: use the PyInstaller sidecar bundled with the app
         let binary = app
             .path()
             .resolve("binaries/samplemind-server", tauri::path::BaseDirectory::Resource)
@@ -93,93 +83,15 @@ fn set_status(window: &tauri::WebviewWindow, msg: &str) {
     ));
 }
 
-// ── Tauri command: native folder picker ─────────────────────────────────────
-
-/// Opens a native OS folder-picker dialog and returns the selected path.
-///
-/// Called from JavaScript via:
-///   const path = await window.__TAURI__.core.invoke('pick_folder')
-///
-/// Returns null if the user cancels. Returns a string path if they pick a folder.
-/// The JS then POSTs this path to Flask /api/import.
-#[tauri::command]
-fn pick_folder(app: tauri::AppHandle) -> Option<String> {
-    use tauri_plugin_dialog::DialogExt;
-
-    // blocking_pick_folder() opens the OS dialog and blocks until
-    // the user picks a folder or dismisses the dialog.
-    // This is safe to call here because Tauri runs commands on a thread pool,
-    // not the main UI thread.
-    app.dialog()
-        .file()
-        .blocking_pick_folder()
-        .map(|path| path.to_string())
-}
-
-// ── Tauri command: path info ─────────────────────────────────────────────────
-
-/// Check if a path is a directory.
-/// Called from JS after a drag-drop to decide whether to use /api/import
-/// (folder) or /api/import-files (list of WAV paths).
-///
-/// JS can't access the filesystem directly — it has to ask Rust.
-#[tauri::command]
-fn is_directory(path: String) -> bool {
-    std::path::Path::new(&path).is_dir()
-}
-
-// ── Tauri commands: JWT token bridge ─────────────────────────────────────────
-//
-// These three commands let the Svelte/JS frontend hand the FastAPI JWT token
-// to Rust, so that future native Rust→FastAPI calls can include it.
-//
-// Typical JS call sequence after login via FastAPI:
-//   const tokens = await fetch('/api/v1/auth/login', { method: 'POST', … }).json()
-//   await invoke('store_token', { token: tokens.access_token })
-//
-// Rust code that needs to call FastAPI directly can then call get_token() on
-// the app state internally.
-
-/// Store the JWT access token in process memory.
-///
-/// Called from JavaScript after a successful FastAPI /api/v1/auth/login.
-#[tauri::command]
-fn store_token(
-    token: String,
-    state: tauri::State<'_, AuthTokenStore>,
-) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
-    *guard = Some(token);
-    Ok(())
-}
-
-/// Retrieve the stored JWT access token.
-///
-/// Returns `None` if no token has been stored (user not logged in via FastAPI).
-#[tauri::command]
-fn get_token(state: tauri::State<'_, AuthTokenStore>) -> Result<Option<String>, String> {
-    let guard = state.0.lock().map_err(|e| e.to_string())?;
-    Ok(guard.clone())
-}
-
-/// Clear the stored JWT token (called on logout).
-#[tauri::command]
-fn clear_token(state: tauri::State<'_, AuthTokenStore>) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
-    *guard = None;
-    Ok(())
-}
-
 // ── System tray ──────────────────────────────────────────────────────────────
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    // Build the right-click context menu
-    let show_item = MenuItem::with_id(app, "show",  "Show SampleMind AI", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "Show SampleMind AI", true, None::<&str>)?;
     let sep       = tauri::menu::PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItem::with_id(app, "quit",  "Quit",               true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit",               true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[&show_item, &sep, &quit_item])?;
 
@@ -187,21 +99,18 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .icon(app.default_window_icon().unwrap().clone())
         .tooltip("SampleMind AI")
         .menu(&menu)
-        // Right-click menu item handler
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "show" => show_main_window(app),
-                "quit" => app.exit(0),
-                _ => {}
-            }
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main_window(app),
+            "quit" => app.exit(0),
+            _      => {}
         })
-        // Left-click on the tray icon toggles the window
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
-            } = event {
+            } = event
+            {
                 show_main_window(tray.app_handle());
             }
         })
@@ -225,7 +134,7 @@ fn main() {
     let server_close = Arc::clone(&server);
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())   // register the dialog plugin
+        .plugin(tauri_plugin_dialog::init())
         // Register all IPC commands — must match capabilities/default.json
         .invoke_handler(tauri::generate_handler![
             pick_folder,
@@ -234,14 +143,12 @@ fn main() {
             get_token,
             clear_token,
         ])
-        // Manage auth token state (process-lifetime, not persisted to disk)
         .manage(AuthTokenStore::default())
         .setup(move |app| {
-            // ── System tray ───────────────────────────────────────────────
             setup_tray(app)?;
 
-            // ── Flask server ──────────────────────────────────────────────
-            let window = app.get_webview_window("main")
+            let window = app
+                .get_webview_window("main")
                 .expect("window 'main' not found");
             window.show()?;
 
@@ -250,15 +157,14 @@ fn main() {
             std::thread::spawn(move || {
                 let (exe, script) = resolve_server(&app_handle);
 
-                // In dev mode, verify main.py exists before spawning
                 if let Some(ref s) = script {
                     if !s.exists() {
-                        set_status(&win, "❌ main.py not found — check repo structure");
+                        set_status(&win, "main.py not found -- check repo structure");
                         return;
                     }
                 }
 
-                set_status(&win, "Starting Python server…");
+                set_status(&win, "Starting Python server...");
                 eprintln!("[SampleMind] Spawning: {:?} serve --port {}", exe, FLASK_PORT);
 
                 let mut cmd = Command::new(&exe);
@@ -273,20 +179,20 @@ fn main() {
 
                 match child {
                     Err(e) => {
-                        set_status(&win, &format!("❌ Failed to start Python: {e}"));
+                        set_status(&win, &format!("Failed to start Python: {e}"));
                     }
                     Ok(proc) => {
                         if let Ok(mut lock) = server_setup.lock() {
                             *lock = Some(proc);
                         }
-                        set_status(&win, "Waiting for server…");
+                        set_status(&win, "Waiting for server...");
                         if wait_for_port(FLASK_PORT, 30) {
                             set_status(&win, "Ready!");
                             let _ = win.eval(&format!(
                                 "window.location.replace('{FLASK_URL}')"
                             ));
                         } else {
-                            set_status(&win, "❌ Server timed out after 30s");
+                            set_status(&win, "Server timed out after 30s");
                         }
                     }
                 }
@@ -294,25 +200,20 @@ fn main() {
 
             Ok(())
         })
-        // Hide the window on close instead of quitting — use tray to quit
-        .on_window_event(move |window, event| {
-            match event {
-                tauri::WindowEvent::CloseRequested { api, .. } => {
-                    // Prevent default close behaviour (which would exit the app)
-                    api.prevent_close();
-                    window.hide().ok();
-                }
-                tauri::WindowEvent::Destroyed => {
-                    // Window is truly gone — kill Flask
-                    if let Ok(mut lock) = server_close.lock() {
-                        if let Some(mut child) = lock.take() {
-                            let _ = child.kill();
-                            let _ = child.wait();
-                        }
+        .on_window_event(move |window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                window.hide().ok();
+            }
+            tauri::WindowEvent::Destroyed => {
+                if let Ok(mut lock) = server_close.lock() {
+                    if let Some(mut child) = lock.take() {
+                        let _ = child.kill();
+                        let _ = child.wait();
                     }
                 }
-                _ => {}
             }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error running tauri application");

@@ -100,6 +100,20 @@
       font-size: 0.875rem;
     }
   </style>
+  <!-- HTMX — reactive UI without full page reloads -->
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+  <script>
+    // Surface HTMX request failures gracefully instead of silently swapping nothing.
+    document.body.addEventListener('htmx:responseError', function (evt) {
+      var status = evt.detail.xhr.status;
+      var target = evt.detail.target;
+      if (target) {
+        target.innerHTML =
+          '<div class="auth-error" style="margin:0.5rem 0">Request failed (HTTP ' +
+          status + '). Please refresh and try again.</div>';
+      }
+    });
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body>

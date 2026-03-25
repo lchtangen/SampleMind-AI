@@ -1,3 +1,8 @@
+---
+name: setup-dev
+description: Set up the SampleMind-AI development environment from scratch on a new machine
+---
+
 # Skill: setup-dev
 
 Set up the SampleMind-AI development environment from scratch on a new machine.

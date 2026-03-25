@@ -1,3 +1,8 @@
+---
+name: tag
+description: Manually tag a sample with genre, mood, energy, and free-form tags
+---
+
 # Skill: tag
 
 Manually tag a sample in the library with genre, mood, energy, and free-form tags.

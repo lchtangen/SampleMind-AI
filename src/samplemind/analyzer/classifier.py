@@ -15,19 +15,20 @@ Feature quick reference:
 """
 
 import warnings
-import numpy as np
+
 import librosa
+import numpy as np
 
 # Suppress librosa warnings about very short audio files (< n_fft samples).
 # These are expected when analyzing short one-shots like hihats.
 warnings.filterwarnings("ignore", message="n_fft=.*is too large")
 
 
-def _features(y: np.ndarray, sr: int, duration: float) -> dict:
+def _features(y: np.ndarray, sr: int | float, duration: float) -> dict[str, float]:
     """Extract all classification features from a loaded audio signal."""
 
     # RMS energy — scalar representing overall loudness
-    rms = float(np.sqrt(np.mean(y ** 2)))
+    rms = float(np.sqrt(np.mean(y**2)))
 
     # Spectral centroid — average across time frames, normalized by Nyquist freq
     # Gives a value 0-1 where 0 = all energy at DC (silence) and 1 = all at top
@@ -47,7 +48,7 @@ def _features(y: np.ndarray, sr: int, duration: float) -> dict:
     # Onset strength — mean strength of rhythmic attacks
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
     onset_mean = float(onset_env.mean())
-    onset_max  = float(onset_env.max())
+    onset_max = float(onset_env.max())
 
     # Low-frequency energy ratio — energy below 300 Hz vs total
     # Kicks and bass have very high low_freq_ratio; hihats have near zero
@@ -59,15 +60,15 @@ def _features(y: np.ndarray, sr: int, duration: float) -> dict:
     low_freq_ratio = low_energy / total_energy
 
     return {
-        "rms":           rms,
+        "rms": rms,
         "centroid_norm": centroid_mean,
-        "zcr":           zcr,
-        "flatness":      flatness,
-        "rolloff_norm":  rolloff_norm,
-        "onset_mean":    onset_mean,
-        "onset_max":     onset_max,
+        "zcr": zcr,
+        "flatness": flatness,
+        "rolloff_norm": rolloff_norm,
+        "onset_mean": onset_mean,
+        "onset_max": onset_max,
         "low_freq_ratio": low_freq_ratio,
-        "duration":      duration,
+        "duration": duration,
     }
 
 
@@ -96,10 +97,10 @@ def classify_mood(f: dict, key: str) -> str:
     euphoric:  major key + high centroid + mid-high energy → uplifting, bright
     melancholic: minor key + low energy + low onset → sad, introspective
     """
-    is_minor   = "min" in (key or "")
-    centroid   = f["centroid_norm"]
-    rms        = f["rms"]
-    zcr        = f["zcr"]
+    is_minor = "min" in (key or "")
+    centroid = f["centroid_norm"]
+    rms = f["rms"]
+    zcr = f["zcr"]
     onset_mean = f["onset_mean"]
 
     # Aggressive: noisy + percussive + bright
@@ -140,12 +141,12 @@ def classify_instrument(f: dict) -> str:
     - Loops:   long duration (> 2s) → almost certainly a loop
     - SFX:     flat spectrum + doesn't fit any other profile
     """
-    dur  = f["duration"]
-    lfr  = f["low_freq_ratio"]
+    dur = f["duration"]
+    lfr = f["low_freq_ratio"]
     flat = f["flatness"]
-    zcr  = f["zcr"]
-    cen  = f["centroid_norm"]
-    om   = f["onset_mean"]
+    zcr = f["zcr"]
+    cen = f["centroid_norm"]
+    om = f["onset_mean"]
     omax = f["onset_max"]
     roll = f["rolloff_norm"]
 
@@ -184,7 +185,7 @@ def classify_instrument(f: dict) -> str:
     return "unknown"
 
 
-def classify(y: np.ndarray, sr: int, key: str) -> dict:
+def classify(y: np.ndarray, sr: int | float, key: str) -> dict[str, str]:
     """
     Main entry point — run all classifiers and return a dict of results.
 
@@ -195,7 +196,7 @@ def classify(y: np.ndarray, sr: int, key: str) -> dict:
     f = _features(y, sr, duration)
 
     return {
-        "energy":     classify_energy(f),
-        "mood":       classify_mood(f, key),
+        "energy": classify_energy(f),
+        "mood": classify_mood(f, key),
         "instrument": classify_instrument(f),
     }

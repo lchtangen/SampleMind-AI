@@ -1,3 +1,8 @@
+---
+name: sidecar
+description: Manage the Python sidecar server used by the JUCE plugin and Tauri IPC over a Unix socket
+---
+
 # Skill: sidecar
 
 Manage the Python sidecar server used by the JUCE plugin and Tauri IPC.

@@ -65,4 +65,3 @@ async def get_current_active_user(user=Depends(get_current_user)):
 
 # ── Convenience type aliases ──────────────────────────────────────────────────
 CurrentUser = Annotated[object, Depends(get_current_active_user)]
-

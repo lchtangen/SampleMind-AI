@@ -1,3 +1,8 @@
+---
+name: import-samples
+description: Recursively scan a folder for WAV/AIFF files, analyze each with librosa, and store in the database
+---
+
 # Skill: import-samples
 
 Recursively scan a folder for WAV/AIFF files, analyze each with librosa,

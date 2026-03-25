@@ -1,3 +1,8 @@
+---
+name: pack
+description: Create, import, verify, or list .smpack sample pack files
+---
+
 # Skill: pack
 
 Create, import, verify, or list `.smpack` sample pack files.

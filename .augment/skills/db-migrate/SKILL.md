@@ -1,3 +1,8 @@
+---
+name: db-migrate
+description: Generate and apply Alembic database migrations for SQLModel schema changes
+---
+
 # Skill: db-migrate
 
 Generate and apply Alembic database migrations for SQLModel schema changes.

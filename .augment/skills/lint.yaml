@@ -1,0 +1,46 @@
+name: lint
+description: >
+  Run ruff lint + format check on all Python source. Optionally auto-fix
+  with --fix. Also checks Rust with cargo clippy.
+agent: test-runner
+commands:
+  check: "uv run ruff check src/ tests/"
+  format_check: "uv run ruff format --check src/ tests/"
+  fix: "uv run ruff check --fix src/ tests/ && uv run ruff format src/ tests/"
+  rust: "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+inputs:
+  - name: fix
+    type: flag
+    description: Auto-fix ruff issues and format files
+    default: false
+  - name: rust
+    type: flag
+    description: Also run cargo clippy on app/src-tauri/
+    default: true
+outputs:
+  - lint_errors: List of ruff lint violations
+  - format_errors: List of ruff format violations
+  - clippy_errors: Rust clippy warnings/errors (if rust=true)
+rules:
+  - Use ruff only — never black, flake8, pylint, isort
+  - clippy must pass with -D warnings (no suppressions without comment)
+examples:
+  - "uv run ruff check src/ tests/"
+  - "uv run ruff format --check src/"
+  - "uv run ruff check --fix src/ && uv run ruff format src/"
+  - "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+
+trigger_keywords:
+  - ruff, lint, format, linting, ruff error, clippy, style error
+  - E501 line too long, F401 unused import, ruff check, ruff format
+  - fix linting, fix formatting, code style, cargo clippy
+
+trigger_files:
+  - "src/**/*.py"
+  - "tests/**/*.py"
+  - "pyproject.toml"
+  - "app/src-tauri/src/**/*.rs"
+
+related_skills: [check, run_tests]
+related_workflows: [ci-check]
+

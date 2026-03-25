@@ -1,3 +1,8 @@
+---
+name: start
+description: Start all SampleMind services: Flask, FastAPI, and optionally Tauri dev mode
+---
+
 # Skill: start
 
 Start all SampleMind services (Flask + FastAPI) and optionally Tauri dev mode.

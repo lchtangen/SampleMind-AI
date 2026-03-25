@@ -5,7 +5,7 @@ list:   show everything, with optional BPM/key filters
 search: filter by filename, genre, energy, BPM, key simultaneously
 """
 
-from data.database import get_all_samples, search_samples, count_samples, init_db
+from data.database import count_samples, get_all_samples, init_db, search_samples
 
 
 def _print_table(rows):

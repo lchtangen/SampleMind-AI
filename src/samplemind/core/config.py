@@ -1,17 +1,25 @@
 """
 core/config.py — application settings for SampleMind AI
 
-Reads from environment variables or .env file.
-Provides a single Settings instance via get_settings() (cached).
+Load order (later overrides earlier):
+  1. Hardcoded defaults below
+  2. .env file in project root        (dev convenience)
+  3. Environment variables            (CI / production)
+
+All env vars use the SAMPLEMIND_ prefix (e.g. SAMPLEMIND_SECRET_KEY).
+Provides a single Settings instance via get_settings() (lru_cache).
 """
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
+import warnings
 
 from platformdirs import user_data_dir
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 APP_NAME = "SampleMind"
@@ -20,44 +28,50 @@ DB_PATH = APP_DIR / "samplemind.db"
 LEGACY_DB_PATH = Path.home() / ".samplemind" / "library.db"
 
 
-class Settings:
-    """Application settings — loaded once at import time."""
+def _default_database_url() -> str:
+    """Return DB URL, preferring legacy path if it already exists on disk."""
+    if LEGACY_DB_PATH.exists() and not DB_PATH.exists():
+        return f"sqlite:///{LEGACY_DB_PATH}"
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{DB_PATH}"
 
-    # ── Database ─────────────────────────────────────────────────────────────
-    # Use the canonical platformdirs path; fall back to legacy path if it exists.
-    @property
-    def database_url(self) -> str:
-        legacy = LEGACY_DB_PATH
-        if legacy.exists() and not DB_PATH.exists():
-            return f"sqlite:///{legacy}"
-        APP_DIR.mkdir(parents=True, exist_ok=True)
-        return f"sqlite:///{DB_PATH}"
 
-    # ── JWT ──────────────────────────────────────────────────────────────────
-    SECRET_KEY: str = os.getenv(
-        "SAMPLEMIND_SECRET_KEY",
-        # Insecure default — always override via environment in production
-        "change-me-before-deployment-use-a-long-random-string",
+class Settings(BaseSettings):
+    """Application settings — loaded from environment variables / .env file."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="SAMPLEMIND_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
     )
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
-    # ── Flask session ────────────────────────────────────────────────────────
-    FLASK_SECRET_KEY: str = os.getenv("FLASK_SECRET_KEY", SECRET_KEY)
+    # ── Database ──────────────────────────────────────────────────────────────
+    database_url: str = Field(
+        default_factory=_default_database_url,
+        description="SQLAlchemy connection string. Use 'sqlite://' for in-memory testing.",
+    )
 
-    # ── OAuth providers (optional — leave empty to disable) ──────────────────
-    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
-    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
-    GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    # ── Authentication ────────────────────────────────────────────────────────
+    secret_key: str = Field(
+        default="CHANGE-ME-IN-PRODUCTION-use-secrets-token-hex-32",
+        description='JWT signing key. Generate: python -c "import secrets; print(secrets.token_hex(32))"',
+    )
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 7
 
-    # ── Server ────────────────────────────────────────────────────────────────
-    API_HOST: str = os.getenv("SAMPLEMIND_API_HOST", "127.0.0.1")
-    API_PORT: int = int(os.getenv("SAMPLEMIND_API_PORT", "8000"))
+    # ── Flask session ─────────────────────────────────────────────────────────
+    # Empty string means "use secret_key" — resolved in _set_derived_defaults.
+    flask_secret_key: str = Field(default="")
+    flask_host: str = "127.0.0.1"
+    flask_port: int = 5000
 
-    # ── CORS ──────────────────────────────────────────────────────────────────
-    CORS_ORIGINS: list[str] = [
+    # ── FastAPI server ────────────────────────────────────────────────────────
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
+    cors_origins: list[str] = [
         "http://localhost:5174",  # Tauri dev
         "http://localhost:5000",  # Flask dev
         "http://localhost:8000",  # FastAPI dev
@@ -65,29 +79,53 @@ class Settings:
     ]
 
     # ── Audio import ──────────────────────────────────────────────────────────
-    # File extensions recognised as importable audio files.
-    # Used by the import command and web upload validation.
-    SUPPORTED_EXTENSIONS: tuple[str, ...] = (".wav", ".aif", ".aiff", ".flac")
+    supported_extensions: tuple[str, ...] = (".wav", ".aif", ".aiff", ".flac")
+    # Max file size in bytes — files larger than this are skipped. Default: 500 MB.
+    max_audio_file_bytes: int = 500 * 1024 * 1024
+    # Number of worker processes for parallel batch analysis. 0 = os.cpu_count().
+    batch_workers: int = 0
 
-    # Maximum file size in bytes to attempt analysis.
-    # Files larger than this are skipped with a warning to avoid OOM on librosa.
-    # Default: 500 MB.  Override via SAMPLEMIND_MAX_AUDIO_BYTES env var.
-    MAX_AUDIO_FILE_BYTES: int = int(
-        os.getenv("SAMPLEMIND_MAX_AUDIO_BYTES", str(500 * 1024 * 1024))
-    )
-
-    # ── Batch processing ──────────────────────────────────────────────────────
-    # Number of worker processes for parallel batch analysis.
-    # 0 means os.cpu_count() — auto-detected at runtime.
-    # Override via SAMPLEMIND_BATCH_WORKERS env var.
-    BATCH_WORKERS: int = int(os.getenv("SAMPLEMIND_BATCH_WORKERS", "0"))
+    # ── Logging ───────────────────────────────────────────────────────────────
+    log_level: Literal["debug", "info", "warning", "error"] = "info"
+    log_format: Literal["console", "json"] = "console"
 
     # ── Environment ───────────────────────────────────────────────────────────
-    ENVIRONMENT: str = os.getenv("SAMPLEMIND_ENV", "development")
+    environment: str = "development"
+
+    # ── Optional integrations ─────────────────────────────────────────────────
+    sentry_dsn: str | None = None
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+
+    @field_validator("secret_key")
+    @classmethod
+    def warn_insecure_secret(cls, v: str) -> str:
+        if v.startswith("CHANGE-ME"):
+            warnings.warn(
+                "SAMPLEMIND_SECRET_KEY is using the insecure default. "
+                "Set it to a random 32-byte hex string in production.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return v
+
+    @model_validator(mode="after")
+    def _set_derived_defaults(self) -> Settings:
+        """Resolve fields that depend on other fields after full validation."""
+        # flask_secret_key defaults to secret_key when not explicitly set
+        if not self.flask_secret_key:
+            object.__setattr__(self, "flask_secret_key", self.secret_key)
+
+        # Ensure the SQLite DB directory exists (skip for in-memory / test URLs)
+        if self.database_url.startswith("sqlite:///"):
+            db_path = Path(self.database_url.removeprefix("sqlite:///"))
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        return self
 
     @property
     def is_development(self) -> bool:
-        return self.ENVIRONMENT == "development"
+        return self.environment == "development"
 
 
 @lru_cache(maxsize=1)
@@ -95,3 +133,7 @@ def get_settings() -> Settings:
     """Return the singleton Settings instance (cached after first call)."""
     return Settings()
 
+
+def override_settings(**kwargs: object) -> Settings:
+    """Test helper — returns a new Settings with overrides, does not touch global."""
+    return Settings(**kwargs)  # type: ignore[arg-type]

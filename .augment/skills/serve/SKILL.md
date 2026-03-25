@@ -1,3 +1,8 @@
+---
+name: serve
+description: Start the SampleMind web services: Flask UI, FastAPI REST server, or both
+---
+
 # Skill: serve
 
 Start the SampleMind web services — Flask UI, FastAPI REST server, or both.

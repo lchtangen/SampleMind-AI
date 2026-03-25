@@ -21,6 +21,7 @@ This directory contains routing agents used to specialize implementation by phas
 
 | Agent | Phase | Focus |
 |-------|-------|-------|
+| `phase-01-foundation` | 1 | uv, pyproject.toml, src-layout, structlog, pydantic-settings |
 | `phase-02-audio-testing` | 2 | pytest WAV fixtures, analyzer coverage |
 | `phase-03-database` | 3 | SQLModel, Alembic, ORM migration |
 | `phase-04-cli` | 4 | Typer, Rich, --json flag, CLI UX |

@@ -2,21 +2,22 @@
 Model loader utility for low-memory environments.
 Supports: 8-bit quantization, disk offloading, and fallback to remote inference.
 """
-from typing import Optional
+
 try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 except ImportError:
     AutoModelForCausalLM = None
     AutoTokenizer = None
 
+
 def load_model(
     model_name: str,
-    offload_folder: Optional[str] = "./offload",
+    offload_folder: str | None = "./offload",
     prefer_8bit: bool = True,
     prefer_offload: bool = True,
     device_map: str = "auto",
-    **kwargs
-) -> Optional[object]:
+    **kwargs,
+) -> object | None:
     """
     Try to load a model with 8-bit quantization or disk offloading.
     Falls back to remote inference if local load fails.
@@ -33,12 +34,16 @@ def load_model(
     try:
         if prefer_offload:
             return AutoModelForCausalLM.from_pretrained(
-                model_name, device_map=device_map, offload_folder=offload_folder, **kwargs
+                model_name,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                **kwargs,
             )
     except Exception as e:
         print(f"Offload load failed: {e}")
     print("Falling back to remote inference or smaller model.")
     return None
+
 
 def load_tokenizer(model_name: str):
     if AutoTokenizer is None:

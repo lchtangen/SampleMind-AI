@@ -1,3 +1,8 @@
+---
+name: check-ci
+description: Run the full local CI suite: ruff lint, pytest with coverage, cargo clippy, and cargo test
+---
+
 # Skill: check-ci
 
 Run the full local CI suite — ruff lint + format check, pytest with coverage,

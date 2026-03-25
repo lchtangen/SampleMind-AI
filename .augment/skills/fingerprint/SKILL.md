@@ -1,3 +1,8 @@
+---
+name: fingerprint
+description: SHA-256 audio fingerprinting for deduplication to identify identical files regardless of filename
+---
+
 # Skill: fingerprint
 
 SHA-256 audio fingerprinting for deduplication — identify identical files regardless of filename.

@@ -1,3 +1,8 @@
+---
+name: analyze-audio
+description: Extract BPM, key, mood, energy, and instrument from WAV/AIFF files using librosa classifiers
+---
+
 # Skill: analyze-audio
 
 Extract all audio features from a WAV or AIFF file using librosa and run the

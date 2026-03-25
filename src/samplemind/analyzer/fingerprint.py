@@ -68,4 +68,3 @@ def find_duplicates(paths: list[Path]) -> dict[str, list[Path]]:
             continue
         groups.setdefault(fp, []).append(path)
     return {fp: ps for fp, ps in groups.items() if len(ps) > 1}
-

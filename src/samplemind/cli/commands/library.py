@@ -38,7 +38,7 @@ def _print_table(rows: list[Sample]) -> None:
     print("─" * 100, file=sys.stderr)
     for i, s in enumerate(rows, 1):
         print(
-            f"{i:<4} {s.filename:<34} {str(s.bpm or '?'):<7} {(s.key or ''):<10} "
+            f"{i:<4} {s.filename:<34} {s.bpm or '?'!s:<7} {(s.key or ''):<10} "
             f"{(s.instrument or ''):<8} {(s.genre or ''):<10} "
             f"{(s.energy or ''):<7} {s.mood or ''}",
             file=sys.stderr,
@@ -66,7 +66,9 @@ def list_samples(
         return
     rows = SampleRepository.search(bpm_min=bpm_min, bpm_max=bpm_max, key=key)
     if json_output:
-        print(json.dumps({"samples": [_sample_to_dict(s) for s in rows], "total": total}))
+        print(
+            json.dumps({"samples": [_sample_to_dict(s) for s in rows], "total": total})
+        )
     else:
         _print_table(rows)
         print(f"{len(rows)} result(s)  |  {total} total in library", file=sys.stderr)
@@ -104,7 +106,9 @@ def search_library(
         instrument=instrument,
     )
     if json_output:
-        print(json.dumps({"samples": [_sample_to_dict(s) for s in rows], "total": total}))
+        print(
+            json.dumps({"samples": [_sample_to_dict(s) for s in rows], "total": total})
+        )
     else:
         _print_table(rows)
         print(f"{len(rows)} result(s)  |  {total} total in library", file=sys.stderr)

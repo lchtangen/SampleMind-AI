@@ -255,5 +255,6 @@
   // ── Markdown lint ───────────────────────────────────────────────────────────
   "markdownlint.config": {
     "extends": ".markdownlint.json"
-  }
+  },
+  "editor.codeActions.triggerOnFocusChange": true
 }

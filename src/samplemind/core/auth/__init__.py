@@ -11,36 +11,35 @@ Public surface:
     )
 """
 
-from .api_keys import APIKeyService, APIKeyCreate, APIKeyPermission
+from .api_keys import APIKeyCreate, APIKeyPermission, APIKeyService
 from .dependencies import get_current_active_user, get_current_user
-from .jwt_handler import configure_jwt, create_access_token, create_refresh_token, verify_token
+from .jwt_handler import (
+    configure_jwt,
+    create_access_token,
+    create_refresh_token,
+    verify_token,
+)
 from .password import hash_password, needs_rehash, verify_password
 from .permissions import admin_only, require_permission, require_role
 from .rbac import Permission, RBACService, UserRole
 
 __all__ = [
-    # JWT
+    "APIKeyCreate",
+    "APIKeyPermission",
+    "APIKeyService",
+    "Permission",
+    "RBACService",
+    "UserRole",
+    "admin_only",
     "configure_jwt",
     "create_access_token",
     "create_refresh_token",
-    "verify_token",
-    # Password
-    "hash_password",
-    "verify_password",
-    "needs_rehash",
-    # FastAPI dependencies
-    "get_current_user",
     "get_current_active_user",
-    # RBAC
-    "UserRole",
-    "Permission",
-    "RBACService",
+    "get_current_user",
+    "hash_password",
+    "needs_rehash",
     "require_permission",
     "require_role",
-    "admin_only",
-    # API keys
-    "APIKeyService",
-    "APIKeyCreate",
-    "APIKeyPermission",
+    "verify_password",
+    "verify_token",
 ]
-

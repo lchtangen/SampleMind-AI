@@ -16,9 +16,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import httpx
-import pytest
 from fastapi.testclient import TestClient
+import pytest
 
 # ── Password ──────────────────────────────────────────────────────────────────
 
@@ -188,7 +187,6 @@ def api_client(orm_engine):
 
     from samplemind.api import __version__
     from samplemind.api.routes import auth as auth_router
-    from fastapi.middleware.cors import CORSMiddleware
 
     @asynccontextmanager
     async def noop_lifespan(app: FastAPI):
@@ -211,7 +209,11 @@ def api_client(orm_engine):
 def test_register_success(api_client):
     resp = api_client.post(
         "/api/v1/auth/register",
-        json={"email": "new@example.com", "username": "newuser", "password": "NewPass1"},
+        json={
+            "email": "new@example.com",
+            "username": "newuser",
+            "password": "NewPass1",
+        },
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -281,4 +283,3 @@ def test_change_password(api_client, auth_headers, test_user):
         data={"username": test_user.email, "password": "Test1234"},
     )
     assert login_resp.status_code == 401
-

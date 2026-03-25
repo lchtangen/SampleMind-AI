@@ -1,6 +1,7 @@
 import numpy as np
-import soundfile as sf
 import pytest
+import soundfile as sf
+
 from samplemind.analyzer.audio_analysis import analyze_file
 
 
@@ -17,8 +18,25 @@ def test_analyze_file_sine(tmp_path):
     assert isinstance(result["bpm"], float)
     assert isinstance(result["key"], str)
     assert result["energy"] in {"low", "mid", "high"}
-    assert result["mood"] in {"dark", "chill", "aggressive", "euphoric", "melancholic", "neutral"}
-    assert result["instrument"] in {"lead", "pad", "bass", "kick", "snare", "hihat", "loop", "sfx", "unknown"}
+    assert result["mood"] in {
+        "dark",
+        "chill",
+        "aggressive",
+        "euphoric",
+        "melancholic",
+        "neutral",
+    }
+    assert result["instrument"] in {
+        "lead",
+        "pad",
+        "bass",
+        "kick",
+        "snare",
+        "hihat",
+        "loop",
+        "sfx",
+        "unknown",
+    }
 
 
 def test_analyze_file_silence(silent_wav):
@@ -27,14 +45,17 @@ def test_analyze_file_silence(silent_wav):
     assert result["instrument"] in {"unknown", "pad", "sfx"}
 
 
-@pytest.mark.parametrize("freq,candidates", [
-    # 60 Hz pure sine = sub-bass fundamental → classifier may return kick, bass, or unknown.
-    # A real kick drum has a transient envelope; a pure sine at 60 Hz has none,
-    # so 'bass' is a legitimate (and more accurate) classification.
-    (60,   {"kick", "bass", "unknown"}),
-    (440,  {"lead", "unknown"}),
-    (1000, {"hihat", "unknown"}),
-])
+@pytest.mark.parametrize(
+    "freq,candidates",
+    [
+        # 60 Hz pure sine = sub-bass fundamental → classifier may return kick, bass, or unknown.
+        # A real kick drum has a transient envelope; a pure sine at 60 Hz has none,
+        # so 'bass' is a legitimate (and more accurate) classification.
+        (60, {"kick", "bass", "unknown"}),
+        (440, {"lead", "unknown"}),
+        (1000, {"hihat", "unknown"}),
+    ],
+)
 def test_instrument_classification(tmp_path, freq, candidates):
     path = synth_wav(tmp_path / f"{freq}hz.wav", freq=freq, amplitude=0.8)
     result = analyze_file(str(path))

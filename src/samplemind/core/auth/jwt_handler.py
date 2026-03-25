@@ -7,8 +7,8 @@ and can be overridden at runtime via configure_jwt() (called from FastAPI lifesp
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime, timedelta
+import logging
 from typing import Any
 
 from jose import JWTError, jwt
@@ -25,10 +25,10 @@ class _JWTConfig:
         from samplemind.core.config import get_settings
 
         s = get_settings()
-        self.SECRET_KEY: str = s.SECRET_KEY
-        self.ALGORITHM: str = s.ALGORITHM
-        self.ACCESS_TOKEN_EXPIRE_MINUTES: int = s.ACCESS_TOKEN_EXPIRE_MINUTES
-        self.REFRESH_TOKEN_EXPIRE_DAYS: int = s.REFRESH_TOKEN_EXPIRE_DAYS
+        self.SECRET_KEY: str = s.secret_key
+        self.ALGORITHM: str = s.algorithm
+        self.ACCESS_TOKEN_EXPIRE_MINUTES: int = s.access_token_expire_minutes
+        self.REFRESH_TOKEN_EXPIRE_DAYS: int = s.refresh_token_expire_days
 
 
 _cfg = _JWTConfig()
@@ -130,4 +130,3 @@ def verify_token(token: str, *, token_type: str = "access") -> str | None:
 
     logger.debug("Token verified for user %s", user_id)
     return user_id
-

@@ -1,3 +1,8 @@
+---
+name: generate-sample
+description: Generate new audio samples from text descriptions using AudioCraft MusicGen or Stable Audio
+---
+
 # Skill: generate-sample
 
 Generate new audio samples from text descriptions using AI (AudioCraft MusicGen / Stable Audio Open).

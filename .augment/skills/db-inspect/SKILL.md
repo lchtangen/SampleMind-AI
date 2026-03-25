@@ -1,3 +1,8 @@
+---
+name: db-inspect
+description: Inspect the SampleMind SQLite database: schema, record counts, and migration state
+---
+
 # Skill: db-inspect
 
 Inspect the SampleMind SQLite database: schema, record counts, migration state,

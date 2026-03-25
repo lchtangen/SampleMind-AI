@@ -1,0 +1,73 @@
+name: list_samples
+description: >
+  List all samples in the library with optional filters for key, BPM range,
+  instrument, mood, energy, and genre. Outputs a formatted table or JSON.
+agent: audio-analyzer
+command: "uv run samplemind list {args} --json"
+inputs:
+  - name: key
+    type: string
+    description: "Filter by musical key (e.g. 'A min', 'C maj', 'F# min')"
+    required: false
+  - name: bpm_min
+    type: float
+    description: Minimum BPM (inclusive)
+    required: false
+  - name: bpm_max
+    type: float
+    description: Maximum BPM (inclusive)
+    required: false
+  - name: instrument
+    type: enum
+    values: [loop, hihat, kick, snare, bass, pad, lead, sfx, unknown]
+    required: false
+  - name: energy
+    type: enum
+    values: [low, mid, high]
+    required: false
+  - name: mood
+    type: enum
+    values: [dark, chill, aggressive, euphoric, melancholic, neutral]
+    required: false
+  - name: genre
+    type: string
+    description: Genre filter (free-form, e.g. trap, lofi, house)
+    required: false
+  - name: json
+    type: flag
+    description: Output JSON to stdout for machine processing
+    default: false
+outputs:
+  - samples: List of Sample objects
+  - count: Total number of results
+  - table_columns: [id, filename, bpm, key, instrument, genre, energy, mood, imported_at]
+sample_schema:
+  id: int
+  filename: str
+  path: str
+  bpm: float | null
+  key: str | null        # e.g. "C maj", "F# min"
+  mood: str | null       # dark/chill/aggressive/euphoric/melancholic/neutral
+  energy: str | null     # low/mid/high
+  instrument: str | null # kick/snare/hihat/bass/pad/lead/loop/sfx/unknown
+  genre: str | null      # user-tagged
+  tags: str | null       # comma-separated user tags
+  imported_at: datetime
+examples:
+  - "uv run samplemind list --json"
+  - "uv run samplemind list --key 'C min' --energy high --json"
+  - "uv run samplemind list --bpm-min 120 --bpm-max 140 --instrument kick"
+  - "uv run samplemind list --genre trap --mood dark --json"
+
+trigger_keywords:
+  - list samples, show library, list all, query library, get samples
+  - filter by key, filter by BPM, filter by instrument, filter by energy
+  - samplemind list, list --json, library contents
+
+trigger_files:
+  - "src/samplemind/cli/commands/library.py"
+  - "src/samplemind/data/repositories/sample_repository.py"
+
+related_skills: [search, tag, import_samples]
+related_workflows: [debug-classifier]
+

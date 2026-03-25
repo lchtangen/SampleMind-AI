@@ -1,3 +1,8 @@
+---
+name: coverage
+description: Run pytest coverage reports and identify untested code paths in the samplemind package
+---
+
 # Skill: coverage
 
 Run test coverage reports and identify untested code paths.

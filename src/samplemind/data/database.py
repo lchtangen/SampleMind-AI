@@ -8,8 +8,8 @@ Migration strategy: _migrate() adds new columns to existing databases
 so users don't lose their library when the schema evolves.
 """
 
-import sqlite3
 import os
+import sqlite3
 
 DB_PATH = os.path.expanduser("~/.samplemind/library.db")
 
@@ -28,10 +28,10 @@ def _migrate(conn: sqlite3.Connection):
     if the column already exists (we catch that specific error).
     """
     new_columns = [
-        ("genre",      "TEXT"),
-        ("energy",     "TEXT"),   # low / mid / high
-        ("tags",       "TEXT"),   # comma-separated free-form tags
-        ("instrument", "TEXT"),   # kick / snare / hihat / bass / pad / lead / loop / sfx
+        ("genre", "TEXT"),
+        ("energy", "TEXT"),  # low / mid / high
+        ("tags", "TEXT"),  # comma-separated free-form tags
+        ("instrument", "TEXT"),  # kick / snare / hihat / bass / pad / lead / loop / sfx
     ]
     for col_name, col_type in new_columns:
         try:
@@ -60,11 +60,19 @@ def init_db():
         _migrate(conn)
 
 
-def save_sample(filename: str, path: str, bpm: float, key: str,
-                mood: str = None, energy: str = None, instrument: str = None):
+def save_sample(
+    filename: str,
+    path: str,
+    bpm: float,
+    key: str,
+    mood: str = None,
+    energy: str = None,
+    instrument: str = None,
+):
     """Insert or update a sample. Re-importing the same path updates auto-detected fields."""
     with _connect() as conn:
-        conn.execute("""
+        conn.execute(
+            """
             INSERT INTO samples (filename, path, bpm, key, mood, energy, instrument)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(path) DO UPDATE SET
@@ -73,21 +81,32 @@ def save_sample(filename: str, path: str, bpm: float, key: str,
                 mood       = excluded.mood,
                 energy     = excluded.energy,
                 instrument = excluded.instrument
-        """, (filename, path, bpm, key, mood, energy, instrument))
+        """,
+            (filename, path, bpm, key, mood, energy, instrument),
+        )
 
 
-def tag_sample(path: str, genre: str = None, mood: str = None,
-               energy: str = None, tags: str = None) -> bool:
+def tag_sample(
+    path: str, genre: str = None, mood: str = None, energy: str = None, tags: str = None
+) -> bool:
     """
     Update the manual tags on a sample by its file path.
     Only updates fields that are explicitly passed (None = leave unchanged).
     Returns True if the sample was found, False if not in the library.
     """
     fields, params = [], []
-    if genre  is not None: fields.append("genre = ?");  params.append(genre)
-    if mood   is not None: fields.append("mood = ?");   params.append(mood)
-    if energy is not None: fields.append("energy = ?"); params.append(energy)
-    if tags   is not None: fields.append("tags = ?");   params.append(tags)
+    if genre is not None:
+        fields.append("genre = ?")
+        params.append(genre)
+    if mood is not None:
+        fields.append("mood = ?")
+        params.append(mood)
+    if energy is not None:
+        fields.append("energy = ?")
+        params.append(energy)
+    if tags is not None:
+        fields.append("tags = ?")
+        params.append(tags)
 
     if not fields:
         return False
@@ -104,13 +123,19 @@ def get_sample_by_name(name: str):
     """Find a sample by partial filename match (case-insensitive)."""
     with _connect() as conn:
         return conn.execute(
-            "SELECT * FROM samples WHERE filename LIKE ? LIMIT 1",
-            (f"%{name}%",)
+            "SELECT * FROM samples WHERE filename LIKE ? LIMIT 1", (f"%{name}%",)
         ).fetchone()
 
 
-def search_samples(query: str = None, bpm_min=None, bpm_max=None,
-                   key=None, genre=None, energy=None, instrument=None):
+def search_samples(
+    query: str = None,
+    bpm_min=None,
+    bpm_max=None,
+    key=None,
+    genre=None,
+    energy=None,
+    instrument=None,
+):
     """
     Full search with all filters combined.
     query = partial filename or tag match.
@@ -121,12 +146,24 @@ def search_samples(query: str = None, bpm_min=None, bpm_max=None,
     if query:
         sql += " AND (filename LIKE ? OR tags LIKE ?)"
         params += [f"%{query}%", f"%{query}%"]
-    if bpm_min  is not None: sql += " AND bpm >= ?";        params.append(bpm_min)
-    if bpm_max  is not None: sql += " AND bpm <= ?";        params.append(bpm_max)
-    if key      is not None: sql += " AND key LIKE ?";      params.append(f"%{key}%")
-    if genre      is not None: sql += " AND genre LIKE ?";      params.append(f"%{genre}%")
-    if energy     is not None: sql += " AND energy = ?";        params.append(energy)
-    if instrument is not None: sql += " AND instrument LIKE ?"; params.append(f"%{instrument}%")
+    if bpm_min is not None:
+        sql += " AND bpm >= ?"
+        params.append(bpm_min)
+    if bpm_max is not None:
+        sql += " AND bpm <= ?"
+        params.append(bpm_max)
+    if key is not None:
+        sql += " AND key LIKE ?"
+        params.append(f"%{key}%")
+    if genre is not None:
+        sql += " AND genre LIKE ?"
+        params.append(f"%{genre}%")
+    if energy is not None:
+        sql += " AND energy = ?"
+        params.append(energy)
+    if instrument is not None:
+        sql += " AND instrument LIKE ?"
+        params.append(f"%{instrument}%")
 
     sql += " ORDER BY imported_at DESC"
 

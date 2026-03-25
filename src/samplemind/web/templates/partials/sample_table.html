@@ -1,0 +1,10 @@
+{# HTMX partial — only the <tbody> rows, swapped in by hx-target="#sample-tbody" #}
+{% from "macros/ui.html" import sample_row %}
+{% if samples %}
+  {% for s in samples %}
+    {{ sample_row(s) }}
+  {% endfor %}
+{% else %}
+  <tr><td colspan="9" class="empty">No samples match your filters.</td></tr>
+{% endif %}
+

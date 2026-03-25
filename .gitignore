@@ -51,6 +51,11 @@ DerivedData/
 .coverage
 htmlcov/
 
+# ── SampleMind runtime databases (never commit) ───────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+
 # ── Temp / lock junk ──────────────────────────────────────────────────────────
 *.lock.swp
 .~lock.*

@@ -1,3 +1,8 @@
+---
+name: run-tests
+description: Run the pytest test suite and Rust tests with CI-matching configuration and coverage
+---
+
 # Skill: run-tests
 
 Run the pytest test suite (and optionally the Rust test suite) with

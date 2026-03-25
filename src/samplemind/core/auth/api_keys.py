@@ -7,23 +7,22 @@ Keys are stored as SHA-256 hashes — the plain key is shown only once at creati
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from enum import StrEnum
 import hashlib
 import secrets
-from datetime import datetime, timedelta
-from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel
 
 
-class APIKeyEnv(str, Enum):
+class APIKeyEnv(StrEnum):
     """Environment tag embedded in the key prefix."""
 
     PRODUCTION = "sm_live_"
     DEVELOPMENT = "sm_test_"
 
 
-class APIKeyPermission(str, Enum):
+class APIKeyPermission(StrEnum):
     """Coarse permissions for API key access."""
 
     READ = "audio:read"
@@ -39,8 +38,8 @@ class APIKeyPermission(str, Enum):
 class APIKeyCreate(BaseModel):
     name: str
     permissions: list[APIKeyPermission]
-    expires_in_days: Optional[int] = None
-    description: Optional[str] = None
+    expires_in_days: int | None = None
+    description: str | None = None
     environment: str = "production"
 
 
@@ -53,7 +52,7 @@ class APIKeyResponse(BaseModel):
     name: str
     permissions: list[APIKeyPermission]
     created_at: datetime
-    expires_at: Optional[datetime]
+    expires_at: datetime | None
     warning: str = "Store this key securely. It will not be shown again."
 
 
@@ -65,8 +64,8 @@ class APIKeyPublic(BaseModel):
     prefix: str
     permissions: list[APIKeyPermission]
     created_at: datetime
-    expires_at: Optional[datetime]
-    last_used_at: Optional[datetime]
+    expires_at: datetime | None
+    last_used_at: datetime | None
     is_active: bool
     usage_count: int
 
@@ -101,7 +100,11 @@ class APIKeyService:
     @staticmethod
     def create(user_id: str, params: APIKeyCreate) -> APIKeyResponse:
         """Build an APIKeyResponse (does NOT persist to DB — caller must do that)."""
-        env = APIKeyEnv.PRODUCTION if params.environment != "development" else APIKeyEnv.DEVELOPMENT
+        env = (
+            APIKeyEnv.PRODUCTION
+            if params.environment != "development"
+            else APIKeyEnv.DEVELOPMENT
+        )
         full_key, _ = APIKeyService.generate(env)
         key_id = f"key_{secrets.token_urlsafe(16)}"
         expires_at = (
@@ -118,4 +121,3 @@ class APIKeyService:
             created_at=datetime.utcnow(),
             expires_at=expires_at,
         )
-

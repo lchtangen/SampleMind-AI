@@ -1,20 +1,60 @@
+"""
+analyzer/audio_analysis.py — Full audio feature extraction pipeline.
+
+Extracts 5 auto-detected fields from a WAV/AIFF file:
+  - bpm:        Tempo in beats per minute (librosa beat tracker)
+  - key:        Root note + quality ("C maj", "F# min") via chroma_cens + tonnetz
+  - energy:     "low" | "mid" | "high" (RMS amplitude threshold)
+  - mood:       "dark" | "chill" | "aggressive" | "euphoric" | "melancholic" | "neutral"
+  - instrument: "loop" | "hihat" | "kick" | "snare" | "bass" | "pad" | "lead" | "sfx" | "unknown"
+
+Public API:
+  analyze_file(file_path: str) -> dict[str, float | str]
+
+Internal helpers (_load, analyze_bpm, analyze_key) are not part of the public API.
+All analysis results are stored in the samples table via SampleRepository.upsert().
+"""
+
+from typing import TypedDict
+
 import librosa
 import numpy as np
-from typing import Tuple
+
 from samplemind.analyzer.classifier import classify
 
 
-def _load(file_path: str):
-    """Load audio once — reused by all analysis functions."""
-    return librosa.load(file_path)
+class AudioFeatures(TypedDict):
+    """Typed return value for analyze_file() — each field has a precise type."""
+
+    bpm: float
+    key: str
+    energy: str
+    mood: str
+    instrument: str
 
 
-def analyze_bpm(y, sr) -> float:
+def _load(file_path: str) -> tuple[np.ndarray, int | float]:
+    """Load audio once — reused by all analysis functions.
+
+    Returns (y, sr) where sr may be int or float depending on the librosa backend.
+    The default sr=22050 Hz is always returned as int, but resampled or
+    native-rate loads can produce float sample rates.
+    """
+    return librosa.load(file_path, sr=22050)
+
+
+def analyze_bpm(y: np.ndarray, sr: int | float) -> float:
+    """Estimate tempo in beats per minute using librosa's beat tracker.
+
+    Uses onset strength envelope and dynamic programming to find the most
+    consistent inter-beat interval. Returns 0.0 for silent or very short clips.
+    Accuracy is ±2 BPM for most electronic music.
+    """
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     return round(float(tempo), 2)
 
 
-def analyze_key(y, sr) -> str:
+def analyze_key(y: np.ndarray, sr: int | float) -> str:
     """
     Detect root note + major/minor quality.
 
@@ -34,7 +74,7 @@ def analyze_key(y, sr) -> str:
     return f"{root} {quality}"
 
 
-def analyze_file(file_path: str) -> dict:
+def analyze_file(file_path: str) -> AudioFeatures:
     """
     Full analysis of a WAV file. Returns a dict with:
       bpm, key, energy, mood, instrument
@@ -44,12 +84,12 @@ def analyze_file(file_path: str) -> dict:
     y, sr = _load(file_path)
     bpm = analyze_bpm(y, sr)
     key = analyze_key(y, sr)
-    ai  = classify(y, sr, key)
+    ai = classify(y, sr, key)
 
     return {
-        "bpm":        bpm,
-        "key":        key,
-        "energy":     ai["energy"],
-        "mood":       ai["mood"],
+        "bpm": bpm,
+        "key": key,
+        "energy": ai["energy"],
+        "mood": ai["mood"],
         "instrument": ai["instrument"],
     }

@@ -75,7 +75,10 @@ and JUCE VST3/AU plugin — all reading the same database.
 
 **Important:**
 
-- **Legacy database.py still exists** in `src/samplemind/data/database.py` but is no longer used by any CLI command or web route. It is kept only for reference during the Phase 5 cleanup. Do not add new code that imports from it.
+- **Legacy database.py still exists** in `src/samplemind/data/database.py`. It is still imported by
+  `src/samplemind/api/main.py` and `src/samplemind/cli/commands/serve.py` (both call `init_db()` for
+  backward compatibility). Phase 5 cleanup will remove these remaining call sites and delete
+  `database.py` entirely. Do not add new code that imports from it.
 - **src/main.py** (legacy argparse entry point) is still required for Tauri dev mode. Do not remove it unless you also update `app/src-tauri/src/main.rs`.
 - The active runtime uses `init_orm()` (not `init_db()`), `SampleRepository` (not `save_sample()` / `search_samples()`), and `get_session()` (not `_connect()`).
 
@@ -276,7 +279,8 @@ cargo test --manifest-path app/src-tauri/Cargo.toml
 @pytest.mark.juce    # requires JUCE plugin to be built
 ```
 
-**Coverage minimum (CI-enforced):** 60% overall (`fail_under = 60` in pyproject.toml).
+**Coverage minimum (CI-enforced):** 60% overall — configured in `[tool.coverage.report]` in
+`pyproject.toml` and enforced by the CI `python` job (no `continue-on-error`).
 **Coverage aspirational targets:** analyzer 80%+, classifier 90%+, CLI 70%+.
 
 **WAV fixtures** — never commit real audio files:

@@ -1,3 +1,8 @@
+---
+name: lint
+description: Run ruff lint and format check on Python source and cargo clippy on Rust code
+---
+
 # Skill: lint
 
 Run ruff lint + format check on all Python source and cargo clippy on Rust.

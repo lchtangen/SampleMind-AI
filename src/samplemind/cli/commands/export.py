@@ -15,8 +15,8 @@ Usage:
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
+import shutil
 
 from rich.console import Console
 from rich.table import Table
@@ -49,7 +49,7 @@ def _fl_name(sample: Sample) -> str:
     stem = Path(sample.filename).stem
 
     if sample.bpm is not None:
-        bpm_str = f"{int(round(sample.bpm))}bpm"
+        bpm_str = f"{round(sample.bpm)}bpm"
     else:
         bpm_str = "nobpm"
 
@@ -71,7 +71,7 @@ def _subfolder(sample: Sample, organize: str) -> str:
         return sample.mood or "unknown"
     if organize == "genre":
         return sample.genre or "untagged"
-    return ""   # flat layout when organize is not set
+    return ""  # flat layout when organize is not set
 
 
 def export_samples(
@@ -113,10 +113,12 @@ def export_samples(
         _err.print("🔍 No samples matched your filters.")
         return
 
-    table = Table(title=f"Exporting {len(samples)} sample(s) → {dest}", show_lines=False)
-    table.add_column("Source",      style="dim",    no_wrap=True)
-    table.add_column("Exported as", style="cyan",   no_wrap=True)
-    table.add_column("Folder",      style="yellow")
+    table = Table(
+        title=f"Exporting {len(samples)} sample(s) → {dest}", show_lines=False
+    )
+    table.add_column("Source", style="dim", no_wrap=True)
+    table.add_column("Exported as", style="cyan", no_wrap=True)
+    table.add_column("Folder", style="yellow")
 
     copied = skipped = 0
 
@@ -142,4 +144,3 @@ def export_samples(
     if skipped:
         _err.print(f"  (skipped {skipped} missing file(s))", end="")
     _err.print()
-

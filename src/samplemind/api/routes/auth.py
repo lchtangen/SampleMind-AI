@@ -16,7 +16,6 @@ Endpoints:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -50,13 +49,15 @@ _ACCESS_TTL_SECONDS = 30 * 60  # 30 minutes
 # ── Registration ──────────────────────────────────────────────────────────────
 
 
-@router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED
+)
 async def register(body: UserCreate):
     """
     Create a new user account.
 
     - **email**: unique, valid email address
-    - **username**: 3–50 characters, letters/digits/underscores only
+    - **username**: 3-50 characters, letters/digits/underscores only
     - **password**: ≥8 chars, at least one upper, lower, and digit
     """
     if UserRepository.exists_by_email(body.email):
@@ -118,7 +119,7 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(body: RefreshRequest):
     """Exchange a valid refresh token for a new access + refresh token pair."""
-    user_id = verify_token(body.refresh_token, token_type="refresh")
+    user_id = verify_token(body.refresh_token, token_type="refresh")  # noqa: S106
     if not user_id:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
@@ -132,7 +133,9 @@ async def refresh(body: RefreshRequest):
 
     access = create_access_token(user.user_id, user.email)
     new_refresh = create_refresh_token(user.user_id)
-    return TokenResponse(access_token=access, refresh_token=new_refresh, expires_in=_ACCESS_TTL_SECONDS)
+    return TokenResponse(
+        access_token=access, refresh_token=new_refresh, expires_in=_ACCESS_TTL_SECONDS
+    )
 
 
 # ── Logout ────────────────────────────────────────────────────────────────────
@@ -159,14 +162,18 @@ async def me(current_user=Depends(get_current_active_user)):
 
 
 @router.put("/me", response_model=UserPublic)
-async def update_profile(body: UserUpdate, current_user=Depends(get_current_active_user)):
+async def update_profile(
+    body: UserUpdate, current_user=Depends(get_current_active_user)
+):
     """Update the authenticated user's profile (username only for now)."""
     if body.username:
         conflict = UserRepository.get_by_username(body.username)
         if conflict and conflict.user_id != current_user.user_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Username already taken")
 
-    updated = UserRepository.update(current_user.user_id, **body.model_dump(exclude_none=True))
+    updated = UserRepository.update(
+        current_user.user_id, **body.model_dump(exclude_none=True)
+    )
     return UserPublic.model_validate(updated)
 
 
@@ -178,7 +185,8 @@ async def change_password(
     if not verify_password(body.current_password, current_user.hashed_password):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Incorrect current password")
 
-    UserRepository.update(current_user.user_id, hashed_password=hash_password(body.new_password))
+    UserRepository.update(
+        current_user.user_id, hashed_password=hash_password(body.new_password)
+    )
     logger.info("Password changed for user: %s", current_user.email)
     return MessageResponse(message="Password changed successfully")
-

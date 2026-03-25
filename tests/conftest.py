@@ -1,5 +1,5 @@
-import sqlite3
 from pathlib import Path
+import sqlite3
 
 import numpy as np
 import pytest
@@ -7,8 +7,8 @@ import soundfile as sf
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-
 # ── Audio fixtures ─────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def silent_wav(tmp_path: Path) -> Path:
@@ -81,8 +81,8 @@ def orm_engine():
     the test, so that UserRepository and FastAPI routes use this isolated
     engine rather than touching the real on-disk database.
     """
-    import samplemind.data.orm as _orm_mod
     import samplemind.core.models.user  # noqa: F401  ← registers User in SQLModel.metadata
+    import samplemind.data.orm as _orm_mod
 
     # StaticPool: all sessions share the same single connection.
     # This is required for in-memory SQLite — without it, each new connection

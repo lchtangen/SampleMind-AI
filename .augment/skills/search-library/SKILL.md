@@ -1,3 +1,8 @@
+---
+name: search-library
+description: Search the SampleMind library with free-text queries and metadata filters for BPM, key, energy
+---
+
 # Skill: search-library
 
 Search the SampleMind library with free-text queries and/or metadata filters

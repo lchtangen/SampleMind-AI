@@ -15,8 +15,9 @@ Feature quick reference:
 """
 
 import warnings
-import numpy as np
+
 import librosa
+import numpy as np
 
 # Suppress librosa warnings about very short audio files (< n_fft samples).
 # These are expected when analyzing short one-shots like hihats.

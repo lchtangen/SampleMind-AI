@@ -1,0 +1,34 @@
+{# macros/ui.html — reusable Jinja2 macros for SampleMind UI components #}
+
+{# Render one sample row in the library table.
+   Used by partials/sample_table.html so both the initial page load
+   and HTMX partial refreshes share the same markup. #}
+{% macro sample_row(sample) %}
+<tr class="sample-row" data-id="{{ sample.id }}" data-path="{{ sample.path }}">
+  <td class="filename">{{ sample.filename }}</td>
+  <td class="bpm">{{ "%.1f"|format(sample.bpm) if sample.bpm else "—" }}</td>
+  <td>{{ sample.key or "—" }}</td>
+  <td><span class="chip instrument">{{ sample.instrument or "—" }}</span></td>
+  <td class="editable" data-field="genre">{{ sample.genre or "" }}</td>
+  <td><span class="chip energy {{ sample.energy or '' }}">{{ sample.energy or "—" }}</span></td>
+  <td><span class="chip mood">{{ sample.mood or "—" }}</span></td>
+  <td><button class="play-btn" data-id="{{ sample.id }}" data-sample-id="{{ sample.id }}">▶</button></td>
+  <td><button class="tag-btn">🏷️</button></td>
+</tr>
+{% endmacro %}
+
+{# Toast / flash notification banner.
+   type: "info" | "success" | "error" | "loading" #}
+{% macro toast(message, type="info") %}
+<div class="toast toast-{{ type }}" role="alert" aria-live="polite">
+  {{ message }}
+</div>
+{% endmacro %}
+
+{# Badge chip with a semantic colour class #}
+{% macro badge(value, category="") %}
+<span class="chip{% if category %} {{ category }}{% endif %}{% if value %} {{ value }}{% endif %}">
+  {{ value or "—" }}
+</span>
+{% endmacro %}
+

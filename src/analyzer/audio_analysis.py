@@ -1,6 +1,8 @@
+from typing import Tuple
+
 import librosa
 import numpy as np
-from typing import Tuple
+
 from analyzer.classifier import classify
 
 

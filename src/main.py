@@ -1,15 +1,17 @@
 import argparse
-from cli.importer import import_samples
+
 from cli.analyze import analyze_samples
+from cli.importer import import_samples
 from cli.library import list_samples, search_library
 from cli.tagger import tag_samples
 
 
 def _serve(port: int):
-    import sys, os
+    import os
+    import sys
     sys.path.insert(0, os.path.dirname(__file__))
-    from web.app import app
     from data.database import init_db
+    from web.app import app
     init_db()
     print(f"🎧 SampleMind AI web UI → http://localhost:{port}")
     app.run(debug=False, port=port)

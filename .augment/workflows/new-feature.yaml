@@ -1,0 +1,74 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Workflow: new-feature
+# Purpose: Standard steps for adding a new feature to SampleMind-AI.
+#          Ensures code quality, test coverage, and IPC contract safety.
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: new-feature
+description: >
+  Guided workflow for implementing a new feature. Covers implementation,
+  tests, IPC contract check, linting, and documentation.
+agent: audio-analyzer    # override per feature type
+
+steps:
+  - id: read_source
+    name: "Read relevant source files"
+    action: >
+      Read the actual source file(s) before proposing any changes.
+      Use codebase-retrieval to find all callers and related files.
+    required: true
+
+  - id: implement
+    name: "Implement the feature"
+    rules:
+      - Type hints on all public functions
+      - src-layout imports (from samplemind.x import y)
+      - JSON to stdout, text to stderr (IPC contract)
+      - No sys.path.insert hacks
+      - Use ruff-compatible style (line length 100, py313 target)
+
+  - id: write_tests
+    name: "Write pytest tests"
+    rules:
+      - Use soundfile + numpy for WAV fixtures (never real audio files)
+      - Use tmp_path for all file I/O — safe for parallel execution
+      - Mark slow tests with @pytest.mark.slow
+      - Mark macOS-only tests with @pytest.mark.macos
+      - Cover happy path + at least one edge case
+    command: "uv run pytest tests/test_<feature>.py -v"
+
+  - id: lint_check
+    name: "Lint and format"
+    command: "uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/"
+    auto_fix: "uv run ruff check --fix src/ && uv run ruff format src/"
+
+  - id: coverage_check
+    name: "Verify coverage targets"
+    command: "uv run pytest tests/ --cov=samplemind --cov-report=term-missing -q"
+    targets:
+      analyzer: "≥80%"
+      classifier: "≥90%"
+      cli: "≥70%"
+      overall: "≥60%"
+
+  - id: ipc_check
+    name: "Verify IPC contract"
+    checks:
+      - "--json flag outputs valid JSON to stdout only"
+      - "No debug prints to stdout in production path"
+      - "Errors go to stderr or are in JSON error field"
+
+  - id: rust_check
+    name: "Rust clippy (if Tauri/Rust touched)"
+    command: "cargo clippy --manifest-path app/src-tauri/Cargo.toml -- -D warnings"
+    skip_if: no_rust_changes
+
+  - id: doc_note
+    name: "Note documentation needed"
+    action: >
+      Identify which phase doc (docs/en/phase-NN-*.md) should be updated.
+      Don't create docs automatically — remind the user to update them.
+
+reporting:
+  summary: "List implemented files, test file, coverage delta, and any doc updates needed"
+

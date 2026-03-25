@@ -1,11 +1,12 @@
-import typer
 from rich.console import Console
+import typer
 
 from samplemind import __version__
 from samplemind.cli.commands.analyze import analyze_samples
 from samplemind.cli.commands.api import serve_api
 from samplemind.cli.commands.duplicates import find_library_duplicates
 from samplemind.cli.commands.export import export_samples
+from samplemind.cli.commands.health import health_cmd
 from samplemind.cli.commands.import_ import import_samples
 from samplemind.cli.commands.library import list_samples, search_library
 from samplemind.cli.commands.serve import serve
@@ -28,9 +29,10 @@ def version() -> None:
 def import_(
     source: str = typer.Argument(..., help="Folder containing WAV files"),
     json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+    workers: int = typer.Option(0, "--workers", "-w", help="Parallel workers (0 = auto)"),
 ) -> None:
     """Import WAV samples into the library."""
-    import_samples(source, json_output=json)
+    import_samples(source, json_output=json, workers=workers)
 
 
 @app.command("analyze")
@@ -87,9 +89,15 @@ def search(
 @app.command("tag")
 def tag(
     name: str = typer.Argument(..., help="Partial filename to identify the sample"),
-    genre: str | None = typer.Option(None, "--genre", help="Genre (e.g. trap, lofi, house)"),
-    mood: str | None = typer.Option(None, "--mood", help="Mood (e.g. dark, chill, euphoric)"),
-    energy: str | None = typer.Option(None, "--energy", help="Energy level [low|mid|high]"),
+    genre: str | None = typer.Option(
+        None, "--genre", help="Genre (e.g. trap, lofi, house)"
+    ),
+    mood: str | None = typer.Option(
+        None, "--mood", help="Mood (e.g. dark, chill, euphoric)"
+    ),
+    energy: str | None = typer.Option(
+        None, "--energy", help="Energy level [low|mid|high]"
+    ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated free tags"),
 ) -> None:
     """Tag a sample with genre, mood, energy."""
@@ -108,7 +116,9 @@ def serve_cmd(
 def api_cmd(
     host: str = typer.Option("127.0.0.1", "--host", help="Bind host"),
     port: int = typer.Option(8000, "--port", "-p", help="Bind port"),
-    reload: bool = typer.Option(False, "--reload", help="Enable uvicorn auto-reload (dev only)"),
+    reload: bool = typer.Option(
+        False, "--reload", help="Enable uvicorn auto-reload (dev only)"
+    ),
 ) -> None:
     """Launch the FastAPI REST API server (auth + JSON endpoints)."""
     serve_api(host=host, port=port, reload=reload)
@@ -135,23 +145,30 @@ def duplicates_cmd(
 @app.command("export")
 def export_cmd(
     target: str | None = typer.Option(
-        None, "--target", "-t",
+        None,
+        "--target",
+        "-t",
         help="Destination folder (default: ./samplemind-export).",
     ),
     organize: str | None = typer.Option(
-        None, "--organize",
+        None,
+        "--organize",
         help="Create subfolders by: instrument | mood | genre",
         metavar="[instrument|mood|genre]",
     ),
     energy: str | None = typer.Option(
-        None, "--energy", help="Filter by energy level [low|mid|high]",
+        None,
+        "--energy",
+        help="Filter by energy level [low|mid|high]",
     ),
     instrument: str | None = typer.Option(
-        None, "--instrument",
+        None,
+        "--instrument",
         help="Filter by instrument [kick|snare|hihat|bass|pad|lead|loop|sfx|unknown]",
     ),
     mood: str | None = typer.Option(
-        None, "--mood",
+        None,
+        "--mood",
         help="Filter by mood [dark|chill|aggressive|euphoric|melancholic|neutral]",
     ),
     bpm_min: float | None = typer.Option(None, "--bpm-min", help="Minimum BPM"),
@@ -176,10 +193,105 @@ def export_cmd(
 
 
 @app.command("stats")
-def stats_cmd() -> None:
+def stats_cmd(
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
     """Print a Rich summary of library statistics.
 
     Shows total count, BPM distribution (min/max/mean/median), and
     breakdowns by energy level, instrument type, and mood.
     """
-    print_stats()
+    print_stats(json_output=json)
+
+
+@app.command("health")
+def health(
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """Run system health checks (database + audio libraries).
+
+    Exits 0 when all checks pass, 1 when any check fails.
+    """
+    health_cmd(json_output=json)
+
+
+# ── Phase 7 stubs ────────────────────────────────────────────────────────────
+
+@app.command("export-to-fl")
+def export_to_fl(
+    energy: str | None = typer.Option(None, "--energy", help="Filter by energy [low|mid|high]"),
+    instrument: str | None = typer.Option(None, "--instrument", help="Filter by instrument type"),
+) -> None:
+    """Export samples to FL Studio's Samples/SampleMind folder. [Phase 7]"""
+    typer.echo("Not yet implemented — Phase 7 (FL Studio Integration)", err=True)
+    raise typer.Exit(1)
+
+
+@app.command("midi-sync")
+def midi_sync(
+    bpm: float = typer.Argument(..., help="BPM to broadcast via MIDI clock"),
+) -> None:
+    """Send BPM as MIDI clock to FL Studio via IAC Driver. [Phase 7]"""
+    typer.echo("Not yet implemented — Phase 7 (FL Studio Integration)", err=True)
+    raise typer.Exit(1)
+
+
+# ── Phase 9 stub ─────────────────────────────────────────────────────────────
+
+@app.command("pack")
+def pack_cmd(
+    action: str = typer.Argument(..., help="Action: create | import | verify | list"),
+) -> None:
+    """Manage .smpack sample pack archives (create, import, verify). [Phase 9]"""
+    typer.echo("Not yet implemented — Phase 9 (Sample Packs)", err=True)
+    raise typer.Exit(1)
+
+
+# ── Phase 11 stub ────────────────────────────────────────────────────────────
+
+@app.command("similar")
+def similar_cmd(
+    path: str = typer.Argument(..., help="Reference WAV file path"),
+    top_k: int = typer.Option(10, "--top", "-k", help="Number of results"),
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """Find samples similar to a reference file using semantic search. [Phase 11]"""
+    typer.echo("Not yet implemented — Phase 11 (Semantic Search)", err=True)
+    raise typer.Exit(1)
+
+
+# ── Phase 12 stub ────────────────────────────────────────────────────────────
+
+@app.command("curate")
+def curate_cmd(
+    prompt: str | None = typer.Argument(None, help="Curation goal (e.g. 'dark trap set')"),
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """AI-powered library curation and smart playlist generation. [Phase 12]"""
+    typer.echo("Not yet implemented — Phase 12 (AI Curation)", err=True)
+    raise typer.Exit(1)
+
+
+# ── Phase 14 stub ────────────────────────────────────────────────────────────
+
+@app.command("analytics")
+def analytics_cmd(
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """Show library analytics: BPM distribution, key heatmap, mood breakdown. [Phase 14]"""
+    typer.echo("Not yet implemented — Phase 14 (Analytics)", err=True)
+    raise typer.Exit(1)
+
+
+# ── Phase 16 stub ────────────────────────────────────────────────────────────
+
+@app.command("generate")
+def generate_cmd(
+    prompt: str = typer.Argument(..., help="Text description of the sound to generate"),
+    duration: float = typer.Option(4.0, "--duration", "-d", help="Duration in seconds"),
+    backend: str = typer.Option("audiocraft", "--backend", help="Backend [audiocraft|stable_audio|mock]"),
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """Generate an audio sample from a text prompt using AI. [Phase 16]"""
+    typer.echo("Not yet implemented — Phase 16 (AI Generation)", err=True)
+    raise typer.Exit(1)

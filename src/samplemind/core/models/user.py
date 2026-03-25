@@ -7,13 +7,13 @@ Pydantic-only schemas (UserCreate, UserPublic, etc.) are defined below it.
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
-from typing import Optional
+import re
+import uuid
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlmodel import Column, DateTime, Field as SMField, SQLModel
-import re
+from sqlmodel import Column, DateTime, SQLModel
+from sqlmodel import Field as SMField
 
 
 def _new_uuid() -> str:
@@ -30,9 +30,9 @@ def _now() -> datetime:
 class User(SQLModel, table=True):
     """Users table — stores credentials and profile data."""
 
-    __tablename__ = "users"
+    __tablename__ = "users"  # type: ignore[assignment]
 
-    id: Optional[int] = SMField(default=None, primary_key=True)
+    id: int | None = SMField(default=None, primary_key=True)
     user_id: str = SMField(default_factory=_new_uuid, unique=True, index=True)
     email: str = SMField(unique=True, index=True)
     username: str = SMField(unique=True, index=True)
@@ -42,13 +42,13 @@ class User(SQLModel, table=True):
     is_verified: bool = SMField(default=False)
     created_at: datetime = SMField(
         default_factory=_now,
-        sa_column=Column(DateTime, default=_now),
+        sa_column=Column(DateTime, nullable=False, default=_now),
     )
     updated_at: datetime = SMField(
         default_factory=_now,
-        sa_column=Column(DateTime, default=_now, onupdate=_now),
+        sa_column=Column(DateTime, nullable=False, default=_now, onupdate=_now),
     )
-    last_login: Optional[datetime] = SMField(default=None)
+    last_login: datetime | None = SMField(default=None)
 
     # Usage stats
     total_analyses: int = SMField(default=0)
@@ -68,7 +68,9 @@ class UserCreate(BaseModel):
     @classmethod
     def username_valid(cls, v: str) -> str:
         if not re.fullmatch(r"[a-zA-Z0-9_]+", v):
-            raise ValueError("Username may only contain letters, digits, and underscores")
+            raise ValueError(
+                "Username may only contain letters, digits, and underscores"
+            )
         return v
 
     @field_validator("password")
@@ -86,13 +88,15 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     """Profile update payload (all fields optional)."""
 
-    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    username: str | None = Field(None, min_length=3, max_length=50)
 
     @field_validator("username")
     @classmethod
-    def username_valid(cls, v: Optional[str]) -> Optional[str]:
+    def username_valid(cls, v: str | None) -> str | None:
         if v and not re.fullmatch(r"[a-zA-Z0-9_]+", v):
-            raise ValueError("Username may only contain letters, digits, and underscores")
+            raise ValueError(
+                "Username may only contain letters, digits, and underscores"
+            )
         return v
 
 
@@ -125,7 +129,7 @@ class UserPublic(BaseModel):
     is_active: bool
     is_verified: bool
     created_at: datetime
-    last_login: Optional[datetime] = None
+    last_login: datetime | None = None
     total_analyses: int = 0
 
     model_config = {"from_attributes": True}
@@ -134,7 +138,7 @@ class UserPublic(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105
     expires_in: int = Field(..., description="Seconds until access token expires")
 
 
@@ -144,4 +148,3 @@ class RefreshRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
-

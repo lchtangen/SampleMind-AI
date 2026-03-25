@@ -2,7 +2,8 @@
 
 > **Loaded by the Augment Code VS Code extension on every task.**
 > This is the master rules file for the project.
-> Cross-tool sync: `CLAUDE.md` (Claude Code) · `.github/copilot-instructions.md` (GitHub Copilot) · `AGENTS.md` (universal routing)
+> Agents: `.augment/agents/*.md` · Skills: `.augment/skills/*/SKILL.md` · Guidelines: `.augment-guidelines` (repo root)
+> Cross-tool sync: `CLAUDE.md` (Claude Code) · `.github/copilot-instructions.md` (Copilot) · `AGENTS.md` (universal routing)
 
 ---
 
@@ -169,12 +170,15 @@ pub async fn import_folder(path: String) -> Result<String, String> { ... }
 
 ## 13. AI-Tool Directory Map
 
-| Tool | Primary Config | Skills | Agents | Commands |
+| Tool | Primary Config | Agents | Skills | Commands |
 |------|---------------|--------|--------|----------|
-| **Augment Code** (VS Code) | `.augment/rules.md` | `.augment/skills/*/SKILL.md` | `AGENTS.md` (root) | VS Code tasks |
-| **Claude Code** | `CLAUDE.md` (root) | `.claude/agents/*.md` | `.claude/agents/*.md` | `.claude/commands/*.md` |
-| **GitHub Copilot** | `.github/copilot-instructions.md` | — | `.github/agents/*.md` | — |
+| **Augment Code** (VS Code) | `.augment/rules.md` | `.augment/agents/*.md` | `.augment/skills/*/SKILL.md` | VS Code tasks |
+| **Claude Code** | `CLAUDE.md` (root) | `.claude/agents/*.md` | — | `.claude/commands/*.md` |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | `.github/agents/*.md` | — | — |
+| **All tools (routing)** | `AGENTS.md` (root) | — | — | — |
 
+**Repository Guidelines:** `.augment-guidelines` (repo root) — single canonical file for all repo-level context (replaces `.augment/memories/*.md` and `Augment-Memories.md`).
+**Personal Guidelines:** Add via Augment Code `@` menu → User Guidelines (stored per-user, not in repo).
 **DO NOT use `.auggie/`** — it is a project automation reference only, not read by any AI extension.
 
 ## 14. Semantic Search Embedding Contract (Phase 11)

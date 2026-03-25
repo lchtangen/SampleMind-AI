@@ -1,3 +1,8 @@
+---
+name: list-samples
+description: List all samples in the SampleMind library as a Rich table or JSON output
+---
+
 # Skill: list-samples
 
 List all samples in the SampleMind library as a Rich table (terminal) or JSON (machine).

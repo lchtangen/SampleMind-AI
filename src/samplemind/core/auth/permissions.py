@@ -69,4 +69,3 @@ def require_role(minimum: UserRole):
 def admin_only():
     """Shortcut dependency for admin-only routes."""
     return require_role(UserRole.ADMIN)
-
