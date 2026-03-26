@@ -5,7 +5,7 @@
    * Debounces the text query (300ms) then calls setFilter() from the library
    * store. Dropdown changes fire immediately (no debounce needed).
    */
-  import { filters, setFilter, clearFilters, isLoading } from "$lib/stores/library.svelte";
+  import { library } from "$lib/stores/library.svelte";
 
   const ENERGY_OPTIONS = ["", "low", "mid", "high"] as const;
   const MOOD_OPTIONS   = ["", "dark", "chill", "aggressive", "euphoric", "melancholic", "neutral"] as const;
@@ -16,57 +16,57 @@
   function onQueryInput(e: Event) {
     const value = (e.target as HTMLInputElement).value;
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => setFilter("query", value), 300);
+    debounceTimer = setTimeout(() => library.setFilter("query", value), 300);
   }
 
   function onEnergyChange(e: Event) {
-    setFilter("energy", (e.target as HTMLSelectElement).value);
+    library.setFilter("energy", (e.target as HTMLSelectElement).value);
   }
 
   function onMoodChange(e: Event) {
-    setFilter("mood", (e.target as HTMLSelectElement).value);
+    library.setFilter("mood", (e.target as HTMLSelectElement).value);
   }
 
   function onInstrumentChange(e: Event) {
-    setFilter("instrument", (e.target as HTMLSelectElement).value);
+    library.setFilter("instrument", (e.target as HTMLSelectElement).value);
   }
 </script>
 
-<div class="search-bar" class:loading={isLoading}>
+<div class="search-bar" class:loading={library.isLoading}>
   <input
     class="search-input"
     type="text"
     placeholder="Search by filename or tag…"
-    value={filters.query}
+    value={library.filters.query}
     oninput={onQueryInput}
   />
 
-  <select class="filter-select" value={filters.energy} onchange={onEnergyChange}>
+  <select class="filter-select" value={library.filters.energy} onchange={onEnergyChange}>
     <option value="">All energy</option>
     {#each ENERGY_OPTIONS.slice(1) as e}
       <option value={e}>{e}</option>
     {/each}
   </select>
 
-  <select class="filter-select" value={filters.mood} onchange={onMoodChange}>
+  <select class="filter-select" value={library.filters.mood} onchange={onMoodChange}>
     <option value="">All moods</option>
     {#each MOOD_OPTIONS.slice(1) as m}
       <option value={m}>{m}</option>
     {/each}
   </select>
 
-  <select class="filter-select" value={filters.instrument} onchange={onInstrumentChange}>
+  <select class="filter-select" value={library.filters.instrument} onchange={onInstrumentChange}>
     <option value="">All types</option>
     {#each INSTRUMENT_OPTIONS.slice(1) as i}
       <option value={i}>{i}</option>
     {/each}
   </select>
 
-  {#if filters.query || filters.energy || filters.mood || filters.instrument}
-    <button class="clear-btn" onclick={clearFilters}>Clear</button>
+  {#if library.filters.query || library.filters.energy || library.filters.mood || library.filters.instrument}
+    <button class="clear-btn" onclick={library.clearFilters}>Clear</button>
   {/if}
 
-  {#if isLoading}
+  {#if library.isLoading}
     <span class="spinner" aria-label="Loading…">⏳</span>
   {/if}
 </div>

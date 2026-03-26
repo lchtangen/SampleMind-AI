@@ -10,10 +10,10 @@ the manifest so that importers can verify integrity byte-for-byte.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
 import re
 import zipfile
-from datetime import datetime, timezone
-from pathlib import Path
 
 from samplemind.packs.checksums import checksum_file
 from samplemind.packs.models import PackEntry, PackManifest
@@ -85,7 +85,7 @@ def create_pack(
         version=version,
         author=author,
         description=description,
-        created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        created_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         entries=entries,
     )
 

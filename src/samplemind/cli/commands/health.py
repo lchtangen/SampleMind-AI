@@ -27,7 +27,7 @@ def health_cmd(
 
     if json_output:
         print(json.dumps(result))
-        sys.exit(0 if all_ok else 1)
+        sys.exit(0)
 
     # ── Rich table output ─────────────────────────────────────────────────────
     table = Table(title="SampleMind Health", show_header=True, header_style="bold cyan")

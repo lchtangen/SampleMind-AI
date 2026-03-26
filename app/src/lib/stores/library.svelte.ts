@@ -1,11 +1,19 @@
 /**
- * library.svelte.ts — Svelte 5 Runes store for the sample library.
+ * library.svelte.ts — Svelte 5 Runes reactive store for the sample library.
  *
- * Reactive state for the full sample list and filter criteria.
- * Calls Flask /api/samples to load data; reacts to filter changes.
+ * Uses the closure-based store pattern required by Svelte 5 module rules:
+ * state lives in a function closure so internal reassignments are allowed,
+ * and consumers access values through getter properties on the exported object.
  *
  * Usage in a component:
- *   import { samples, loadSamples, query, energyFilter } from "$lib/stores/library.svelte";
+ *   import { library } from "$lib/stores/library.svelte";
+ *   import type { Sample } from "$lib/stores/library.svelte";
+ *
+ *   library.samples         // reactive Sample[]
+ *   library.filters.query   // reactive string
+ *   library.loadSamples()   // async refresh
+ *   library.setFilter(key, value)
+ *   library.clearFilters()
  */
 
 export interface Sample {
@@ -30,73 +38,78 @@ export interface LibraryFilters {
   bpm_max: string;
 }
 
-// ── Reactive state (Svelte 5 Runes) ──────────────────────────────────────────
+// ── Closure-based reactive store ─────────────────────────────────────────────
+//
+// Internal variables can be reassigned freely; only the returned object is
+// exported, so Svelte's "no-reassign exported state" rule is satisfied.
 
-export let samples = $state<Sample[]>([]);
-export let isLoading = $state(false);
-export let error = $state<string | null>(null);
-export let total = $state(0);
+function createLibraryStore() {
+  let samples   = $state<Sample[]>([]);
+  let isLoading = $state(false);
+  let error     = $state<string | null>(null);
+  let total     = $state(0);
+  let filters   = $state<LibraryFilters>({
+    query:      "",
+    energy:     "",
+    mood:       "",
+    instrument: "",
+    bpm_min:    "",
+    bpm_max:    "",
+  });
 
-export let filters = $state<LibraryFilters>({
-  query: "",
-  energy: "",
-  mood: "",
-  instrument: "",
-  bpm_min: "",
-  bpm_max: "",
-});
+  async function loadSamples(): Promise<void> {
+    isLoading = true;
+    error     = null;
 
-// ── API functions ─────────────────────────────────────────────────────────────
+    try {
+      const params = new URLSearchParams();
+      if (filters.query)      params.set("q",          filters.query);
+      if (filters.energy)     params.set("energy",     filters.energy);
+      if (filters.mood)       params.set("mood",        filters.mood);
+      if (filters.instrument) params.set("instrument", filters.instrument);
+      if (filters.bpm_min)    params.set("bpm_min",    filters.bpm_min);
+      if (filters.bpm_max)    params.set("bpm_max",    filters.bpm_max);
 
-/**
- * Load samples from Flask /api/samples with current filters.
- * Called on startup and whenever any filter changes.
- */
-export async function loadSamples(): Promise<void> {
-  isLoading = true;
-  error = null;
+      const res = await fetch(`/api/samples?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-  try {
-    const params = new URLSearchParams();
-    if (filters.query)      params.set("q",          filters.query);
-    if (filters.energy)     params.set("energy",     filters.energy);
-    if (filters.mood)       params.set("mood",        filters.mood);
-    if (filters.instrument) params.set("instrument", filters.instrument);
-    if (filters.bpm_min)    params.set("bpm_min",    filters.bpm_min);
-    if (filters.bpm_max)    params.set("bpm_max",    filters.bpm_max);
-
-    const res = await fetch(`/api/samples?${params.toString()}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const data: Sample[] = await res.json();
-    samples = data;
-    total = data.length;
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e);
-    samples = [];
-    total = 0;
-  } finally {
-    isLoading = false;
+      const data: Sample[] = await res.json();
+      samples = data;
+      total   = data.length;
+    } catch (e) {
+      error   = e instanceof Error ? e.message : String(e);
+      samples = [];
+      total   = 0;
+    } finally {
+      isLoading = false;
+    }
   }
+
+  function setFilter(key: keyof LibraryFilters, value: string): void {
+    filters[key] = value;
+    loadSamples();
+  }
+
+  function clearFilters(): void {
+    filters.query      = "";
+    filters.energy     = "";
+    filters.mood       = "";
+    filters.instrument = "";
+    filters.bpm_min    = "";
+    filters.bpm_max    = "";
+    loadSamples();
+  }
+
+  return {
+    get samples()   { return samples;   },
+    get isLoading() { return isLoading; },
+    get error()     { return error;     },
+    get total()     { return total;     },
+    get filters()   { return filters;   },
+    loadSamples,
+    setFilter,
+    clearFilters,
+  };
 }
 
-/**
- * Update a single filter key and reload.
- */
-export function setFilter(key: keyof LibraryFilters, value: string): void {
-  filters[key] = value;
-  loadSamples();
-}
-
-/**
- * Clear all filters and reload.
- */
-export function clearFilters(): void {
-  filters.query = "";
-  filters.energy = "";
-  filters.mood = "";
-  filters.instrument = "";
-  filters.bpm_min = "";
-  filters.bpm_max = "";
-  loadSamples();
-}
+export const library = createLibraryStore();

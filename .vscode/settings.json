@@ -256,5 +256,6 @@
   "markdownlint.config": {
     "extends": ".markdownlint.json"
   },
-  "editor.codeActions.triggerOnFocusChange": true
+  "editor.codeActions.triggerOnFocusChange": true,
+  "cmake.ignoreCMakeListsMissing": true
 }

@@ -22,7 +22,7 @@ _JSON_HELP = "Output machine-readable JSON to stdout (for Tauri/IPC consumers)."
 @app.command()
 def version() -> None:
     """Show the current version."""
-    console.print(__version__)
+    typer.echo(__version__)
 
 
 @app.command("import")
@@ -215,39 +215,194 @@ def health(
     health_cmd(json_output=json)
 
 
-# ── Phase 7 stubs ────────────────────────────────────────────────────────────
+# ── Phase 8: Sidecar server ──────────────────────────────────────────────────
+
+@app.command("sidecar")
+def sidecar_cmd(
+    socket: str = typer.Option(
+        None,
+        "--socket",
+        help="Unix socket path (default: ~/tmp/samplemind.sock)",
+    ),
+) -> None:
+    """Start the Python sidecar IPC server for the JUCE VST3/AU plugin.
+
+    Binds a Unix domain socket and dispatches JSON requests from the plugin
+    to the SampleRepository and Audio Analyzer.  Signals readiness with a
+    single JSON line on stdout:  {"status": "ready", "version": 2, ...}
+    """
+    import asyncio
+
+    from samplemind.sidecar.server import DEFAULT_SOCKET_PATH, run_server
+
+    asyncio.run(run_server(socket_path=socket or DEFAULT_SOCKET_PATH))
+
+
+# ── Phase 7: FL Studio integration ───────────────────────────────────────────
 
 @app.command("export-to-fl")
 def export_to_fl(
     energy: str | None = typer.Option(None, "--energy", help="Filter by energy [low|mid|high]"),
     instrument: str | None = typer.Option(None, "--instrument", help="Filter by instrument type"),
+    dest: str | None = typer.Option(None, "--dest", help="Override FL Studio target folder"),
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
-    """Export samples to FL Studio's Samples/SampleMind folder. [Phase 7]"""
-    typer.echo("Not yet implemented — Phase 7 (FL Studio Integration)", err=True)
-    raise typer.Exit(1)
+    """Export samples to FL Studio's Patches/Samples/SampleMind folder.
+
+    Auto-detects FL Studio 20/21 installation paths.  Use --dest to override.
+    Skips files already up-to-date in the destination.
+    """
+    import json as _json
+    from pathlib import Path
+
+    from samplemind.data.orm import init_orm
+    from samplemind.data.repositories.sample_repository import SampleRepository
+    from samplemind.integrations.filesystem import export_to_fl_studio
+
+    init_orm()
+    samples = SampleRepository.search(energy=energy, instrument=instrument)
+    paths = [Path(s.path) for s in samples if Path(s.path).exists()]
+
+    try:
+        result = export_to_fl_studio(paths, dest_dir=Path(dest) if dest else None)
+    except RuntimeError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    if json:
+        typer.echo(_json.dumps(result))
+    else:
+        console.print(
+            f"[green]Exported[/green] {result['copied']} file(s) to "
+            f"{result['targets']} FL Studio folder(s) "
+            f"({result['skipped']} skipped — already up to date)"
+        )
 
 
 @app.command("midi-sync")
 def midi_sync(
-    bpm: float = typer.Argument(..., help="BPM to broadcast via MIDI clock"),
+    bpm: float = typer.Argument(..., help="BPM value to send via MIDI CC"),
+    port: str = typer.Option("IAC Driver Bus 1", "--port", help="MIDI output port name"),
 ) -> None:
-    """Send BPM as MIDI clock to FL Studio via IAC Driver. [Phase 7]"""
-    typer.echo("Not yet implemented — Phase 7 (FL Studio Integration)", err=True)
-    raise typer.Exit(1)
+    """Send BPM to FL Studio via MIDI CC on the IAC Driver (macOS) or loopMIDI (Windows).
+
+    Encodes BPM as a 14-bit value across CC 14 (MSB) and CC 46 (LSB) on channel 1.
+    FL Studio must be configured to receive these CCs via a MIDI controller mapping.
+    """
+    from samplemind.integrations.midi import send_bpm_via_midi
+
+    try:
+        send_bpm_via_midi(bpm, port_name=port)
+    except RuntimeError as exc:
+        console.print(f"[red]MIDI error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    console.print(f"[green]Sent[/green] BPM={bpm:.1f} via MIDI CC to {port!r}")
 
 
-# ── Phase 9 stub ─────────────────────────────────────────────────────────────
+# ── Phase 9: Sample Pack management ──────────────────────────────────────────
 
 @app.command("pack")
 def pack_cmd(
     action: str = typer.Argument(..., help="Action: create | import | verify | list"),
+    path: str = typer.Argument("", help="Source folder (create) or .smpack file (import/verify)"),
+    name: str | None = typer.Option(None, "--name", help="Pack name (create only)"),
+    version_str: str = typer.Option("1.0.0", "--version", help="Semver version string (create only)"),
+    author: str = typer.Option("unknown", "--author", help="Pack author (create only)"),
+    description: str = typer.Option("", "--description", help="Pack description (create only)"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Output .smpack path (create only)"),
+    dest: str | None = typer.Option(None, "--dest", help="Destination folder (import only)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Verify checksums without importing (import/verify)"),
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
-    """Manage .smpack sample pack archives (create, import, verify). [Phase 9]"""
-    typer.echo("Not yet implemented — Phase 9 (Sample Packs)", err=True)
-    raise typer.Exit(1)
+    """Manage .smpack sample pack archives.
+
+    \b
+    Actions:
+      create  — Build a .smpack archive from a folder of WAV files
+      import  — Verify and import a .smpack into the library
+      verify  — Verify checksums only (alias for import --dry-run)
+      list    — List .smpack files in the default packs directory
+    """
+    import json as _json
+    from pathlib import Path
+
+    from samplemind.packs.builder import PackBuildError, create_pack
+    from samplemind.packs.importer import PackIntegrityError, import_pack
+
+    if action == "create":
+        if not path:
+            console.print("[red]Error:[/red] path to WAV folder is required for 'create'", style="")
+            raise typer.Exit(1)
+        try:
+            result_path = create_pack(
+                Path(path),
+                name=name or Path(path).name,
+                version=version_str,
+                author=author,
+                description=description,
+                output_path=Path(output) if output else None,
+            )
+        except PackBuildError as exc:
+            console.print(f"[red]Pack build error:[/red] {exc}")
+            raise typer.Exit(1) from exc
+
+        if json:
+            typer.echo(_json.dumps({"smpack": str(result_path)}))
+        else:
+            console.print(f"[green]Created:[/green] {result_path}")
+
+    elif action in ("import", "verify"):
+        if not path:
+            console.print("[red]Error:[/red] path to .smpack file is required", style="")
+            raise typer.Exit(1)
+        is_dry = dry_run or action == "verify"
+        try:
+            samples = import_pack(
+                Path(path),
+                dest_dir=Path(dest) if dest else None,
+                dry_run=is_dry,
+            )
+        except FileNotFoundError as exc:
+            console.print(f"[red]Not found:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        except ValueError as exc:
+            console.print(f"[red]Invalid pack:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        except PackIntegrityError as exc:
+            console.print(f"[red]Integrity error:[/red] {exc}")
+            raise typer.Exit(1) from exc
+
+        if json:
+            typer.echo(_json.dumps({"imported": len(samples), "dry_run": is_dry}))
+        else:
+            label = "Verified" if is_dry else "Imported"
+            console.print(f"[green]{label}:[/green] {len(samples)} sample(s)")
+
+    elif action == "list":
+        from samplemind.core.config import get_settings
+        db_url = get_settings().database_url
+        db_parent = Path(db_url.removeprefix("sqlite:///")).parent
+        packs_dir = db_parent / "packs"
+        if not packs_dir.exists():
+            console.print("No packs directory found.")
+            raise typer.Exit(0)
+        smpack_files = sorted(packs_dir.rglob("*.smpack"))
+        if json:
+            typer.echo(_json.dumps({"packs": [str(p) for p in smpack_files]}))
+        else:
+            if not smpack_files:
+                console.print("No .smpack files found.")
+            for p in smpack_files:
+                console.print(str(p))
+
+    else:
+        console.print(f"[red]Unknown action:[/red] {action!r}. Use: create | import | verify | list")
+        raise typer.Exit(1)
 
 
-# ── Phase 11 stub ────────────────────────────────────────────────────────────
+# ── Phase 11: Semantic Search ─────────────────────────────────────────────────
+
 
 @app.command("similar")
 def similar_cmd(
@@ -255,32 +410,179 @@ def similar_cmd(
     top_k: int = typer.Option(10, "--top", "-k", help="Number of results"),
     json: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
-    """Find samples similar to a reference file using semantic search. [Phase 11]"""
-    typer.echo("Not yet implemented — Phase 11 (Semantic Search)", err=True)
-    raise typer.Exit(1)
+    """Find samples similar to a reference file using audio feature embeddings."""
+    import json as _json
+
+    from pathlib import Path as _Path
+
+    from samplemind.data.orm import init_orm
+    from samplemind.data.repositories.sample_repository import SampleRepository
+    from samplemind.search.embeddings import embed_audio
+    from samplemind.search.vector_index import VectorIndex
+
+    ref = _Path(path)
+    if not ref.exists():
+        typer.echo(f"File not found: {path}", err=True)
+        raise typer.Exit(1)
+
+    init_orm()
+
+    vec = embed_audio(ref)
+    idx = VectorIndex()
+    idx.ensure_tables()
+    sample_ids = idx.search_audio(vec, k=top_k)
+    idx.close()
+
+    samples = [SampleRepository.get_by_id(sid) for sid in sample_ids]
+    samples = [s for s in samples if s is not None]
+
+    if json:
+        from samplemind.core.models.sample import SamplePublic
+        typer.echo(_json.dumps([SamplePublic.model_validate(s).model_dump(mode="json") for s in samples]))
+    else:
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console(stderr=True)
+        t = Table(title=f"Top {top_k} Similar Samples")
+        t.add_column("ID", justify="right")
+        t.add_column("Filename")
+        t.add_column("BPM", justify="right")
+        t.add_column("Energy")
+        for s in samples:
+            t.add_row(str(s.id), s.filename, f"{s.bpm:.1f}" if s.bpm else "-", s.energy or "-")
+        console.print(t)
 
 
-# ── Phase 12 stub ────────────────────────────────────────────────────────────
+# ── Phase 12: AI Curation ─────────────────────────────────────────────────────
+
 
 @app.command("curate")
 def curate_cmd(
     prompt: str | None = typer.Argument(None, help="Curation goal (e.g. 'dark trap set')"),
     json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+    model: str = typer.Option("claude-haiku-4-5-20251001", "--model", help="pydantic-ai model ID"),
 ) -> None:
-    """AI-powered library curation and smart playlist generation. [Phase 12]"""
-    typer.echo("Not yet implemented — Phase 12 (AI Curation)", err=True)
-    raise typer.Exit(1)
+    """AI-powered library curation using Claude."""
+    import json as _json
+
+    from samplemind.agent.curator import CuratorAgent
+    from samplemind.data.orm import init_orm
+
+    init_orm()
+
+    _prompt = prompt or "Analyse my sample library and suggest improvements."
+    agent = CuratorAgent(model_id=model)
+
+    try:
+        result = agent.curate_sync(_prompt)
+    except Exception as exc:
+        typer.echo(f"Curation failed: {exc}", err=True)
+        raise typer.Exit(1) from exc
+
+    if json:
+        typer.echo(_json.dumps({
+            "recommendations": result.recommendations,
+            "suggested_tags": result.suggested_tags,
+            "gap_analysis": result.gap_analysis,
+            "energy_arc": result.energy_arc,
+        }))
+    else:
+        from rich.console import Console
+
+        console = Console(stderr=True)
+        console.print("[bold]Curation Recommendations[/bold]")
+        for rec in result.recommendations:
+            console.print(f"  • {rec}")
+        if result.energy_arc:
+            console.print(f"\nEnergy arc: {' → '.join(result.energy_arc)}")
+        if result.gap_analysis:
+            console.print("\n[bold]Gap Analysis[/bold]")
+            for inst, data in result.gap_analysis.items():
+                surplus = data.get("surplus", 0)
+                symbol = "+" if surplus >= 0 else ""
+                console.print(f"  {inst}: {data.get('actual', 0)}/{data.get('target', 0)} ({symbol}{surplus})")
 
 
-# ── Phase 14 stub ────────────────────────────────────────────────────────────
+# ── Phase 14: Analytics ───────────────────────────────────────────────────────
+
 
 @app.command("analytics")
 def analytics_cmd(
     json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+    export_html: str | None = typer.Option(None, "--export-html", help="Render Plotly dashboard to HTML file"),
 ) -> None:
-    """Show library analytics: BPM distribution, key heatmap, mood breakdown. [Phase 14]"""
-    typer.echo("Not yet implemented — Phase 14 (Analytics)", err=True)
-    raise typer.Exit(1)
+    """Show library analytics: BPM distribution, key heatmap, mood breakdown."""
+    import json as _json
+
+    from samplemind.analytics.engine import get_bpm_buckets, get_summary
+    from samplemind.data.orm import init_orm
+
+    init_orm()
+
+    summary = get_summary()
+
+    if json:
+        typer.echo(_json.dumps({
+            "total": summary.total,
+            "by_energy": summary.by_energy,
+            "by_mood": summary.by_mood,
+            "by_instrument": summary.by_instrument,
+            "bpm_min": summary.bpm_min,
+            "bpm_max": summary.bpm_max,
+            "bpm_mean": summary.bpm_mean,
+        }))
+        return
+
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console(stderr=True)
+    console.print(f"[bold]Library Analytics[/bold] — {summary.total} sample(s)\n")
+
+    # Energy breakdown
+    t = Table(title="Energy")
+    t.add_column("Level")
+    t.add_column("Count", justify="right")
+    for level in ("low", "mid", "high"):
+        t.add_row(level, str(summary.by_energy.get(level, 0)))
+    console.print(t)
+
+    # BPM summary
+    if summary.bpm_mean is not None:
+        console.print(
+            f"\nBPM: min={summary.bpm_min:.1f}  "
+            f"max={summary.bpm_max:.1f}  "
+            f"mean={summary.bpm_mean:.1f}"
+        )
+
+    # BPM buckets
+    buckets = get_bpm_buckets()
+    if buckets:
+        t2 = Table(title="\nBPM Distribution")
+        t2.add_column("Range")
+        t2.add_column("Count", justify="right")
+        for b in buckets:
+            t2.add_row(b.label, str(b.count))
+        console.print(t2)
+
+    if export_html:
+        try:
+            from samplemind.analytics.charts import bpm_histogram_chart, energy_bar_chart
+
+            import plotly.graph_objects as go  # noqa: F401
+
+            from pathlib import Path
+            import plotly.io as pio
+
+            figs = [bpm_histogram_chart(), energy_bar_chart()]
+            html_parts = [pio.to_html(f, full_html=False, include_plotlyjs="cdn") for f in figs]
+            html = "<html><body>" + "\n".join(html_parts) + "</body></html>"
+            Path(export_html).write_text(html)
+            typer.echo(f"Dashboard exported to {export_html}", err=True)
+        except ImportError:
+            typer.echo("plotly not installed — run: uv sync --extra analytics", err=True)
+            raise typer.Exit(1)
 
 
 # ── Phase 16 stub ────────────────────────────────────────────────────────────

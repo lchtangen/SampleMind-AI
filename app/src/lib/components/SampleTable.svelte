@@ -6,7 +6,7 @@
    * Supports row selection (click) and emits a "select" event with the sample.
    * Energy values are rendered as colour-coded badges.
    */
-  import { samples, total } from "$lib/stores/library.svelte";
+  import { library } from "$lib/stores/library.svelte";
   import type { Sample } from "$lib/stores/library.svelte";
 
   let { onselect }: { onselect?: (s: Sample) => void } = $props();
@@ -35,10 +35,10 @@
 
 <div class="table-container">
   <div class="table-meta">
-    {total} sample{total === 1 ? "" : "s"}
+    {library.total} sample{library.total === 1 ? "" : "s"}
   </div>
 
-  {#if samples.length === 0}
+  {#if library.samples.length === 0}
     <div class="empty-state">No samples match the current filters.</div>
   {:else}
     <table class="sample-table">
@@ -54,7 +54,7 @@
         </tr>
       </thead>
       <tbody>
-        {#each samples as s (s.id)}
+        {#each library.samples as s (s.id)}
           <tr
             class="sample-row"
             class:selected={selected === s.id}

@@ -6,7 +6,9 @@
     <div class="logo">🎧 SampleMind AI</div>
     <div class="header-right">
       <span class="library-count" id="library-count">{{ total }} samples in library</span>
+      <a href="{{ url_for('library.analytics') }}" class="analytics-link">Analytics</a>
       <button id="import-btn" class="import-btn">+ Import Folder</button>
+      <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode (T)">☀️</button>
       {% if current_user %}
       <span class="user-badge">{{ current_user.username }}</span>
       <a href="{{ url_for('library.logout') }}" class="logout-link">Sign out</a>

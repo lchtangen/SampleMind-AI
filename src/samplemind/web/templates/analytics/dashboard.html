@@ -1,11 +1,177 @@
 {% extends "base.html" %}
-{# Phase 14 — Analytics Dashboard stub #}
-{# Will render Plotly charts: BPM histogram, key heatmap, mood donut, growth timeline. #}
 {% block title %}Analytics · SampleMind{% endblock %}
-{% block content %}
-<div style="padding:2rem;">
-  <h2>Analytics Dashboard</h2>
-  <p style="color:var(--text-muted,#888);">Coming in Phase 14 — Analytics.</p>
-  {# TODO: Phase 14 — embed Plotly figures via {{ bpm_chart_json | safe }} etc. #}
-</div>
+
+{% block body %}
+<header>
+  <div class="logo">🎧 SampleMind AI</div>
+  <div class="header-right">
+    <a href="{{ url_for('library.index') }}" style="color:var(--muted);font-size:13px;text-decoration:none;">← Library</a>
+    <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode">☀️</button>
+  </div>
+</header>
+
+<main style="max-width:960px;margin:0 auto;">
+  <h1 style="margin-bottom:1.5rem;font-size:20px;">Analytics</h1>
+
+  {% if summary.total == 0 %}
+    <p style="color:var(--muted);text-align:center;padding:3rem;">No samples in library yet. Import some WAV files to see analytics.</p>
+  {% else %}
+
+  <!-- ── Overview ── -->
+  <div class="analytics-grid">
+    <div class="stat-card">
+      <div class="stat-value">{{ summary.total }}</div>
+      <div class="stat-label">Total Samples</div>
+    </div>
+    {% if summary.bpm_mean %}
+    <div class="stat-card">
+      <div class="stat-value">{{ "%.1f"|format(summary.bpm_mean) }}</div>
+      <div class="stat-label">Avg BPM</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ "%.0f"|format(summary.bpm_min) }}–{{ "%.0f"|format(summary.bpm_max) }}</div>
+      <div class="stat-label">BPM Range</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── BPM Histogram ── -->
+  {% if bpm_buckets %}
+  <section class="analytics-section">
+    <h2>BPM Distribution</h2>
+    {% set max_count = bpm_buckets | map(attribute='count') | max %}
+    <div class="bar-chart">
+      {% for b in bpm_buckets %}
+      {% set pct = (b.count / max_count * 100) | int if max_count > 0 else 0 %}
+      <div class="bar-row">
+        <span class="bar-label">{{ b.label }}</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:{{ pct }}%"></div>
+        </div>
+        <span class="bar-count">{{ b.count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- ── Energy / Instrument / Mood ── -->
+  <div class="analytics-row">
+
+    <section class="analytics-section">
+      <h2>Energy</h2>
+      <table class="analytics-table">
+        <thead><tr><th>Level</th><th>Count</th></tr></thead>
+        <tbody>
+          {% for level in ["high", "mid", "low"] %}
+          <tr>
+            <td><span class="chip energy-{{ level }}">{{ level }}</span></td>
+            <td>{{ summary.by_energy.get(level, 0) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="analytics-section">
+      <h2>Instrument</h2>
+      <table class="analytics-table">
+        <thead><tr><th>Type</th><th>Count</th></tr></thead>
+        <tbody>
+          {% for inst, cnt in summary.by_instrument.items() | sort(attribute='1', reverse=True) %}
+          <tr>
+            <td><span class="chip instrument">{{ inst }}</span></td>
+            <td>{{ cnt }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="analytics-section">
+      <h2>Mood</h2>
+      <table class="analytics-table">
+        <thead><tr><th>Mood</th><th>Count</th></tr></thead>
+        <tbody>
+          {% for mood, cnt in summary.by_mood.items() | sort(attribute='1', reverse=True) %}
+          <tr><td>{{ mood }}</td><td>{{ cnt }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+  </div>
+
+  <!-- ── Key frequency ── -->
+  {% if key_counts %}
+  <section class="analytics-section">
+    <h2>Top Keys</h2>
+    <div class="key-grid">
+      {% for key, cnt in key_counts.items() | list | sort(attribute='1', reverse=True) | list[:12] %}
+      <div class="key-chip">
+        <span class="key-name">{{ key }}</span>
+        <span class="key-count">{{ cnt }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% endif %}
+</main>
+
+<style>
+.analytics-grid {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 2rem;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 28px;
+  min-width: 140px;
+}
+.stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+.stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.analytics-section {
+  margin-bottom: 2rem;
+}
+.analytics-section h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.bar-chart { display: flex; flex-direction: column; gap: 6px; }
+.bar-row { display: flex; align-items: center; gap: 10px; }
+.bar-label { width: 80px; font-size: 12px; color: var(--muted); text-align: right; flex-shrink: 0; }
+.bar-track { flex: 1; background: var(--border); border-radius: 4px; height: 18px; }
+.bar-fill { background: var(--accent); border-radius: 4px; height: 100%; transition: width 0.3s; min-width: 2px; }
+.bar-count { width: 32px; font-size: 12px; color: var(--muted); }
+
+.analytics-row { display: flex; gap: 2rem; flex-wrap: wrap; }
+.analytics-row .analytics-section { flex: 1; min-width: 180px; }
+
+.analytics-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; }
+.analytics-table th { padding: 8px 12px; text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; background: #12141e; border-bottom: 1px solid var(--border); }
+.analytics-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.analytics-table tr:last-child td { border-bottom: none; }
+
+.energy-high { background: rgba(239,68,68,0.15); color: #ef4444; border-color: #ef4444; }
+.energy-mid  { background: rgba(251,191,36,0.15); color: #fbbf24; border-color: #fbbf24; }
+.energy-low  { background: rgba(78,204,163,0.15); color: var(--accent2); border-color: var(--accent2); }
+
+.key-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.key-chip { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 13px; }
+.key-name { font-weight: 600; }
+.key-count { color: var(--muted); font-size: 11px; }
+</style>
+
+<script src="/static/app.js"></script>
 {% endblock %}

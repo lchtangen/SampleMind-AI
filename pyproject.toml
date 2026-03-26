@@ -77,6 +77,15 @@ dev = [
 # FL Studio MIDI integration (optional — requires system rtmidi)
 midi = ["python-rtmidi>=1.5"]
 
+# FL Studio Windows COM automation (optional — Windows only)
+windows = ["pywin32>=306"]
+
+# Analytics charts (optional — requires plotly)
+analytics = ["plotly>=5.0"]
+
+# Cloud sync (optional — requires boto3)
+sync = ["boto3>=1.35"]
+
 # AI semantic search models — install with: uv sync --extra ai
 # Compatible with Python 3.13 + numpy 2.x.
 #

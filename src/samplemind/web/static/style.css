@@ -14,6 +14,17 @@
   --radius:   8px;
 }
 
+[data-theme="light"] {
+  --bg:       #f5f6fa;
+  --surface:  #ffffff;
+  --border:   #dde1ea;
+  --accent:   #6c5ce7;
+  --accent2:  #00b894;
+  --text:     #1e2030;
+  --muted:    #8892a4;
+  --danger:   #e74c3c;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -259,6 +270,33 @@ audio { accent-color: var(--accent); filter: invert(0.9) hue-rotate(210deg); }
 .drop-icon  { font-size: 52px; line-height: 1; }
 .drop-title { font-size: 22px; font-weight: 700; color: var(--text); }
 .drop-hint  { font-size: 13px; color: var(--muted); }
+
+/* ── User badge + logout ── */
+.user-badge { color: var(--muted); font-size: 13px; }
+.logout-link { color: var(--muted); font-size: 13px; text-decoration: none; }
+.logout-link:hover { color: var(--text); }
+
+/* ── Theme toggle ── */
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+  padding: 4px 8px;
+  cursor: pointer;
+  line-height: 1;
+  transition: border-color 0.15s;
+}
+.theme-toggle:hover { border-color: var(--accent); }
+
+/* ── Analytics link ── */
+.analytics-link {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.analytics-link:hover { color: var(--text); }
 
 /* ── Instrument type chips ── */
 .chip {

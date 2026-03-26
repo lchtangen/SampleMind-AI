@@ -9,7 +9,7 @@
    *   4. On done, reload the library store to refresh the table
    */
   import { pickFolder } from "$lib/utils/tauri";
-  import { loadSamples } from "$lib/stores/library.svelte";
+  import { library } from "$lib/stores/library.svelte";
 
   let importing  = $state(false);
   let progress   = $state(0);
@@ -88,7 +88,7 @@
       }
 
       // 4. Reload library
-      await loadSamples();
+      await library.loadSamples();
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : String(e);
       statusMsg = "";

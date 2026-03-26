@@ -215,3 +215,61 @@ def test_samples_partial_filters_by_energy(client: FlaskClient) -> None:
     assert r.status_code == 200
     assert b"hi.wav" in r.data
     assert b"lo.wav" not in r.data
+
+
+# ── /api/export-to-fl ─────────────────────────────────────────────────────────
+
+
+def test_export_to_fl_requires_auth(client: FlaskClient) -> None:
+    """POST /api/export-to-fl redirects unauthenticated users to /login."""
+    r = client.post("/api/export-to-fl", json={}, follow_redirects=False)
+    assert r.status_code in (302, 303)
+
+
+def test_export_to_fl_returns_ok(
+    authed_client: FlaskClient,
+    tmp_path,
+    silent_wav,
+) -> None:
+    """POST /api/export-to-fl copies matching samples and returns ok + counts."""
+    from unittest.mock import patch as _patch
+
+    from samplemind.core.models.sample import SampleCreate
+    from samplemind.data.repositories.sample_repository import SampleRepository
+
+    SampleRepository.upsert(
+        SampleCreate(filename="kick.wav", path=str(silent_wav), energy="high")
+    )
+
+    dest = tmp_path / "fl_out"
+    with _patch(
+        "samplemind.integrations.filesystem.export_to_fl_studio",
+        return_value={"copied": 1, "skipped": 0, "targets": 1},
+    ) as mock_export:
+        r = authed_client.post(
+            "/api/export-to-fl",
+            json={"energy": "high", "dest": str(dest)},
+        )
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["copied"] == 1
+    assert body["skipped"] == 0
+    mock_export.assert_called_once()
+
+
+def test_export_to_fl_no_fl_installed_returns_500(
+    authed_client: FlaskClient,
+) -> None:
+    """POST /api/export-to-fl returns 500 when no FL Studio is found."""
+    from unittest.mock import patch as _patch
+
+    with _patch(
+        "samplemind.integrations.filesystem.export_to_fl_studio",
+        side_effect=RuntimeError("No FL Studio installation detected."),
+    ):
+        r = authed_client.post("/api/export-to-fl", json={})
+
+    assert r.status_code == 500
+    assert "No FL Studio" in r.get_json()["error"]

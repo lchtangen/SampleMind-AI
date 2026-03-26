@@ -13,19 +13,21 @@ Covers:
 
 from __future__ import annotations
 
-import json
+from pathlib import Path
 import shutil
 import zipfile
-from pathlib import Path
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from samplemind.packs.builder import PackBuildError, create_pack
-from samplemind.packs.checksums import checksum_file, verify_entry, verify_manifest_checksums
+from samplemind.packs.checksums import (
+    checksum_file,
+    verify_entry,
+    verify_manifest_checksums,
+)
 from samplemind.packs.importer import PackIntegrityError, import_pack
 from samplemind.packs.models import PackEntry, PackManifest
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -262,7 +264,7 @@ def test_import_pack_missing_manifest(tmp_path: Path, silent_wav: Path) -> None:
     with zipfile.ZipFile(no_manifest, "w") as zf:
         zf.writestr("audio.wav", b"fake wav")
 
-    with pytest.raises(ValueError, match="manifest.json"):
+    with pytest.raises(ValueError, match=r"manifest\.json"):
         import_pack(no_manifest)
 
 

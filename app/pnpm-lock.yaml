@@ -11,6 +11,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.10.1
         version: 2.10.1
+      wavesurfer.js:
+        specifier: ^7.9.0
+        version: 7.12.5
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
@@ -516,6 +519,9 @@ packages:
       vite:
         optional: true
 
+  wavesurfer.js@7.12.5:
+    resolution: {integrity: sha512-MSZcA13R9ZlxgYpzfakaSYf8dz5tCdZKYbjtN1qnKbCi+UoyfaTuhvjlXHrITi/fgeO3qWfsH7U3BP1AKnwRNg==}
+
   zimmerframe@1.1.4:
     resolution: {integrity: sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ==}
 
@@ -877,5 +883,7 @@ snapshots:
   vitefu@1.1.2(vite@8.0.2):
     optionalDependencies:
       vite: 8.0.2
+
+  wavesurfer.js@7.12.5: {}
 
   zimmerframe@1.1.4: {}

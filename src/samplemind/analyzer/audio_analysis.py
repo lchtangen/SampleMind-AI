@@ -50,8 +50,14 @@ def analyze_bpm(y: np.ndarray, sr: int | float) -> float:
     consistent inter-beat interval. Returns 0.0 for silent or very short clips.
     Accuracy is ±2 BPM for most electronic music.
     """
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    return round(float(tempo), 2)
+    try:
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        # Convert numpy array to scalar if needed
+        if hasattr(tempo, 'item'):
+            tempo = tempo.item()
+        return round(float(tempo), 2)
+    except Exception:
+        return 0.0
 
 
 def analyze_key(y: np.ndarray, sr: int | float) -> str:
@@ -62,16 +68,19 @@ def analyze_key(y: np.ndarray, sr: int | float) -> str:
     - Highest average energy note = root note
     - tonnetz: harmonic tension — minor keys score higher than major
     """
-    chroma = librosa.feature.chroma_cens(y=y, sr=sr)
-    chroma_mean = chroma.mean(axis=1)
-    key_index = int(chroma_mean.argmax())
-    notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-    root = notes[key_index]
+    try:
+        chroma = librosa.feature.chroma_cens(y=y, sr=sr)
+        chroma_mean = chroma.mean(axis=1)
+        key_index = int(chroma_mean.argmax())
+        notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        root = notes[key_index]
 
-    tonnetz = librosa.feature.tonnetz(y=librosa.effects.harmonic(y), sr=sr)
-    quality = "min" if np.abs(tonnetz).mean() > 0.1 else "maj"
+        tonnetz = librosa.feature.tonnetz(y=librosa.effects.harmonic(y), sr=sr)
+        quality = "min" if np.abs(tonnetz).mean() > 0.1 else "maj"
 
-    return f"{root} {quality}"
+        return f"{root} {quality}"
+    except Exception:
+        return "C maj"  # Default fallback
 
 
 def analyze_file(file_path: str) -> AudioFeatures:

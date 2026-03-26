@@ -332,8 +332,89 @@ def api_import_files():
     return jsonify({"ok": True, "imported": imported, "errors": errors})
 
 
+@library_bp.route("/api/bulk-tag", methods=["POST"])
+def api_bulk_tag():
+    """Apply the same tag update to multiple samples at once.
+
+    Expects JSON body:
+        { "paths": ["/abs/path/a.wav", ...], "genre": "trap", "mood": "dark", ... }
+
+    Only non-null fields in the body are written; omitted fields are left unchanged.
+    Returns { "ok": true, "updated": N } where N is the number of rows written.
+    """
+    data = request.json or {}
+    paths = data.get("paths", [])
+    if not paths:
+        return jsonify({"error": "paths list is required"}), 400
+
+    update = SampleUpdate(
+        genre=data.get("genre"),
+        mood=data.get("mood"),
+        energy=data.get("energy"),
+        tags=data.get("tags"),
+    )
+    updated = sum(1 for p in paths if SampleRepository.tag(p, update))
+    return jsonify({"ok": True, "updated": updated})
+
+
+@library_bp.route("/analytics")
+@login_required
+def analytics():
+    """Analytics dashboard — BPM distribution, energy/mood/instrument breakdowns."""
+    from samplemind.analytics.engine import get_bpm_buckets, get_key_counts, get_summary
+
+    summary = get_summary()
+    bpm_buckets = get_bpm_buckets(buckets=8)
+    key_counts = get_key_counts()
+    return render_template(
+        "analytics/dashboard.html",
+        summary=summary,
+        bpm_buckets=bpm_buckets,
+        key_counts=key_counts,
+    )
+
+
 @library_bp.route("/api/status")
 def api_status():
     """Health check + library stats."""
     return jsonify({"ok": True, "total": SampleRepository.count()})
+
+
+@library_bp.route("/api/export-to-fl", methods=["POST"])
+@login_required
+def api_export_to_fl():
+    """Export filtered samples to the FL Studio SampleMind folder.
+
+    JSON body (all fields optional):
+        energy     — filter: "low" | "mid" | "high"
+        instrument — filter: "kick" | "snare" | "hihat" | ...
+        dest       — absolute path override for the destination folder
+
+    Returns:
+        200  {"ok": true,  "copied": N, "skipped": M, "targets": T}
+        400  {"error": "dest must be an absolute path"}
+        500  {"error": "<RuntimeError from export_to_fl_studio>"}
+    """
+    from samplemind.integrations.filesystem import export_to_fl_studio
+
+    data = request.json or {}
+    energy: str | None = data.get("energy") or None
+    instrument: str | None = data.get("instrument") or None
+    dest_raw: str | None = data.get("dest") or None
+
+    dest_dir: Path | None = None
+    if dest_raw:
+        dest_dir = Path(dest_raw)
+        if not dest_dir.is_absolute():
+            return jsonify({"error": "dest must be an absolute path"}), 400
+
+    samples = SampleRepository.search(energy=energy, instrument=instrument)
+    sample_paths = [Path(s.path) for s in samples if Path(s.path).exists()]
+
+    try:
+        result = export_to_fl_studio(sample_paths, dest_dir=dest_dir)
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"ok": True, **result})
 

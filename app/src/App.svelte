@@ -20,13 +20,15 @@
   import SearchBar      from "$lib/components/SearchBar.svelte";
   import SampleTable    from "$lib/components/SampleTable.svelte";
   import ImportPanel    from "$lib/components/ImportPanel.svelte";
-  import { loadSamples } from "$lib/stores/library.svelte";
+  import ExportPanel    from "$lib/components/ExportPanel.svelte";
+  import WaveformPlayer from "$lib/components/WaveformPlayer.svelte";
+  import { library } from "$lib/stores/library.svelte";
   import type { Sample } from "$lib/stores/library.svelte";
 
   let selectedSample = $state<Sample | null>(null);
 
   onMount(() => {
-    loadSamples();
+    library.loadSamples();
   });
 
   function handleSelect(s: Sample) {
@@ -41,7 +43,12 @@
     <SampleTable onselect={handleSelect} />
   </main>
 
+  {#if selectedSample}
+    <WaveformPlayer sample={selectedSample} />
+  {/if}
+
   <ImportPanel />
+  <ExportPanel />
 </div>
 
 <style>

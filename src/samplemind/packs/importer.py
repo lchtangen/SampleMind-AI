@@ -15,21 +15,23 @@ modifying the library.
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 import shutil
 import tempfile
 import zipfile
-from pathlib import Path
 
 from samplemind.core.config import get_settings
-from samplemind.core.models.sample import SampleCreate
+
+# Re-export for callers who only import from this module
+from samplemind.core.models.sample import (
+    Sample,
+    SampleCreate,
+)
 from samplemind.data.orm import init_orm
 from samplemind.data.repositories.sample_repository import SampleRepository
 from samplemind.packs.checksums import verify_manifest_checksums
 from samplemind.packs.models import PackManifest
-
-# Re-export for callers who only import from this module
-from samplemind.core.models.sample import Sample  # noqa: F401 -- public re-export
 
 
 class PackIntegrityError(Exception):

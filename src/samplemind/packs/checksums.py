@@ -30,7 +30,7 @@ def checksum_file(path: Path) -> str:
         64-character lowercase hex string.
     """
     h = hashlib.sha256()
-    with open(path, "rb") as fh:
+    with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(_CHUNK), b""):
             h.update(chunk)
     return h.hexdigest()

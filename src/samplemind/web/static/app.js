@@ -362,6 +362,93 @@ async function handleDrop(paths) {
   }
 }
 
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+//
+// Persists the user's preference in localStorage so it survives page reloads.
+// The data-theme attribute on <html> drives the CSS variable switch.
+
+const themeToggle = document.getElementById("theme-toggle");
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  if (themeToggle) themeToggle.textContent = theme === "light" ? "🌙" : "☀️";
+}
+
+// Restore saved preference on load (default: dark)
+applyTheme(localStorage.getItem("sm-theme") || "dark");
+
+if (themeToggle) {
+  themeToggle.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    localStorage.setItem("sm-theme", next);
+    applyTheme(next);
+  });
+}
+
+
+// ── Keyboard shortcuts ───────────────────────────────────────────────────────
+//
+// /  → focus the search input (vim-style)
+// t  → toggle light/dark theme
+// Escape → close the tag modal (or blur the focused input)
+// Space  → play/pause current track (only when not typing)
+
+function isTyping() {
+  const tag = document.activeElement?.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+document.addEventListener("keydown", e => {
+  // Ignore modifier-key combos (Ctrl+/, etc.)
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  switch (e.key) {
+    case "/":
+      // Focus search — only when not already typing somewhere
+      if (!isTyping()) {
+        e.preventDefault();
+        searchInput?.focus();
+        searchInput?.select();
+      }
+      break;
+
+    case "t":
+    case "T":
+      if (!isTyping()) {
+        const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+        localStorage.setItem("sm-theme", next);
+        applyTheme(next);
+      }
+      break;
+
+    case "Escape":
+      // Close modal first; then blur search if modal is already closed
+      if (!modal.classList.contains("hidden")) {
+        modal.classList.add("hidden");
+      } else if (document.activeElement === searchInput) {
+        searchInput.blur();
+      }
+      break;
+
+    case " ":
+      // Play/pause — but never intercept Space inside a text input
+      if (!isTyping() && currentPlayBtn) {
+        e.preventDefault();
+        if (audioPlayer.paused) {
+          audioPlayer.play();
+          currentPlayBtn.textContent = "⏸";
+          currentPlayBtn.classList.add("playing");
+        } else {
+          audioPlayer.pause();
+          currentPlayBtn.textContent = "▶";
+          currentPlayBtn.classList.remove("playing");
+        }
+      }
+      break;
+  }
+});
+
+
 // Subscribe to Tauri's drag-drop event stream.
 // listen() returns an unlisten function — call it to unsubscribe.
 listen("tauri://drag-drop", event => {
