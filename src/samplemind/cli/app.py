@@ -783,10 +783,43 @@ def analytics_cmd(
 @app.command("generate")
 def generate_cmd(
     prompt: str = typer.Argument(..., help="Text description of the sound to generate"),
-    duration: float = typer.Option(4.0, "--duration", "-d", help="Duration in seconds"),
-    backend: str = typer.Option("audiocraft", "--backend", help="Backend [audiocraft|stable_audio|mock]"),
-    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+    duration: float = typer.Option(5.0, "--duration", "-d", help="Duration in seconds"),
+    bpm: float | None = typer.Option(None, "--bpm", help="Target BPM hint"),
+    key: str | None = typer.Option(None, "--key", help="Target key hint, e.g. 'C major'"),
+    backend: str = typer.Option(
+        "mock",
+        "--backend",
+        "-b",
+        help="Backend: mock | audiocraft | stable_audio",
+    ),
+    auto_import: bool = typer.Option(False, "--import", help="Auto-import into library after generation"),
+    json_output: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """Generate an audio sample from a text prompt using AI. [Phase 16]"""
-    typer.echo("Not yet implemented — Phase 16 (AI Generation)", err=True)
-    raise typer.Exit(1)
+    import json as _json
+
+    from samplemind.generation.models import GenerationRequest
+    from samplemind.generation.pipeline import generate
+
+    req = GenerationRequest(
+        prompt=prompt,
+        duration_seconds=duration,
+        bpm=bpm,
+        key=key,
+        backend=backend,
+    )
+    try:
+        result = generate(req, auto_import=auto_import)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    except ImportError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+
+    if json_output:
+        typer.echo(_json.dumps(result.model_dump(mode="json")))
+    else:
+        console.print(f"[green]Generated:[/green] {result.output_path}")
+        if result.sample_id is not None:
+            console.print(f"[dim]Imported as sample #{result.sample_id}[/dim]")

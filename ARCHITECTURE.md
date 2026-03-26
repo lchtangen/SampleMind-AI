@@ -2,7 +2,7 @@
 
 > Reference document for system architecture, data flow, IPC contracts, phase roadmap, and
 > technology decisions. Kept in sync with the actual codebase — not aspirational.
-> **Last updated: 2026-03-26 (v0.5.0, Phases 5–7, 9, 11–14 complete)**
+> **Last updated: 2026-03-26 (v0.6.0, Phases 5–7, 9, 11–14 complete)**
 
 ---
 
@@ -22,12 +22,12 @@
 | 10 | Production Release (signing, notarization, CI/CD) | 📋 Planned | 0% |
 | 11 | Semantic Search (CLAP embeddings, FAISS/sqlite-vec) | ✅ Live | 96% |
 | 12 | AI Curation (pydantic-ai, LiteLLM, smart playlists) | ✅ Live | 95% |
-| 13 | Cloud Sync (R2/Supabase, multi-device CRDTs) | 🔄 Partial | 80% |
+| 13 | Cloud Sync (R2/Supabase, multi-device CRDTs) | 🔄 Partial | 90% |
 | 14 | Analytics Dashboard (Plotly, BPM histograms) | ✅ Live | 100% |
-| 15 | Marketplace (Stripe, pack listings, signed CDN) | 📋 Planned | 0% |
-| 16 | AI Generation (AudioCraft, Stable Audio, text-to-audio) | 📋 Planned | 0% |
+| 15 | Marketplace (Stripe, pack listings, signed CDN) | 🔄 Partial | 70% |
+| 16 | AI Generation (AudioCraft, Stable Audio, text-to-audio) | ✅ Live | 90% |
 
-**Overall project progress: ~60%** — Phases 1–4, 9, 11–14 fully live; 5–8 partial; 10, 15–16 planned.
+**Overall project progress: ~70%** — Phases 1–4, 9, 11–14 fully live; 5–8 partial; 10, 15–16 planned.
 
 ---
 

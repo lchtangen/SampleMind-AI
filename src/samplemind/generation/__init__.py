@@ -8,3 +8,13 @@ AudioCraft (Meta), Stable Audio Open (Stability AI), and a deterministic mock.
 
 See: docs/en/phase-16-ai-generation.md
 """
+
+from samplemind.generation.models import GenerationRequest, GenerationResult
+from samplemind.generation.pipeline import MODEL_REGISTRY, generate
+
+__all__ = [
+    "MODEL_REGISTRY",
+    "GenerationRequest",
+    "GenerationResult",
+    "generate",
+]

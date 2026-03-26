@@ -103,8 +103,8 @@ clap = [
 # Analytics charts (optional — requires plotly)
 analytics = ["plotly>=5.0"]
 
-# Cloud sync (optional — requires boto3)
-sync = ["boto3>=1.35"]
+# Cloud sync (optional — requires boto3 for file sync; supabase for metadata sync)
+sync = ["boto3>=1.35", "supabase>=2"]
 
 # AI semantic search models — install with: uv sync --extra ai
 # Compatible with Python 3.13 + numpy 2.x.
@@ -122,6 +122,29 @@ ai = [
 # Embedding models — lightweight semantic search (numpy-2.x compatible)
 embeddings = [
     "sentence-transformers>=3.0", # semantic tag/description search via text embeddings
+]
+
+# AI generation core (mock backend only — no ML deps; numpy+soundfile are already in core)
+# NOTE: audiocraft requires torch==2.1.0 which has no Python 3.13 wheels.
+#       Install it manually in a Python ≤3.11 conda/venv environment:
+#         conda create -n sm-gen python=3.11 && pip install audiocraft
+generation = [
+    "numpy>=1.24",
+    "soundfile>=0.12",
+]
+
+# Stable Audio Open generation backend — heavy (~1.7B, needs 8GB+ RAM)
+# NOTE: requires torch>=2.0 with Python ≤3.11 or a GPU environment.
+#       Install manually: pip install stable-audio-tools diffusers torch einops
+# stable-audio = ["stable-audio-tools>=0.0.14", "diffusers>=0.28", "torch>=2.0", "einops>=0.7"]
+stable-audio = [
+    "einops>=0.7",  # einops is py3.13 compatible; torch/diffusers installed separately
+]
+
+# Marketplace — Stripe payments + Supabase metadata sync
+marketplace = [
+    "stripe>=7",
+    "supabase>=2",
 ]
 
 [project.scripts]
