@@ -17,7 +17,7 @@
 | 5 | Web UI (Flask HTMX, SSE, blueprints) | ✅ Live | 100% |
 | 6 | Desktop App (Svelte 5, Tauri IPC commands) | ✅ Live | 100% |
 | 7 | FL Studio Integration (filesystem, AppleScript, MIDI) | ✅ Live | 100% |
-| 8 | VST3/AU Plugin (JUCE 8, sidecar) | 🔄 Partial | 75% |
+| 8 | VST3/AU Plugin (JUCE 8, sidecar) | 🔄 Partial | 90% |
 | 9 | Sample Packs (.smpack ZIP, SHA-256, distribution) | ✅ Live | 100% |
 | 10 | Production Release (signing, notarization, CI/CD) | 📋 Planned | 0% |
 | 11 | Semantic Search (CLAP embeddings, FAISS/sqlite-vec) | ✅ Live | 96% |
@@ -27,7 +27,7 @@
 | 15 | Marketplace (Stripe, pack listings, signed CDN) | 🔄 Partial | 70% |
 | 16 | AI Generation (AudioCraft, Stable Audio, text-to-audio) | ✅ Live | 90% |
 
-**Overall project progress: ~70%** — Phases 1–4, 9, 11–14 fully live; 5–8 partial; 10, 15–16 planned.
+**Overall project progress: ~85%** — Phases 1–9, 11–14 fully live; 8, 13, 15–16 partial; 10 planned.
 
 ---
 
@@ -65,9 +65,12 @@
 ┌─────────────┼───────────────────────────────────────────────────┐
 │  Layer 2 — Python Backend                                       │
 │  ┌──────────┴──────────┐                                        │
-│  │  Typer CLI          │  12 commands: import, analyze, list,   │
+│  │  Typer CLI          │  21 commands: import, analyze, list,   │
 │  │  src/samplemind/    │  search, tag, serve, api, duplicates,  │
-│  │  cli/app.py         │  export, stats, health, version        │
+│  │  cli/app.py         │  export, stats, health, version,       │
+│  │                     │  sidecar, export-to-fl, midi-sync,     │
+│  │                     │  pack, sync, similar, curate,          │
+│  │                     │  analytics, generate                   │
 │  └──────────┬──────────┘                                        │
 │             │                                                   │
 │  ┌──────────┴────────────────────────────────────────────────┐  │
@@ -267,7 +270,7 @@ Supported actions (version 2 envelope):
 | **Logging** | `src/samplemind/core/logging.py` | ✅ Live | structlog configuration; JSON renderer in prod, dev renderer locally |
 | **FastAPI App** | `src/samplemind/api/main.py` | ✅ Live | `create_app()` factory; lifespan (init_orm + configure_jwt); CORS; /api/v1/health |
 | **Auth Routes** | `src/samplemind/api/routes/auth.py` | ✅ Live | /register, /login, /refresh, /logout, /me (GET/PUT), /change-password |
-| **Typer CLI** | `src/samplemind/cli/app.py` | ✅ Live | 12 commands; `--json` on all data commands; JSON → stdout, human text → stderr |
+| **Typer CLI** | `src/samplemind/cli/app.py` | ✅ Live | 21 commands; `--json` on all data commands; JSON → stdout, human text → stderr |
 | **CLI: import** | `src/samplemind/cli/commands/import_.py` | ✅ Live | Discover WAV files → `analyze_batch()` → upsert → Rich table or JSON |
 | **CLI: analyze** | `src/samplemind/cli/commands/analyze.py` | ✅ Live | Analyze without storing; useful for preview / IPC testing |
 | **CLI: library** | `src/samplemind/cli/commands/library.py` | ✅ Live | `list` + `search` with all filters; Rich table or JSON |

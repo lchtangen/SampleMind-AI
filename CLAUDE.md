@@ -62,23 +62,23 @@ and JUCE VST3/AU plugin — all reading the same database.
 | Package manager | uv + pyproject.toml | ✅ live |
 | Python version | 3.13 | ✅ live |
 | Package layout | src/samplemind/ | ✅ live |
-| CLI | Typer (src/samplemind/cli/app.py) — 8 commands | ✅ live |
+| CLI | Typer (src/samplemind/cli/app.py) — 21 commands | ✅ live |
 | Database | SQLModel + Alembic (data/orm.py + migrations/) | ✅ live |
 | Auth | JWT + RBAC (core/auth/ + api/routes/auth.py) | ✅ live |
 | Repositories | SampleRepository + UserRepository | ✅ live |
 | Lint/format | ruff ≥0.15 | ✅ live |
 | Type checking | pyright ≥1.1.390 | ✅ live |
-| Tests | pytest ≥9 + hypothesis + soundfile fixtures (33 tests) | ✅ live |
+| Tests | pytest ≥9 + hypothesis + soundfile fixtures (262 tests) | ✅ live |
 | CI | ruff + pyright + pytest + alembic check + clippy | ✅ live |
-| Frontend | Svelte 5 Runes + Vite | 📋 Phase 7 |
-| Plugin | JUCE 8 VST3/AU | 📋 Phase 9 |
+| Frontend | Svelte 5 Runes + Vite | ✅ live |
+| Plugin | JUCE 8 VST3/AU | 🔄 Partial — Phase 8 (90%) |
 
 **Important:**
 
 - **Legacy database.py still exists** in `src/samplemind/data/database.py`. It is still imported by
   `src/samplemind/api/main.py` and `src/samplemind/cli/commands/serve.py` (both call `init_db()` for
-  backward compatibility). Phase 5 cleanup will remove these remaining call sites and delete
-  `database.py` entirely. Do not add new code that imports from it.
+  backward compatibility). Phase 5 cleanup was deferred — `database.py` will be removed in a future
+  maintenance release. Do not add new code that imports from it.
 - **src/main.py** (legacy argparse entry point) is still required for Tauri dev mode. Do not remove it unless you also update `app/src-tauri/src/main.rs`.
 - The active runtime uses `init_orm()` (not `init_db()`), `SampleRepository` (not `save_sample()` / `search_samples()`), and `get_session()` (not `_connect()`).
 
@@ -119,7 +119,7 @@ cd app && pnpm tauri build --target universal-apple-darwin
 # --- Python (uv — use for all work) ---
 uv sync --dev                      # install all deps + dev tools into .venv
 uv run alembic upgrade head        # apply all schema migrations (required before first run)
-uv run samplemind --help           # show all 8 commands
+uv run samplemind --help           # show all 21 commands
 
 uv run samplemind import ~/Music/  # import + analyze WAV files
 uv run samplemind list             # list library in a Rich table
@@ -128,7 +128,7 @@ uv run samplemind tag "kick_128" --genre trap          # manual tag
 uv run samplemind serve            # Flask web UI at http://localhost:5000
 uv run samplemind api              # FastAPI auth server at http://localhost:8000/docs
 
-uv run pytest tests/ -v                                          # run all 33 tests
+uv run pytest tests/ -v                                          # run all 262 tests
 uv run pytest tests/ -v -m "not slow"                           # fast tests only
 uv run pytest tests/test_audio_analysis.py::test_bpm -v         # single test
 uv run ruff check src/ tests/                                    # lint

@@ -16,10 +16,10 @@
 
 SampleMind AI analyzes your WAV and AIFF sample files using [librosa](https://librosa.org/), stores metadata in a local SQLite database, and gives you multiple ways to browse and work with your library:
 
-- **CLI** — `samplemind import`, `analyze`, `search`, `stats`, `duplicates`
-- **Web UI** — Flask + HTMX browser interface with waveform preview
+- **CLI** — 21 commands: `import`, `search`, `generate`, `curate`, `similar`, `pack`, `sync`, `analytics` and more
+- **Web UI** — Flask + HTMX browser interface with waveform preview and SSE progress
 - **Desktop App** — Tauri 2 + Svelte 5 native app (macOS .dmg, Windows .msi)
-- **VST3/AU Plugin** — Live sample browser inside FL Studio (JUCE 8, Phase 8)
+- **VST3/AU Plugin** — Live sample browser inside FL Studio (JUCE 8, PythonSidecar IPC)
 
 Everything reads from the same SQLite database — no sync needed.
 
@@ -34,10 +34,15 @@ Everything reads from the same SQLite database — no sync needed.
 | **Audio Fingerprinting** | SHA-256 dedup detection — find and remove exact duplicates |
 | **Batch Import** | Parallel analysis with `--workers` (defaults to CPU count) |
 | **SQLite Library** | WAL mode + FTS5 full-text search, < 50ms queries |
+| **Semantic Search** | CLAP audio embeddings + sqlite-vec — search by sound similarity or text description |
+| **AI Curation** | pydantic-ai smart playlists, energy arc generation, gap analysis via LiteLLM |
+| **AI Generation** | Text-to-audio via AudioCraft MusicGen/AudioGen or Stable Audio Open |
 | **FL Studio Export** | Filesystem copy, clipboard path, AppleScript, MIDI metadata |
 | **Sample Packs** | Export/import `.smpack` bundles with SHA-256 integrity |
+| **Cloud Sync** | R2/S3 file sync + Supabase metadata sync across devices |
+| **Analytics** | Plotly BPM histograms, key heatmaps, mood/energy breakdowns |
 | **Auto-Updater** | Sparkle (macOS) / NSIS (Windows) via GitHub Releases |
-| **Offline-First** | Fully local — no cloud, no API keys required |
+| **Offline-First** | Fully local — no cloud, no API keys required for core features |
 
 ---
 
@@ -88,7 +93,7 @@ uv run samplemind api
 ### Development Setup (WSL2)
 
 ```bash
-# Run the full test suite (33 tests):
+# Run the full test suite (262 tests):
 uv run pytest tests/ -v
 
 # Run only fast tests (skips real librosa analysis — ~0.5s total):
@@ -155,17 +160,22 @@ lipo -info app/src-tauri/target/universal-apple-darwin/release/bundle/macos/Samp
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | Foundation (uv, src-layout, Typer CLI, Flask web UI) | ✅ Complete |
-| 2 | Audio Analysis & Testing (librosa, 33 tests) | ✅ Complete |
-| 3 | Authentication & Authorization (JWT, RBAC, FastAPI) | ✅ Complete |
-| 4 | Database Layer (SQLModel + Alembic, SampleRepository, WAL) | ✅ Complete |
-| 5 | CLI Modernization (stats, duplicates, --workers) | 📋 Planned |
-| 6 | Web UI Improvements (HTMX, SSE, wavesurfer.js) | 📋 Planned |
-| 7 | Desktop App (Tauri 2 + Svelte 5 Runes) | 📋 Planned |
-| 8 | FL Studio Integration (AppleScript, filesystem, MIDI) | 📋 Planned |
-| 9 | VST3/AU Plugin (JUCE 8) | 📋 Planned |
-| 10 | Sample Packs (.smpack format) | 📋 Planned |
-| 11 | Production (signing, notarization, CI/CD) | 📋 Planned |
+| 1 | Foundation (uv, src-layout, config, Typer CLI) | ✅ Complete |
+| 2 | Audio Analysis (librosa, 8 features, 262 tests) | ✅ Complete |
+| 3 | Database & Auth (SQLModel, Alembic, JWT, RBAC) | ✅ Complete |
+| 4 | CLI Modernization (21 commands, Rich, --json IPC) | ✅ Complete |
+| 5 | Web UI (Flask, HTMX, SSE, waveform preview) | ✅ Complete |
+| 6 | Desktop App (Tauri 2 + Svelte 5 Runes) | ✅ Complete |
+| 7 | FL Studio Integration (filesystem, AppleScript, MIDI) | ✅ Complete |
+| 8 | VST3/AU Plugin (JUCE 8, PythonSidecar IPC) | 🔄 90% — auval validation pending |
+| 9 | Sample Packs (.smpack ZIP, SHA-256 integrity) | ✅ Complete |
+| 10 | Production Release (signing, notarization, CI/CD) | 📋 Planned |
+| 11 | Semantic Search (CLAP embeddings, sqlite-vec) | ✅ Complete |
+| 12 | AI Curation (pydantic-ai, LiteLLM, smart playlists) | ✅ Complete |
+| 13 | Cloud Sync (R2 file sync, Supabase metadata) | 🔄 90% — CRDT full merge pending |
+| 14 | Analytics Dashboard (Plotly, BPM/key histograms) | ✅ Complete |
+| 15 | Marketplace (Stripe checkout, R2 CDN, pack listings) | 🔄 70% — FastAPI routes pending |
+| 16 | AI Generation (AudioCraft, Stable Audio, MockBackend) | 🔄 90% — GPU backends pending |
 
 See [ROADMAP.md](ROADMAP.md) for the full roadmap.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the system architecture.
@@ -179,16 +189,25 @@ See [docs/meta/](docs/meta/) for project meta and agent guides (agent routing, C
 ```
 SampleMind-AI/
 ├── src/samplemind/          ← Python package (src-layout)
-│   ├── cli/                 ← Typer CLI commands
-│   ├── analyzer/            ← librosa audio analysis
-│   ├── data/                ← SQLite database layer
-│   └── web/                 ← Flask web UI
+│   ├── cli/                 ← 21 Typer commands
+│   ├── analyzer/            ← librosa audio analysis + classifiers
+│   ├── data/                ← SQLModel + Alembic + repositories
+│   ├── web/                 ← Flask HTMX web UI
+│   ├── integrations/        ← FL Studio filesystem, AppleScript, MIDI
+│   ├── packs/               ← .smpack builder/importer
+│   ├── search/              ← CLAP embeddings + sqlite-vec index
+│   ├── agent/               ← AI curation (pydantic-ai)
+│   ├── sync/                ← R2 cloud sync + Supabase metadata
+│   ├── analytics/           ← Plotly charts + summary engine
+│   ├── marketplace/         ← Stripe + R2 pack listings
+│   ├── generation/          ← Text-to-audio (AudioCraft, MockBackend)
+│   └── sidecar/             ← Unix socket server for JUCE plugin
 ├── app/                     ← Tauri 2 desktop app
 │   ├── src/                 ← Svelte 5 frontend
 │   └── src-tauri/           ← Rust backend
 ├── plugin/                  ← JUCE 8 VST3/AU plugin
-├── tests/                   ← pytest suite (synthetic WAV fixtures)
-├── docs/en/                 ← English phase documentation
+├── tests/                   ← pytest suite (262 tests, synthetic WAV fixtures)
+├── docs/en/                 ← English phase documentation (phases 1–16)
 ├── docs/no/                 ← Norwegian phase documentation
 ├── scripts/                 ← Dev and release scripts
 ├── .claude/                 ← Claude Code agents and commands
