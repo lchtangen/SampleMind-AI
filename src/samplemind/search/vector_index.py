@@ -11,13 +11,13 @@ Uses the sqlite-vec extension (already a core dependency).
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
+import sqlite3
 
 import numpy as np
 import sqlite_vec
 
-from samplemind.search.embeddings import AUDIO_DIM, TEXT_DIM
+from samplemind.search.embeddings import AUDIO_DIM, CLAP_DIM, TEXT_DIM
 
 
 class VectorIndex:
@@ -32,7 +32,7 @@ class VectorIndex:
                      or a tmp_path for testing.
         """
         if db_path is None:
-            from samplemind.core.config import get_settings  # noqa: PLC0415
+            from samplemind.core.config import get_settings
 
             url = get_settings().database_url  # "sqlite:///path/to/db"
             db_path = Path(url.removeprefix("sqlite:///"))
@@ -58,6 +58,10 @@ class VectorIndex:
         self._conn.execute(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_text_embeddings "
             f"USING vec0(sample_id INTEGER PRIMARY KEY, embedding FLOAT[{TEXT_DIM}])"
+        )
+        self._conn.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_clap_embeddings "
+            f"USING vec0(sample_id INTEGER PRIMARY KEY, embedding FLOAT[{CLAP_DIM}])"
         )
         self._conn.commit()
 
@@ -121,15 +125,46 @@ class VectorIndex:
         ).fetchall()
         return [int(r[0]) for r in rows]
 
+    def upsert_clap(self, sample_id: int, embedding: np.ndarray) -> None:
+        """Insert or replace a CLAP audio embedding for sample_id."""
+        blob = sqlite_vec.serialize_float32(embedding.tolist())
+        self._conn.execute(
+            "INSERT OR REPLACE INTO vec_clap_embeddings(sample_id, embedding) VALUES (?, ?)",
+            (sample_id, blob),
+        )
+        self._conn.commit()
+
+    def search_clap(self, query_vec: np.ndarray, k: int = 10) -> list[int]:
+        """Return k nearest CLAP neighbours (sample_ids, ascending distance).
+
+        Args:
+            query_vec: L2-normalized float32 array of shape (CLAP_DIM,).
+            k: Number of results.
+
+        Returns:
+            List of sample_ids sorted by ascending distance.
+        """
+        blob = sqlite_vec.serialize_float32(query_vec.tolist())
+        rows = self._conn.execute(
+            "SELECT sample_id FROM vec_clap_embeddings "
+            "WHERE embedding MATCH ? "
+            "ORDER BY distance LIMIT ?",
+            (blob, k),
+        ).fetchall()
+        return [int(r[0]) for r in rows]
+
     # ── Delete ────────────────────────────────────────────────────────────────
 
     def delete(self, sample_id: int) -> None:
-        """Remove all embeddings for sample_id (both audio and text)."""
+        """Remove all embeddings for sample_id (audio, text, and CLAP)."""
         self._conn.execute(
             "DELETE FROM vec_audio_embeddings WHERE sample_id = ?", (sample_id,)
         )
         self._conn.execute(
             "DELETE FROM vec_text_embeddings WHERE sample_id = ?", (sample_id,)
+        )
+        self._conn.execute(
+            "DELETE FROM vec_clap_embeddings WHERE sample_id = ?", (sample_id,)
         )
         self._conn.commit()
 
@@ -139,7 +174,7 @@ class VectorIndex:
         """Close the database connection."""
         self._conn.close()
 
-    def __enter__(self) -> "VectorIndex":
+    def __enter__(self) -> VectorIndex:
         return self
 
     def __exit__(self, *_: object) -> None:

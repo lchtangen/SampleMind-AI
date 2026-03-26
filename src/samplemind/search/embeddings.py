@@ -24,6 +24,7 @@ import numpy as np
 
 AUDIO_DIM: int = 10
 TEXT_DIM: int = 384
+CLAP_DIM: int = 512
 
 # Lookup tables for categorical → numeric mapping
 _ENERGY_MAP = {"low": 0, "mid": 1, "high": 2}
@@ -83,8 +84,9 @@ def embed_audio(path: Path) -> np.ndarray:
     Returns:
         float32 ndarray of shape (10,).
     """
-    from samplemind.analyzer.audio_analysis import analyze_file  # noqa: PLC0415
-    import librosa  # noqa: PLC0415
+    import librosa
+
+    from samplemind.analyzer.audio_analysis import analyze_file
 
     features = analyze_file(str(path))
 
@@ -129,7 +131,7 @@ def embed_text(query: str) -> np.ndarray:
         RuntimeError: If sentence-transformers is not installed.
     """
     try:
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+        from sentence_transformers import SentenceTransformer
     except ImportError as exc:
         raise RuntimeError(
             "sentence-transformers is required for text embedding. "
@@ -148,8 +150,46 @@ _text_model: object | None = None
 
 def _get_text_model() -> object:
     """Return cached SentenceTransformer model, loading on first call."""
-    global _text_model  # noqa: PLW0603
+    global _text_model
     if _text_model is None:
-        from sentence_transformers import SentenceTransformer  # noqa: PLC0415
+        from sentence_transformers import SentenceTransformer
         _text_model = SentenceTransformer("all-MiniLM-L6-v2")
     return _text_model
+
+
+# ── CLAP (512-dim) audio embedding ────────────────────────────────────────────
+
+_clap_embedder: object | None = None
+
+
+def embed_audio_clap(path: Path) -> np.ndarray:
+    """Return a 512-dim CLAP embedding for an audio file.
+
+    Uses AudioEmbedder (lazy-loaded on first call, ~630 MB model).
+    Requires: uv sync --extra clap
+
+    The embedding is L2-normalized so it is directly comparable to text
+    embeddings from AudioEmbedder.embed_text() for cross-modal search.
+
+    Args:
+        path: Path to a WAV or AIFF audio file.
+
+    Returns:
+        float32 ndarray of shape (512,).
+
+    Raises:
+        RuntimeError: If transformers/torch is not installed.
+    """
+    return _get_clap_embedder().embed(path)  # type: ignore[union-attr]
+
+
+def _get_clap_embedder() -> object:
+    """Return cached AudioEmbedder, loading the model on first call."""
+    global _clap_embedder
+    if _clap_embedder is None:
+        from samplemind.ai.embeddings import AudioEmbedder
+
+        embedder = AudioEmbedder()
+        embedder.load()
+        _clap_embedder = embedder
+    return _clap_embedder

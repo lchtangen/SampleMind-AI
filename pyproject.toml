@@ -80,6 +80,25 @@ midi = ["python-rtmidi>=1.5"]
 # FL Studio Windows COM automation (optional — Windows only)
 windows = ["pywin32>=306"]
 
+# Local AI inference via GGUF models — install with: uv sync --extra local-ai
+# Enables LocalAIEngine for offline tag generation (samplemind tag --auto).
+# llama-cpp-python compiles a native extension; pre-built wheels available for
+# Linux x86_64, macOS arm64/x86_64.  WSL2 users: ensure build-essential is
+# installed (sudo apt-get install build-essential) if no wheel is available.
+local-ai = [
+    "llama-cpp-python>=0.3.4",
+    "huggingface-hub>=0.23",
+]
+
+# CLAP audio embeddings — install with: uv sync --extra clap
+# Enables AudioEmbedder for 512-dim semantic audio search (cross-modal text queries).
+# Note: laion-clap==1.1.7 requires numpy<2.0 (incompatible with Python 3.13 + numpy>=2.2).
+# Uses transformers.ClapModel which is numpy 2.x compatible.
+clap = [
+    "transformers>=4.40",
+    "torch>=2.0",
+]
+
 # Analytics charts (optional — requires plotly)
 analytics = ["plotly>=5.0"]
 
@@ -204,6 +223,8 @@ ignore = [
 "src/samplemind/core/auth/*.py" = ["ANN", "S105", "S106", "S107"]
 # model_loader.py — uses print() for progress output, complex **kwargs type
 "src/samplemind/utils/model_loader.py" = ["T20", "ANN"]
+# local_models.py — optional llama-cpp-python import; PLR2004 (magic value) in BPM ranges
+"src/samplemind/ai/local_models.py" = ["PLR2004"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["samplemind"]
@@ -236,6 +257,10 @@ exclude = [
     "src/samplemind/data/database.py",
     # Optional AI dependency (transformers) not installed in base venv
     "src/samplemind/utils/model_loader.py",
+    # Optional llama-cpp-python / huggingface-hub not installed in base venv
+    "src/samplemind/ai/local_models.py",
+    # Optional torch / transformers not installed in base venv
+    "src/samplemind/ai/embeddings.py",
     "build/",
     "**/node_modules",
     "**/__pycache__",

@@ -11,7 +11,7 @@ from samplemind.cli.commands.import_ import import_samples
 from samplemind.cli.commands.library import list_samples, search_library
 from samplemind.cli.commands.serve import serve
 from samplemind.cli.commands.stats import print_stats
-from samplemind.cli.commands.tag import tag_samples
+from samplemind.cli.commands.tag import auto_tag_samples, tag_samples
 
 console = Console(stderr=True)
 app = typer.Typer(help="SampleMind AI — Audio Sample Library Manager")
@@ -88,7 +88,7 @@ def search(
 
 @app.command("tag")
 def tag(
-    name: str = typer.Argument(..., help="Partial filename to identify the sample"),
+    name: str | None = typer.Argument(None, help="Partial filename to identify the sample"),
     genre: str | None = typer.Option(
         None, "--genre", help="Genre (e.g. trap, lofi, house)"
     ),
@@ -99,9 +99,35 @@ def tag(
         None, "--energy", help="Energy level [low|mid|high]"
     ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated free tags"),
+    auto: bool = typer.Option(False, "--auto", help="AI auto-tag one sample via LocalAIEngine"),
+    auto_all: bool = typer.Option(False, "--auto-all", help="AI auto-tag entire library"),
+    model: str | None = typer.Option(None, "--model", help="Path to GGUF model file"),
+    workers: int = typer.Option(4, "--workers", help="Parallel workers for --auto-all"),
+    download_model: bool = typer.Option(
+        False, "--download-model", help="Download the default Llama 3.2 1B model first"
+    ),
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
-    """Tag a sample with genre, mood, energy."""
-    tag_samples(name, genre=genre, mood=mood, energy=energy, tags=tags)
+    """Tag a sample with genre, mood, energy — or auto-tag via LocalAIEngine.
+
+    \b
+    Manual tagging:
+      samplemind tag kick_128 --genre trap --energy high
+    AI auto-tag one sample (rule-based fallback if model not found):
+      samplemind tag kick_128 --auto
+    AI auto-tag entire library:
+      samplemind tag --auto-all --workers 4
+    Download the Llama model then auto-tag:
+      samplemind tag --auto-all --download-model
+    """
+    if auto or auto_all or download_model:
+        sample_name = None if auto_all else name
+        auto_tag_samples(sample_name, model, workers, download_model, json)
+    else:
+        if not name:
+            console.print("[red]Error:[/red] name argument is required for manual tagging.")
+            raise typer.Exit(1)
+        tag_samples(name, genre=genre, mood=mood, energy=energy, tags=tags)
 
 
 @app.command("serve")

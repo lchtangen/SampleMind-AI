@@ -798,6 +798,15 @@ wheels = [
 ]
 
 [[package]]
+name = "diskcache"
+version = "5.6.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1669,6 +1678,18 @@ sdist = { url = "https://files.pythonhosted.org/packages/64/36/360b5aafa0238e297
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/ba/c63c5786dfee4c3417094c4b00966e61e4a63efecee22cb7b4c0387dda83/librosa-0.11.0-py3-none-any.whl", hash = "sha256:0b6415c4fd68bff4c29288abe67c6d80b587e0e1e2cfb0aad23e4559504a7fa1", size = 260749, upload-time = "2025-03-11T15:09:52.982Z" },
 ]
+
+[[package]]
+name = "llama-cpp-python"
+version = "0.3.19"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "diskcache" },
+    { name = "jinja2" },
+    { name = "numpy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d7/0f/b26ceec20294f5d592ac137ccc2f10e91fa1f35bb8555906b5718a625ac1/llama_cpp_python-0.3.19.tar.gz", hash = "sha256:6816e4a0a74ae9a356e7a0546e13147543f01f695c86a28d940e4b86519acf13", size = 59043951, upload-time = "2026-03-25T22:32:32.581Z" }
 
 [[package]]
 name = "llvmlite"
@@ -3482,6 +3503,10 @@ ai = [
 analytics = [
     { name = "plotly" },
 ]
+clap = [
+    { name = "torch" },
+    { name = "transformers" },
+]
 dev = [
     { name = "hypothesis" },
     { name = "pre-commit" },
@@ -3496,6 +3521,10 @@ dev = [
 ]
 embeddings = [
     { name = "sentence-transformers" },
+]
+local-ai = [
+    { name = "huggingface-hub" },
+    { name = "llama-cpp-python" },
 ]
 midi = [
     { name = "python-rtmidi" },
@@ -3523,10 +3552,12 @@ requires-dist = [
     { name = "flask", specifier = ">=3.1" },
     { name = "flask-cors", specifier = ">=5.0" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "huggingface-hub", marker = "extra == 'local-ai'", specifier = ">=0.23" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "itsdangerous", specifier = ">=2.2" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "librosa", specifier = "==0.11.0" },
+    { name = "llama-cpp-python", marker = "extra == 'local-ai'", specifier = ">=0.3.4" },
     { name = "numba", specifier = ">=0.61" },
     { name = "numpy", specifier = ">=2.2" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7" },
@@ -3559,10 +3590,12 @@ requires-dist = [
     { name = "sqlite-vec", specifier = ">=0.1.7" },
     { name = "sqlmodel", specifier = ">=0.0.21" },
     { name = "structlog", specifier = ">=24.4" },
+    { name = "torch", marker = "extra == 'clap'", specifier = ">=2.0" },
+    { name = "transformers", marker = "extra == 'clap'", specifier = ">=4.40" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
-provides-extras = ["dev", "midi", "windows", "analytics", "sync", "ai", "embeddings"]
+provides-extras = ["dev", "midi", "windows", "local-ai", "clap", "analytics", "sync", "ai", "embeddings"]
 
 [package.metadata.requires-dev]
 dev = [
