@@ -2,7 +2,7 @@
 
 > Reference document for system architecture, data flow, IPC contracts, phase roadmap, and
 > technology decisions. Kept in sync with the actual codebase — not aspirational.
-> **Last updated: 2026-03-26 (v0.4.0, Phases 5–7 complete)**
+> **Last updated: 2026-03-26 (v0.5.0, Phases 5–7, 9, 11–14 complete)**
 
 ---
 
@@ -18,16 +18,16 @@
 | 6 | Desktop App (Svelte 5, Tauri IPC commands) | ✅ Live | 100% |
 | 7 | FL Studio Integration (filesystem, AppleScript, MIDI) | ✅ Live | 100% |
 | 8 | VST3/AU Plugin (JUCE 8, sidecar) | 🔄 Partial | 75% |
-| 9 | Sample Packs (.smpack ZIP, SHA-256, distribution) | 📋 Planned | 0% |
+| 9 | Sample Packs (.smpack ZIP, SHA-256, distribution) | ✅ Live | 100% |
 | 10 | Production Release (signing, notarization, CI/CD) | 📋 Planned | 0% |
-| 11 | Semantic Search (CLAP embeddings, FAISS/sqlite-vec) | 📋 Planned | 0% |
-| 12 | AI Curation (pydantic-ai, LiteLLM, smart playlists) | 📋 Planned | 0% |
-| 13 | Cloud Sync (R2/Supabase, multi-device CRDTs) | 📋 Planned | 0% |
-| 14 | Analytics Dashboard (Plotly, BPM histograms) | 📋 Planned | 0% |
+| 11 | Semantic Search (CLAP embeddings, FAISS/sqlite-vec) | ✅ Live | 96% |
+| 12 | AI Curation (pydantic-ai, LiteLLM, smart playlists) | ✅ Live | 95% |
+| 13 | Cloud Sync (R2/Supabase, multi-device CRDTs) | 🔄 Partial | 80% |
+| 14 | Analytics Dashboard (Plotly, BPM histograms) | ✅ Live | 100% |
 | 15 | Marketplace (Stripe, pack listings, signed CDN) | 📋 Planned | 0% |
 | 16 | AI Generation (AudioCraft, Stable Audio, text-to-audio) | 📋 Planned | 0% |
 
-**Overall project progress: ~35%** — Phases 1–4 fully live; 5–6 partial; 7–16 planned.
+**Overall project progress: ~60%** — Phases 1–4, 9, 11–14 fully live; 5–8 partial; 10, 15–16 planned.
 
 ---
 
@@ -283,11 +283,13 @@ Supported actions (version 2 envelope):
 | **Svelte Frontend** | `app/src/main.ts` | 🔄 Partial | Entry point boots Svelte App; full components target Phase 6 |
 | **ML Model Loader** | `src/samplemind/utils/model_loader.py` | ✅ Live | Low-memory HuggingFace loading (8-bit quant, disk offload, remote fallback) |
 | **FL Studio Export** | `src/samplemind/integrations/` | ✅ Live | Filesystem copy, AppleScript automation, clipboard path copy, MIDI BPM sync |
-| **Pack System** | `src/samplemind/packs/` | 📋 Phase 9 | .smpack ZIP format; manifest.json; SHA-256 integrity |
+| **Pack System** | `src/samplemind/packs/` | ✅ Live | .smpack ZIP format; manifest.json; SHA-256 integrity; CLI pack create/import/list |
 | **Python Sidecar** | `src/samplemind/sidecar/` | 📋 Phase 8 | asyncio Unix socket server for JUCE plugin IPC |
 | **JUCE Plugin** | `plugin/Source/` | 📋 Phase 8 | VST3 + AU plugin; PluginEditor; PythonSidecar IPC client |
-| **Semantic Search** | `src/samplemind/search/` | 📋 Phase 11 | CLAP embeddings; FAISS / sqlite-vec vector index |
-| **AI Curation** | `src/samplemind/agent/` | 📋 Phase 12 | pydantic-ai agents; LiteLLM; smart playlist generation |
+| **Semantic Search** | `src/samplemind/search/` | ✅ Live | 10-dim audio embeddings; 384-dim text (MiniLM); sqlite-vec vector index; CLI similar |
+| **AI Curation** | `src/samplemind/agent/` | ✅ Live | pydantic-ai CuratorAgent; playlist_by_energy; gap_analysis; CLI curate analyze/playlist/gaps |
+| **Cloud Sync** | `src/samplemind/sync/` | 🔄 Partial | boto3 S3-compatible push/pull; MD5/ETag dedup; CLI sync push/pull/status |
+| **Analytics** | `src/samplemind/analytics/` | ✅ Live | LibrarySummary; BPM buckets; key counts; growth timeline; CLI analytics |
 | **Legacy DB** | `src/samplemind/data/database.py` | ⚠️ Deprecated | sqlite3 functions; kept for reference only; do not add new imports |
 
 ---

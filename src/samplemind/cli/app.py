@@ -436,6 +436,70 @@ def pack_cmd(
         raise typer.Exit(1)
 
 
+# ── Phase 13: Cloud Sync ──────────────────────────────────────────────────────
+
+
+@app.command("sync")
+def sync_cmd(
+    action: str = typer.Argument(..., help="push | pull | status"),
+    paths: list[str] = typer.Argument(default=None, help="Files/dirs to push (push only)"),
+    dest: str = typer.Option("", "--dest", "-d", help="Destination dir for pull"),
+    json: bool = typer.Option(False, "--json", help=_JSON_HELP),
+) -> None:
+    """Cloud sync — push/pull audio files to S3-compatible storage (R2, S3, B2)."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    if action == "push":
+        from samplemind.sync.file_sync import push_files
+
+        resolved = [_Path(p) for p in (paths or [])]
+        if not resolved:
+            console.print("[red]Error:[/red] Provide at least one file or directory to push.")
+            raise typer.Exit(1)
+        result = push_files(resolved)
+        if json:
+            typer.echo(_json.dumps(result))
+        else:
+            console.print(
+                f"[green]Uploaded:[/green] {result['uploaded']}  "
+                f"Skipped: {result['skipped']}  Errors: {result['errors']}"
+            )
+
+    elif action == "pull":
+        from samplemind.sync.file_sync import pull_files
+
+        dst = _Path(dest) if dest else _Path.cwd()
+        result = pull_files(dst)
+        if json:
+            typer.echo(_json.dumps(result))
+        else:
+            console.print(
+                f"[green]Downloaded:[/green] {result['downloaded']}  "
+                f"Skipped: {result['skipped']}  Errors: {result['errors']}"
+            )
+
+    elif action == "status":
+        from samplemind.sync.config import get_sync_settings
+
+        s = get_sync_settings()
+        data = {
+            "endpoint": s.endpoint_url,
+            "bucket": s.bucket,
+            "prefix": s.prefix,
+            "dry_run": s.dry_run,
+            "credentials_set": bool(s.access_key),
+        }
+        if json:
+            typer.echo(_json.dumps(data))
+        else:
+            console.print_json(_json.dumps(data))
+
+    else:
+        console.print(f"[red]Unknown action:[/red] {action!r}. Use: push | pull | status")
+        raise typer.Exit(1)
+
+
 # ── Phase 11: Semantic Search ─────────────────────────────────────────────────
 
 
@@ -447,7 +511,6 @@ def similar_cmd(
 ) -> None:
     """Find samples similar to a reference file using audio feature embeddings."""
     import json as _json
-
     from pathlib import Path as _Path
 
     from samplemind.data.orm import init_orm
@@ -695,12 +758,15 @@ def analytics_cmd(
 
     if export_html:
         try:
-            from samplemind.analytics.charts import bpm_histogram_chart, energy_bar_chart
+            from pathlib import Path
 
             import plotly.graph_objects as go  # noqa: F401
-
-            from pathlib import Path
             import plotly.io as pio
+
+            from samplemind.analytics.charts import (
+                bpm_histogram_chart,
+                energy_bar_chart,
+            )
 
             figs = [bpm_histogram_chart(), energy_bar_chart()]
             html_parts = [pio.to_html(f, full_html=False, include_plotlyjs="cdn") for f in figs]
