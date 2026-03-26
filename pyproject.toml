@@ -62,6 +62,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "pytest-cov>=6",
     "pytest-xdist>=3.6",     # parallel test execution (-n auto)
+    "pytest-timeout>=2.3",   # per-test timeout — prevents hangs in VSCode/CI
     "pytest-benchmark>=4.0", # performance regression tests
     "hypothesis>=6.0",       # property-based / fuzz testing
 
@@ -136,8 +137,13 @@ packages = ["src/samplemind"]
 # ── pytest ─────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+# Default: skip slow tests so `uv run pytest` is fast in VSCode / CI fast lane.
+# Run the full suite with: uv run pytest --slow  OR  uv run pytest -m ""
+addopts = "-v --tb=short -m 'not slow'"
 asyncio_mode = "auto"
+# Per-test timeout — prevents any single test from hanging indefinitely.
+# Raise per test with @pytest.mark.timeout(N). Full suite may need --timeout=60.
+timeout = 30
 markers = [
     "slow: expensive audio analysis tests (skip with: pytest -m 'not slow')",
     "integration: requires real filesystem or database",
@@ -273,4 +279,5 @@ dev = [
     "pyright>=1.1.390",
     "pytest>=9",
     "pytest-asyncio>=0.24",
+    "pytest-timeout>=2.4.0",
 ]

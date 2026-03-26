@@ -12,6 +12,7 @@ def synth_wav(path, freq=440, sr=22050, duration=1.0, amplitude=0.5):
     return path
 
 
+@pytest.mark.slow
 def test_analyze_file_sine(tmp_path):
     path = synth_wav(tmp_path / "sine.wav", freq=440, amplitude=0.5)
     result = analyze_file(str(path))
@@ -39,12 +40,14 @@ def test_analyze_file_sine(tmp_path):
     }
 
 
+@pytest.mark.slow
 def test_analyze_file_silence(silent_wav):
     result = analyze_file(str(silent_wav))
     assert result["energy"] == "low"
     assert result["instrument"] in {"unknown", "pad", "sfx"}
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "freq,candidates",
     [

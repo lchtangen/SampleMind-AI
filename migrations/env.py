@@ -46,22 +46,30 @@ def _get_url() -> str:
 
     Priority:
     1. SAMPLEMIND_DB_URL environment variable (CI / staging override)
-    2. URL from alembic.ini [alembic] section (``sqlalchemy.url``)
-    3. URL from samplemind.core.config.Settings (production default)
+    2. URL from samplemind.core.config.Settings (runtime default — always preferred)
+    3. URL from alembic.ini [alembic] section (last-resort fallback)
+
+    Note: alembic.ini's ``sqlalchemy.url`` is a dev-only placeholder.  Alembic
+    expands ``%(here)s`` *before* ``get_main_option()`` returns, so checking for
+    the literal ``%(`` prefix is unreliable.  Always prefer Settings so that
+    ``uv run alembic upgrade head`` targets the same DB the app uses at runtime.
     """
     import os
 
     if url := os.getenv("SAMPLEMIND_DB_URL"):
         return url
 
+    try:
+        from samplemind.core.config import get_settings
+
+        return get_settings().database_url
+    except Exception:
+        pass  # package not installed / import error — fall back to ini
+
     if ini_url := config.get_main_option("sqlalchemy.url"):
-        # Skip the placeholder entry that starts with "sqlite:///%"
-        if not ini_url.startswith("sqlite:///%("):
-            return ini_url
+        return ini_url
 
-    from samplemind.core.config import get_settings
-
-    return get_settings().database_url
+    raise RuntimeError("Cannot resolve database URL for Alembic migrations")
 
 
 # ── Offline mode — emit SQL to a file without a live DB connection ────────────

@@ -7,6 +7,54 @@ import soundfile as sf
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
+# ── --slow CLI flag ──────────────────────────────────────────────────────────
+# Allows: ``pytest --slow`` to include slow tests while the default
+# addopts = "-m 'not slow'" skips them for fast interactive runs.
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--slow",
+        action="store_true",
+        default=False,
+        help="Also run tests marked @pytest.mark.slow (disabled by default).",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    if config.getoption("--slow"):
+        # Remove the 'not slow' marker expression injected by addopts
+        # so that slow tests run alongside fast ones.
+        for item in items:
+            item.own_markers  # ensure markers are loaded
+        config.option.markexpr = ""
+
+
+# ── Eager imports to prevent C-extension double-load on Python 3.13 ──────────
+# Python 3.13 is stricter about C extensions: a .so loaded twice in the same
+# process raises "cannot load module more than once per process".
+# librosa and scipy use lazy_loader, which can trigger re-imports of already-
+# loaded C extensions (numpy.fft._pocketfft_umath, scipy.signal, etc.) if the
+# first import of the top-level package doesn't pull them in.
+# Pre-importing the full chain here — before any test module imports — ensures
+# every C extension is loaded exactly once, into the correct module namespace.
+#
+# Also fixes: numba 0.64 lazily initialises PyYAML, causing
+#   AttributeError: partially initialized module 'yaml'
+# when multiple test modules trigger numba initialisation in close succession.
+try:
+    import numba  # noqa: F401 — forces yaml to be fully initialised
+    import numpy.fft  # noqa: F401 — loads _pocketfft_umath C ext once
+    import scipy.signal  # noqa: F401 — loads scipy C exts before lazy_loader can
+    import librosa  # noqa: F401 — resolves lazy submodule chain up front
+    # Warm up the most commonly used lazy submodules that trigger the issue
+    import librosa.core.audio  # noqa: F401
+    import librosa.feature  # noqa: F401
+except ImportError:
+    pass  # optional deps; tests that need them will skip or fail on their own
+
 # ── Audio fixtures ─────────────────────────────────────────────────────────────
 
 

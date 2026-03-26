@@ -7,6 +7,11 @@ Tests end-to-end scenarios:
 - Duplicate detection
 - Semantic search
 - Playlist generation
+
+NOTE: All tests here are marked ``slow`` — they spawn ``uv run samplemind``
+subprocesses which each incur Python + numba startup time (~5-10s each).
+Run with: ``uv run pytest -m slow`` or ``uv run pytest --slow``
+Skip by default in fast mode (the default ``addopts`` filter).
 """
 
 from __future__ import annotations
@@ -16,6 +21,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+# Mark every test in this module as slow — subprocess tests are too heavy for
+# interactive / VSCode runs. They still run in CI via: pytest -m slow
+pytestmark = [pytest.mark.slow]
 
 
 @pytest.fixture
@@ -241,7 +250,6 @@ def test_export_command(generated_samples, clean_db, tmp_path):
     assert result.returncode == 0
 
 
-@pytest.mark.slow
 def test_parallel_import_performance(generated_samples, clean_db):
     """Test that parallel import is faster than sequential"""
     import time
