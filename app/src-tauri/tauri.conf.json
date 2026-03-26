@@ -41,11 +41,7 @@
 
   "bundle": {
     "active": true,
-    "targets": {
-      "macOS": ["dmg", "app"],
-      "windows": ["msi", "nsis"],
-      "linux": ["appimage", "deb"]
-    },
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -63,7 +59,7 @@
       "frameworks": [],
       "minimumSystemVersion": "12.0",
       "exceptionDomain": null,
-      "hardened_runtime": true
+      "hardenedRuntime": true
     },
     "windows": {
       "certificateThumbprint": null,
@@ -76,7 +72,7 @@
         "language": "en-US"
       },
       "nsis": {
-        "installMode": "perUser",
+        "installMode": "currentUser",
         "languages": ["English"]
       }
     },
@@ -87,14 +83,6 @@
       "appimage": {
         "bundleMediaFramework": true
       }
-    },
-    "updater": {
-      "active": true,
-      "dialog": true,
-      "pubkey": "",
-      "endpoints": [
-        "https://api.github.com/repos/lchtangen/SampleMind-AI/releases/latest"
-      ]
     }
   }
 }

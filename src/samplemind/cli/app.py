@@ -30,9 +30,18 @@ def import_(
     source: str = typer.Argument(..., help="Folder containing WAV files"),
     json: bool = typer.Option(False, "--json", help=_JSON_HELP),
     workers: int = typer.Option(0, "--workers", "-w", help="Parallel workers (0 = auto)"),
+    auto_tag: bool = typer.Option(
+        False, "--auto-tag",
+        help="Auto-tag imported samples using LocalAIEngine (rule-based if no model)",
+    ),
+    deduplicate: bool = typer.Option(
+        False, "--deduplicate", "--dedup",
+        help="Skip files whose SHA-256 fingerprint already exists in the library",
+    ),
 ) -> None:
     """Import WAV samples into the library."""
-    import_samples(source, json_output=json, workers=workers)
+    import_samples(source, json_output=json, workers=workers,
+                   auto_tag=auto_tag, deduplicate=deduplicate)
 
 
 @app.command("analyze")
@@ -485,17 +494,110 @@ def similar_cmd(
 
 @app.command("curate")
 def curate_cmd(
-    prompt: str | None = typer.Argument(None, help="Curation goal (e.g. 'dark trap set')"),
+    action: str = typer.Argument(
+        "analyze",
+        help="Sub-command: analyze | playlist | gaps  (default: analyze)",
+    ),
+    prompt: str | None = typer.Option(None, "--prompt", "-p", help="Curation goal for 'analyze'"),
+    # playlist options
+    arc: str | None = typer.Option(
+        None,
+        "--arc",
+        help="Energy arc for 'playlist', comma-separated: e.g. low,mid,high,high",
+    ),
+    mood: str | None = typer.Option(None, "--mood", help="Mood filter for 'playlist'"),
+    instrument: str | None = typer.Option(None, "--instrument", help="Instrument filter for 'playlist'"),
+    # gaps options
+    target_kicks: int = typer.Option(10, "--kicks", help="Target kick count for 'gaps'"),
+    target_snares: int = typer.Option(8, "--snares", help="Target snare count for 'gaps'"),
+    target_hihats: int = typer.Option(12, "--hihats", help="Target hihat count for 'gaps'"),
+    # shared
     json: bool = typer.Option(False, "--json", help=_JSON_HELP),
     model: str = typer.Option("claude-haiku-4-5-20251001", "--model", help="pydantic-ai model ID"),
 ) -> None:
-    """AI-powered library curation using Claude."""
+    """AI-powered library curation.
+
+    \b
+    Sub-commands:
+      analyze   Run CuratorAgent (requires Claude API key) — default
+      playlist  Generate an energy-arc playlist from the library (offline)
+      gaps      Analyse missing instrument types vs a target profile (offline)
+
+    \b
+    Examples:
+      samplemind curate
+      samplemind curate analyze --prompt "dark trap set"
+      samplemind curate playlist --arc low,mid,high,high --mood dark
+      samplemind curate gaps --kicks 20 --snares 15 --json
+    """
     import json as _json
 
-    from samplemind.agent.curator import CuratorAgent
     from samplemind.data.orm import init_orm
 
     init_orm()
+
+    _console = __import__("rich.console", fromlist=["Console"]).Console(stderr=True)
+
+    # ── playlist sub-command ─────────────────────────────────────────────────
+    if action == "playlist":
+        from samplemind.agent.playlist import playlist_by_energy
+
+        _arc = [e.strip() for e in (arc or "low,mid,high").split(",")]
+        samples = playlist_by_energy(_arc, mood=mood, instrument=instrument)
+
+        if json:
+            typer.echo(_json.dumps([
+                {"id": s.id, "filename": s.filename, "energy": s.energy,
+                 "mood": s.mood, "bpm": s.bpm, "key": s.key}
+                for s in samples
+            ]))
+        else:
+            from rich.table import Table
+
+            table = Table(show_header=True, header_style="bold cyan", box=None)
+            table.add_column("#", width=4)
+            table.add_column("Filename", min_width=30)
+            table.add_column("Energy", width=7)
+            table.add_column("Mood", width=12)
+            table.add_column("BPM", justify="right", width=7)
+            table.add_column("Key", width=8)
+            for i, s in enumerate(samples, 1):
+                table.add_row(
+                    str(i), s.filename, s.energy or "", s.mood or "",
+                    str(s.bpm or ""), s.key or "",
+                )
+            _console.print(f"\n[bold]Playlist — arc: {' → '.join(_arc)}[/bold]")
+            _console.print(table)
+            _console.print(f"\n[green]{len(samples)} track(s) generated.[/green]")
+        return
+
+    # ── gaps sub-command ─────────────────────────────────────────────────────
+    if action == "gaps":
+        from samplemind.agent.playlist import gap_analysis
+
+        target = {"kick": target_kicks, "snare": target_snares, "hihat": target_hihats}
+        result = gap_analysis(target)
+
+        if json:
+            typer.echo(_json.dumps(result))
+        else:
+            _console.print("\n[bold]Library Gap Analysis[/bold]")
+            for inst, data in result.items():
+                surplus = data.get("surplus", 0)
+                color = "green" if surplus >= 0 else "red"
+                sign = "+" if surplus >= 0 else ""
+                _console.print(
+                    f"  {inst:10s} {data.get('actual', 0):3d}/{data.get('target', 0):3d}"
+                    f"  [{color}]{sign}{surplus}[/{color}]"
+                )
+        return
+
+    # ── analyze sub-command (default — calls CuratorAgent) ───────────────────
+    if action not in ("analyze",):
+        # Treat any unrecognised action as a free-form prompt for backward compat
+        prompt = prompt or action
+
+    from samplemind.agent.curator import CuratorAgent
 
     _prompt = prompt or "Analyse my sample library and suggest improvements."
     agent = CuratorAgent(model_id=model)
@@ -514,20 +616,19 @@ def curate_cmd(
             "energy_arc": result.energy_arc,
         }))
     else:
-        from rich.console import Console
-
-        console = Console(stderr=True)
-        console.print("[bold]Curation Recommendations[/bold]")
+        _console.print("[bold]Curation Recommendations[/bold]")
         for rec in result.recommendations:
-            console.print(f"  • {rec}")
+            _console.print(f"  • {rec}")
         if result.energy_arc:
-            console.print(f"\nEnergy arc: {' → '.join(result.energy_arc)}")
+            _console.print(f"\nEnergy arc: {' → '.join(result.energy_arc)}")
         if result.gap_analysis:
-            console.print("\n[bold]Gap Analysis[/bold]")
+            _console.print("\n[bold]Gap Analysis[/bold]")
             for inst, data in result.gap_analysis.items():
                 surplus = data.get("surplus", 0)
                 symbol = "+" if surplus >= 0 else ""
-                console.print(f"  {inst}: {data.get('actual', 0)}/{data.get('target', 0)} ({symbol}{surplus})")
+                _console.print(
+                    f"  {inst}: {data.get('actual', 0)}/{data.get('target', 0)} ({symbol}{surplus})"
+                )
 
 
 # ── Phase 14: Analytics ───────────────────────────────────────────────────────

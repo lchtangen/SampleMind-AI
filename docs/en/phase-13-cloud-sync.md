@@ -1,5 +1,7 @@
 # Phase 13 — Cloud Sync & Multi-Device
 
+**Status: 📋 Planned** — depends on Phase 10 (production + auth) | Phase 13 of 16 | Agent: `phase-13-cloud-sync`
+
 > **Goal:** Sync the SampleMind library across multiple machines — studio Mac,
 > home Mac, Windows laptop — with conflict resolution and team collaboration.
 >

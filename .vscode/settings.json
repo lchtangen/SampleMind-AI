@@ -1,10 +1,6 @@
 {
   // ── Python ──────────────────────────────────────────────────────────────────
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-  "python.analysis.extraPaths": [
-    "${workspaceFolder}/src"
-  ],
-  "python.analysis.typeCheckingMode": "basic",
   "python.analysis.autoImportCompletions": true,
   "python.analysis.inlayHints.variableTypes": true,
   "python.analysis.inlayHints.functionReturnTypes": true,
@@ -251,11 +247,14 @@
     "toml": true,
     "plaintext": true
   },
-
-  // ── Markdown lint ───────────────────────────────────────────────────────────
-  "markdownlint.config": {
-    "extends": ".markdownlint.json"
-  },
-  "editor.codeActions.triggerOnFocusChange": true,
-  "cmake.ignoreCMakeListsMissing": true
+  "cSpell.enabledLanguageIds": {
+    "python": true,
+    "rust": true,
+    "svelte": true,
+    "typescript": true,
+    "markdown": true,
+    "json": true,
+    "toml": true,
+    "plaintext": true
+  }
 }

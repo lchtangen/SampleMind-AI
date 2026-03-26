@@ -1,5 +1,7 @@
 # Phase 3 — Database & Data Layer
 
+**Status: ✅ Complete** — SQLModel + Alembic live, WAL mode auto-applied | Phase 3 of 16
+
 > Upgrade the raw `sqlite3` layer in `database.py` to **SQLModel** + SQLAlchemy 2.0 with
 > Alembic migrations, type-safe models, and a Repository pattern.
 

@@ -52,10 +52,11 @@ def analyze_bpm(y: np.ndarray, sr: int | float) -> float:
     """
     try:
         tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-        # Convert numpy array to scalar if needed
-        if hasattr(tempo, 'item'):
-            tempo = tempo.item()
-        return round(float(tempo), 2)
+        # tempo may be a 0-dim array, a 1-element array, or a Python float
+        # depending on librosa version and audio length.  Flatten to scalar:
+        tempo_arr = np.asarray(tempo).ravel()
+        bpm_val = float(tempo_arr[0]) if tempo_arr.size > 0 else 0.0
+        return round(bpm_val, 2)
     except Exception:
         return 0.0
 

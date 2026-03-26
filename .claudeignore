@@ -1,0 +1,60 @@
+# Python artifacts — never useful to read
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Audio files — always generate synthetic fixtures, never read real ones
+*.wav
+*.aiff
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.opus
+
+# Database files — read via CLI/API, not directly
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Generated test fixtures
+tests/fixtures/generated/
+
+# Rust/Tauri build artifacts — large, auto-generated
+app/src-tauri/target/
+app/node_modules/
+
+# JUCE plugin build
+plugin/build/
+plugin/Builds/
+plugin/JuceLibraryCode/
+
+# Lock files — large, rarely useful context
+uv.lock
+pnpm-lock.yaml
+Cargo.lock
+
+# Coverage, cache, and test reports
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS and editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Secrets and environment — never read
+.env
+.env.local
+*.pem
+*.key

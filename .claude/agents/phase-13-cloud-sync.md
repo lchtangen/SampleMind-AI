@@ -1,3 +1,17 @@
+---
+name: phase-13-cloud-sync
+description: >
+  Use this agent automatically for ANY task involving: Phase 13, cloud sync, Cloudflare R2,
+  Supabase, multi-device sync, S3, boto3, SyncSettings, push_metadata, s3.head_object,
+  sync push/pull, conflict resolution, "cloud sync", "multi-device", or "Phase 13 work".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  src/samplemind/sync/**/*.py — or the file contains: import boto3, s3.head_object,
+  SyncSettings, push_metadata, pull_metadata, CloudSyncClient, supabase.
+  Do NOT wait for the user to ask — route here for all Phase 13 work.
+model: sonnet
+tools: Read, Grep, Glob, Bash
+---
+
 # Phase 13 Agent — Cloud Sync & Multi-Device
 
 ## Identity

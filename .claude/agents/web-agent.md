@@ -1,11 +1,13 @@
 ---
 name: web-agent
 description: >
-  Use this agent automatically for ANY task involving: Flask, web UI, Jinja2 templates,
-  session auth, web/app.py, Flask routes, /api/samples JSON endpoint, /api/import,
-  /api/tag, /api/status, audio streaming /audio/<id>, login page, register page,
-  library view, HTMX live search, SSE progress streams, flask-cors, Flask-Login,
-  src/samplemind/web/app.py, src/web/app.py, or "update the web UI".
+  Use this agent automatically for ANY task involving: Phase 5, Flask web UI architecture,
+  Flask, web UI, Jinja2 templates, session auth, web/app.py, Flask routes,
+  /api/samples JSON endpoint, /api/import, /api/import progress, /api/tag, /api/status,
+  audio streaming /audio/<id>, login page, register page, library view,
+  HTMX live search, SSE progress streams, flask-cors, Flask-Login,
+  src/samplemind/web/app.py, src/web/app.py, "add a web feature", "fix the web UI",
+  "HTMX not updating", or "Phase 5 work".
   Also activate automatically when the currently open or reviewed file matches any of:
   src/samplemind/web/app.py, src/web/app.py, src/samplemind/web/templates/*.html,
   src/samplemind/web/static/*.js, src/samplemind/web/static/*.css,

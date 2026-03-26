@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from flask import Blueprint, Response, request, stream_with_context
+from flask import Blueprint, Response, request
 
 from samplemind.analyzer.audio_analysis import analyze_file
 from samplemind.core.models.sample import SampleCreate
@@ -75,7 +75,7 @@ def import_folder():
         yield _sse_event("done", {"imported": imported, "total": total})
 
     return Response(
-        stream_with_context(generate()),
+        generate(),
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

@@ -1,3 +1,17 @@
+---
+name: phase-14-analytics
+description: >
+  Use this agent automatically for ANY task involving: Phase 14, analytics, Plotly charts,
+  BPM histogram, key heatmap, growth timeline, library statistics dashboard, bpm_histogram_chart,
+  get_key_heatmap, get_summary, "analytics", "dashboard", "BPM histogram", "key heatmap",
+  or "Phase 14 work". Also activate automatically when the currently open or reviewed file
+  matches any of: src/samplemind/analytics/**/*.py — or the file contains: import plotly,
+  bpm_histogram_chart, get_key_heatmap, get_summary, AnalyticsDashboard, plotly.graph_objects.
+  Do NOT wait for the user to ask — route here for all Phase 14 work.
+model: sonnet
+tools: Read, Grep, Glob, Bash
+---
+
 # Phase 14 Agent — Analytics Dashboard
 
 ## Identity

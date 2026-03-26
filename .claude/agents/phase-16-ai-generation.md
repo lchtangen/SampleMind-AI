@@ -1,3 +1,18 @@
+---
+name: phase-16-ai-generation
+description: >
+  Use this agent automatically for ANY task involving: Phase 16, AI sample generation,
+  AudioCraft, MusicGen, AudioGen, Stable Audio, text-to-audio, StableAudioPipeline,
+  GenerationRequest, MODEL_REGISTRY, "generate sample", "text-to-audio", "AudioCraft",
+  "Stable Audio", or "Phase 16 work". Also activate automatically when the currently open
+  or reviewed file matches any of: src/samplemind/generation/**/*.py — or the file contains:
+  from audiocraft, StableAudioPipeline, GenerationRequest, MODEL_REGISTRY, AudioGen,
+  MusicGen, generate_audio, text_to_audio.
+  Do NOT wait for the user to ask — route here for all Phase 16 work.
+model: sonnet
+tools: Read, Grep, Glob, Bash
+---
+
 # Phase 16 Agent — AI Sample Generation
 
 ## Identity

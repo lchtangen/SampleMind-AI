@@ -145,4 +145,3 @@ uv run samplemind analytics --json
 uv run samplemind generate "dark kick" --bpm 140 --model mock
 uv run samplemind index rebuild
 ```
-

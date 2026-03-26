@@ -1,0 +1,28 @@
+{
+  "agents": {
+    "audio-analyzer":           { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "test-runner":              { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "tauri-builder":            { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "doc-writer":               { "model": "claude-haiku-4-5-20251001", "tools": ["Read", "Grep", "Glob", "Write"] },
+    "fl-studio-agent":          { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "api-agent":                { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "web-agent":                { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "security-agent":           { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "devops-agent":             { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "ml-agent":                 { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-01-foundation":      { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-02-audio-testing":   { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-03-database":        { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-04-cli":             { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-06-desktop":         { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-08-vst-plugin":      { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-09-sample-packs":    { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-10-production":      { "model": "claude-opus-4-6",   "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-11-semantic-search": { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-12-ai-curation":     { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-13-cloud-sync":      { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-14-analytics":       { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-15-marketplace":     { "model": "claude-opus-4-6",   "tools": ["Read", "Grep", "Glob", "Bash"] },
+    "phase-16-ai-generation":   { "model": "claude-sonnet-4-6", "tools": ["Read", "Grep", "Glob", "Bash"] }
+  }
+}

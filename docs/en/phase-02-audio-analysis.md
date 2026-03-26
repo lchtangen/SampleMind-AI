@@ -1,5 +1,7 @@
 # Phase 2 — Audio Analysis & AI Classification
 
+**Status: ✅ Complete** — live since v0.1.0 | Phase 2 of 16 | 244 tests passing
+
 > Understand, test, and extend the audio analysis pipeline that extracts BPM, key, and 8 acoustic
 > features from WAV files using librosa 0.11.
 

@@ -1,7 +1,9 @@
 # Phase 1 — Foundation & Project Structure
 
+**Status: ✅ Complete** — live since v0.1.0 | Phase 1 of 16
+
 > Set up a modern Python 3.13 project with `uv`, `pyproject.toml`, and a clean folder layout
-> that scales through all 10 phases.
+> that scales through all 16 phases.
 
 ---
 

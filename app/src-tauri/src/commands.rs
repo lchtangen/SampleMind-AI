@@ -1,8 +1,8 @@
-/// commands.rs — All Tauri IPC commands for SampleMind AI.
-///
-/// Every function tagged `#[tauri::command]` here must also be registered in:
-///   - `main.rs` → `.invoke_handler(tauri::generate_handler![...])`
-///   - `capabilities/default.json` (custom commands are allowed by `core:default`)
+//! commands.rs — All Tauri IPC commands for SampleMind AI.
+//!
+//! Every function tagged `#[tauri::command]` here must also be registered in:
+//!   - `main.rs` → `.invoke_handler(tauri::generate_handler![...])`
+//!   - `capabilities/default.json` (custom commands are allowed by `core:default`)
 
 use crate::state::AuthTokenStore;
 
@@ -63,4 +63,66 @@ pub fn clear_token(state: tauri::State<'_, AuthTokenStore>) -> Result<(), String
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
     *guard = None;
     Ok(())
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // ── is_directory ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn is_directory_returns_false_for_nonexistent_path() {
+        assert!(!is_directory(
+            "/this/path/absolutely/does/not/exist/xyz123abc".to_string()
+        ));
+    }
+
+    #[test]
+    fn is_directory_returns_false_for_a_regular_file() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file_path = dir.path().join("test.wav");
+        let mut f = std::fs::File::create(&file_path).expect("create file");
+        f.write_all(b"RIFF").expect("write");
+        assert!(!is_directory(file_path.to_string_lossy().to_string()));
+    }
+
+    #[test]
+    fn is_directory_returns_true_for_a_real_directory() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(is_directory(dir.path().to_string_lossy().to_string()));
+    }
+
+    // ── AuthTokenStore ────────────────────────────────────────────────────────
+
+    #[test]
+    fn token_store_roundtrip() {
+        let store = AuthTokenStore(Mutex::new(None));
+
+        // Initially empty
+        assert!(store.0.lock().unwrap().is_none());
+
+        // Store a token
+        *store.0.lock().unwrap() = Some("eyJhbGciOiJIUzI1NiJ9.test".to_string());
+        assert_eq!(
+            *store.0.lock().unwrap(),
+            Some("eyJhbGciOiJIUzI1NiJ9.test".to_string())
+        );
+
+        // Clear it
+        *store.0.lock().unwrap() = None;
+        assert!(store.0.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn token_store_overwrites_previous_token() {
+        let store = AuthTokenStore(Mutex::new(None));
+        *store.0.lock().unwrap() = Some("token-v1".to_string());
+        *store.0.lock().unwrap() = Some("token-v2".to_string());
+        assert_eq!(*store.0.lock().unwrap(), Some("token-v2".to_string()));
+    }
 }

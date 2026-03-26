@@ -15,7 +15,7 @@ description: >
   staple, codesign, universal-apple-darwin, PyInstaller, --onefile,
   azure/trusted-signing-action, AZURE_CLIENT_ID, tauri build.
   Do NOT wait for the user to ask — route here for all Phase 10 production work.
-model: claude-opus-4
+model: opus
 tools: Read, Grep, Glob, Bash
 ---
 

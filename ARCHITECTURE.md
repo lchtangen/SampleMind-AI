@@ -2,7 +2,7 @@
 
 > Reference document for system architecture, data flow, IPC contracts, phase roadmap, and
 > technology decisions. Kept in sync with the actual codebase — not aspirational.
-> **Last updated: 2026-03-25 (v0.2.0, Phase 4 complete)**
+> **Last updated: 2026-03-26 (v0.4.0, Phases 5–7 complete)**
 
 ---
 
@@ -14,10 +14,10 @@
 | 2 | Audio Analysis (librosa, 8 features, classifiers) | ✅ Live | 100% |
 | 3 | Database & Auth (SQLModel, Alembic, JWT, RBAC) | ✅ Live | 100% |
 | 4 | CLI Modernization (Typer, batch, FTS5, perf) | ✅ Live | 100% |
-| 5 | Web UI (Flask HTMX, SSE, blueprints) | 🔄 Partial | ~30% |
-| 6 | Desktop App (Svelte 5, Tauri IPC commands) | 🔄 Partial | ~30% |
-| 7 | FL Studio Integration (filesystem, AppleScript, MIDI) | 📋 Planned | 0% |
-| 8 | VST3/AU Plugin (JUCE 8, sidecar) | 📋 Planned | 0% |
+| 5 | Web UI (Flask HTMX, SSE, blueprints) | ✅ Live | 100% |
+| 6 | Desktop App (Svelte 5, Tauri IPC commands) | ✅ Live | 100% |
+| 7 | FL Studio Integration (filesystem, AppleScript, MIDI) | ✅ Live | 100% |
+| 8 | VST3/AU Plugin (JUCE 8, sidecar) | 🔄 Partial | 75% |
 | 9 | Sample Packs (.smpack ZIP, SHA-256, distribution) | 📋 Planned | 0% |
 | 10 | Production Release (signing, notarization, CI/CD) | 📋 Planned | 0% |
 | 11 | Semantic Search (CLAP embeddings, FAISS/sqlite-vec) | 📋 Planned | 0% |
@@ -33,7 +33,7 @@
 
 ## System Layers
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  Layer 4 — DAW Integration                          [Phase 7-8] │
 │  ┌──────────────────────┐   ┌─────────────────────────────────┐ │
@@ -102,7 +102,7 @@
 
 ## Data Flow
 
-```
+```text
 WAV / AIFF file on disk
      │
      ▼
@@ -233,7 +233,7 @@ Once Svelte 5 components are built, Tauri will call Python via subprocess stdout
 
 Length-prefixed JSON over a Unix domain socket (`~/tmp/samplemind.sock`):
 
-```
+```text
 Request:  [4-byte big-endian int: length] [UTF-8 JSON bytes]
 Response: [4-byte big-endian int: length] [UTF-8 JSON bytes]
 
@@ -282,7 +282,7 @@ Supported actions (version 2 envelope):
 | **Tauri Rust Core** | `app/src-tauri/src/main.rs` | ✅ Live | 5 IPC commands; Flask spawning (dev) / sidecar binary (prod); system tray |
 | **Svelte Frontend** | `app/src/main.ts` | 🔄 Partial | Entry point boots Svelte App; full components target Phase 6 |
 | **ML Model Loader** | `src/samplemind/utils/model_loader.py` | ✅ Live | Low-memory HuggingFace loading (8-bit quant, disk offload, remote fallback) |
-| **FL Studio Export** | `src/samplemind/integrations/` | 📋 Phase 7 | Filesystem copy, AppleScript automation, clipboard path copy |
+| **FL Studio Export** | `src/samplemind/integrations/` | ✅ Live | Filesystem copy, AppleScript automation, clipboard path copy, MIDI BPM sync |
 | **Pack System** | `src/samplemind/packs/` | 📋 Phase 9 | .smpack ZIP format; manifest.json; SHA-256 integrity |
 | **Python Sidecar** | `src/samplemind/sidecar/` | 📋 Phase 8 | asyncio Unix socket server for JUCE plugin IPC |
 | **JUCE Plugin** | `plugin/Source/` | 📋 Phase 8 | VST3 + AU plugin; PluginEditor; PythonSidecar IPC client |
@@ -322,7 +322,7 @@ Phases 7–8 depend on Phase 6. Phase 9 depends on Phase 4. Phases 11–16 depen
 
 ## Repository Structure
 
-```
+```text
 SampleMind-AI/
 ├── src/samplemind/                  ← Python package (src-layout, v0.2.0)
 │   ├── __init__.py                  ← __version__ = "0.2.0"
@@ -431,7 +431,7 @@ SampleMind-AI/
 
 All batch processing is **live** as of Phase 4 (v0.2.0):
 
-```
+```text
 Batch import flow:
 files[] (discovered recursively from source path)
   │
@@ -482,6 +482,7 @@ else:
 | VST3 UI open | < 200ms | N/A (Phase 8) |
 
 **Remaining bottlenecks for Phase 5:**
+
 - Single file analysis: ~800ms first call (librosa JIT + numba cache warmup); target 500ms
   with `--skip-analysis` flag and mtime-based re-analysis cache
 - Batch is now parallel, but 100-file target assumes 4+ CPU cores; single-core machines ~60s
@@ -599,7 +600,7 @@ logger.debug("analyze.complete", path=path, duration_ms=elapsed_ms)
 
 ### Development (Windows WSL2)
 
-```
+```text
 Windows 11
 └── WSL2 (Ubuntu 24.04)
     ├── /home/ubuntu/dev/projects/SampleMind-AI/  ← ALL code here (Linux ext4, fast)
@@ -615,7 +616,7 @@ NOTE: NEVER store code under /mnt/c/ — NTFS is 5–10× slower for git and Pyt
 
 ### Production (macOS)
 
-```
+```text
 macOS 12+ (Apple Silicon preferred)
 └── SampleMind.app  (Tauri bundle, ~15 MB signed + notarized)
     ├── Contents/MacOS/
@@ -638,7 +639,7 @@ Sample library:
 
 ## Sidecar v2 Architecture (Phase 8)
 
-```
+```text
 JUCE Plugin                    Python Sidecar (PyInstaller bundle)
 ┌─────────────────┐            ┌──────────────────────────────────────┐
 │ PluginEditor    │            │ server.py                            │
@@ -702,7 +703,7 @@ file path, code pattern, or chat keyword — no manual routing needed.
 
 ### Slash Commands
 
-```
+```text
 /check    /test     /build    /import   /search   /analyze
 /serve    /start    /list     /tag      /health   /db-inspect
 /auth     /setup    /debug    /pack     /sidecar
@@ -710,7 +711,7 @@ file path, code pattern, or chat keyword — no manual routing needed.
 
 ### Auggie CLI Skills (22 total)
 
-```
+```text
 analyze_audio  batch_import  build  check  coverage  db_inspect  db_migrate
 fingerprint  health_check  import_samples  lint  list_samples  pack  run_tests
 search  serve_api  serve_web  setup_dev  sidecar  start  auth  tag

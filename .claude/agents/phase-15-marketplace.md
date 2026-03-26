@@ -1,3 +1,17 @@
+---
+name: phase-15-marketplace
+description: >
+  Use this agent automatically for ANY task involving: Phase 15, marketplace, Stripe, pack
+  publishing, CDN, signed URL, creator publishing, stripe.checkout, PackListing,
+  validate_pack_for_marketplace, "marketplace", "pack publishing", "Stripe", "signed URL",
+  or "Phase 15 work". Also activate automatically when the currently open or reviewed file
+  matches any of: src/samplemind/marketplace/**/*.py — or the file contains: stripe.checkout,
+  PackListing, validate_pack_for_marketplace, MarketplaceClient, signed_url, creator_payout.
+  Do NOT wait for the user to ask — route here for all Phase 15 work.
+model: opus
+tools: Read, Grep, Glob, Bash
+---
+
 # Phase 15 Agent — Sample Pack Marketplace
 
 ## Identity

@@ -1,5 +1,7 @@
 # Phase 4 — CLI with Typer and Rich
 
+**Status: ✅ Complete** — 10 commands live, `--json` IPC contract active | Phase 4 of 16
+
 > Replace the `argparse`-based `main.py` with a modern **Typer** CLI that provides automatic
 > `--help`, type validation, Rich-formatted output, and a JSON mode for Tauri IPC.
 
@@ -16,7 +18,7 @@
 ## Goal State
 
 - `src/samplemind/cli/app.py` with Typer replacing `src/main.py`
-- All 6 commands migrated: `import`, `analyze`, `list`, `search`, `tag`, `serve`
+- All 10 commands live: `import`, `list`, `search`, `tag`, `serve`, `api`, `health`, `version`, `stats`, `export`
 - All commands support `--json` for machine-readable output
 - Rich progress bar during import and batch analysis
 - `samplemind --help` works directly from the terminal

@@ -1,124 +1,158 @@
 # SampleMind-AI Implementation Status
 
-Last updated: 2026-03-25
+Last updated: 2026-03-26
+
+---
 
 ## Phase Status
 
-| Phase | Name | Status | Agent |
-|---|---|---|---|
-| 1 | Foundation | **Complete** | n/a |
-| 2 | Audio Analysis & Testing | **In Progress** | phase-02-audio-testing |
-| 3 | Database (SQLModel + Alembic) | Planned | phase-03-database |
-| 4 | CLI Expansion | Planned | phase-04-cli |
-| 5 | Web UI Enhancements | Planned | phase-05-web |
-| 6 | Desktop App (Tauri 2) | Planned | phase-06-desktop |
-| 7 | FL Studio Integration | Planned | phase-07-fl-studio |
-| 8 | VST3/AU Plugin (JUCE 8) | Planned | phase-08-vst-plugin |
-| 9 | Sample Packs | Planned | phase-09-sample-packs |
+| Phase | Name | Status | Primary Agent |
+|-------|------|--------|---------------|
+| 1 | Foundation (uv, src-layout, config, logging) | **Complete** | phase-01-foundation |
+| 2 | Audio Analysis & Testing | **Complete** | phase-02-audio-testing |
+| 3 | Database (SQLModel + Alembic) | **Complete** | phase-03-database |
+| 4 | CLI Expansion (Typer + Rich) | **Complete** | phase-04-cli |
+| 5 | Flask Web UI + SSE Import | **Complete** | web-agent |
+| 6 | Tauri 2 Desktop App | Planned | phase-06-desktop |
+| 7 | FL Studio Integration | Planned | fl-studio-agent |
+| 8 | VST3/AU Plugin (JUCE 8) | Planned — spec ready | phase-08-vst-plugin |
+| 9 | Sample Packs (.smpack) | Planned | phase-09-sample-packs |
 | 10 | Production & Distribution | Planned | phase-10-production |
+| 11 | Semantic Search (CLAP + FAISS) | Planned — spec ready | phase-11-semantic-search |
+| 12 | AI Curation (LiteLLM) | Planned | phase-12-ai-curation |
+| 13 | Cloud Sync (R2/Supabase) | Planned | phase-13-cloud-sync |
+| 14 | Analytics Dashboard (Plotly) | Planned | phase-14-analytics |
+| 15 | Sample Pack Marketplace (Stripe) | Planned | phase-15-marketplace |
+| 16 | AI Sample Generation (AudioCraft) | Planned | phase-16-ai-generation |
 
 ---
 
 ## Performance Targets
 
-| Operation | Target | Current State |
-|---|---|---|
-| Single file analysis | < 500ms | ~800ms (needs optimization) |
-| Batch import (100 files) | < 30s | sequential, no workers yet |
-| Search query | < 50ms | sqlite3, no FTS5 yet |
+| Operation | Target | Measured |
+|-----------|--------|---------|
+| Single file analysis | < 500ms | ~800ms CPU-only (Phase 2 baseline) |
+| Batch import (100 files) | < 30s | ~13 min full suite (WAV fixtures) |
+| Search query (keyword) | < 50ms | SQLite LIKE, no FTS5 yet |
+| Semantic search (FAISS) | < 100ms | not built yet (Phase 11) |
 | Tauri cold start | < 2s | not measured |
 | Sidecar startup | < 3s | not built yet |
 | VST3 UI open | < 200ms | not built yet |
 
 ---
 
-## What Is Live (Phase 1 complete)
+## What Is Live
 
-### Python Package
-- `src/samplemind/` — proper src-layout package
-- `src/samplemind/analyzer/audio_analysis.py` — 8-feature librosa extraction
-- `src/samplemind/analyzer/classifier.py` — energy/mood/instrument classifiers
-- `src/samplemind/cli/app.py` — Typer CLI with import, analyze, tag, search, serve commands
-- `src/samplemind/data/database.py` — sqlite3 database layer
-- `src/samplemind/web/app.py` — Flask web UI
-- `tests/` — pytest test suite with WAV fixtures
+### Python Backend (Phases 1–5 complete)
+
+- `src/samplemind/` — proper src-layout package with Python 3.13
+- `src/samplemind/analyzer/audio_analysis.py` — 8-feature librosa extraction (BPM, key, RMS, centroid, ZCR, flatness, rolloff, onset)
+- `src/samplemind/analyzer/classifier.py` — energy/mood/instrument classifiers + `_safe_float()` guard
+- `src/samplemind/analyzer/fingerprint.py` — SHA-256 content fingerprinting for dedup
+- `src/samplemind/cli/app.py` — Typer CLI: import, list, search, tag, serve, api, health, version, stats, export
+- `src/samplemind/data/orm.py` — SQLModel + WAL PRAGMA + Alembic migrations
+- `src/samplemind/data/repositories/` — SampleRepository + UserRepository
+- `src/samplemind/core/auth/` — JWT + RBAC (bcrypt, python-jose)
+- `src/samplemind/api/main.py` — FastAPI with /api/v1/ routes, JWT auth, OpenAPI docs
+- `src/samplemind/web/app.py` — Flask web UI with HTMX live search, SSE import, audio streaming
+- `src/samplemind/web/blueprints/` — auth, samples, import (SSE), FL Studio export
+- `src/samplemind/integrations/filesystem.py` — FL Studio filesystem export
+- `tests/` — 244 tests (226 fast + 18 slow), 60%+ coverage
 
 ### Tooling
-- `pyproject.toml` — uv-managed, ruff, pytest, coverage configured
+
+- `pyproject.toml` — uv-managed, ruff ≥0.15, pytest ≥9, pyright ≥1.1.390
 - `.python-version` — pins Python 3.13
-- `uv.lock` — locked dependency tree
-- `.github/workflows/python-lint.yml` → replaced with uv+ruff+pytest+clippy CI
-
-### Claude Code Config
-- `.claude/commands/` — 10 slash commands
-- `.claude/agents/` — 14 specialized agents (phase + domain)
-- `CLAUDE.md` — full project guide
-- `ARCHITECTURE.md` — system architecture
+- `.github/workflows/ci.yml` — ruff + pyright + pytest + alembic check + clippy
 
 ---
 
-## Next Execution Steps
+## Agent Quick Index (24 agents)
 
-### Phase 2 — Audio Analysis & Testing
+### Domain Agents
 
-**Priority 1:** Expand test fixtures in `tests/conftest.py`
-- Add `kick_wav`, `hihat_wav`, `bass_wav`, `loud_wav` fixtures
-- Add batch processing test with 5-file synthetic directory
+| Agent | Trigger |
+|-------|---------|
+| `audio-analyzer` | librosa, BPM, WAV, classify, fingerprint, spectral |
+| `test-runner` | pytest, test, failing, coverage, CI, fixture |
+| `tauri-builder` | Tauri, Rust, Svelte, cargo, pnpm tauri |
+| `doc-writer` | docs, README, ARCHITECTURE, phase doc |
+| `fl-studio-agent` | FL Studio, JUCE, VST3, AU, sidecar, Phase 7 |
+| `api-agent` | FastAPI, REST, /api/v1, endpoint, Bearer token |
+| `web-agent` | Flask, web UI, HTMX, SSE, login page, Phase 5 |
+| `security-agent` | JWT, RBAC, bcrypt, OAuth2, permission |
+| `devops-agent` | setup, CI/CD, GitHub Actions, WSL2, environment |
+| `ml-agent` | ML model, transformers, HuggingFace, embedding |
 
-**Priority 2:** Add fingerprinting module
-- Create `src/samplemind/analyzer/fingerprint.py`
-- SHA-256 of first 64KB for dedup detection
+### Phase Agents
 
-**Priority 3:** Add batch processing
-- Create `src/samplemind/analyzer/batch.py`
-- ProcessPoolExecutor with configurable workers
-- Progress callback
-
-**Priority 4:** Achieve coverage targets
-- `test_audio_analysis.py`: 80%+ coverage
-- `test_classifier.py`: 90%+ coverage (threshold edge cases)
-
-### Phase 3 — Database
-
-**Priority 1:** Enable WAL mode + PRAGMA tuning in `database.py`
-**Priority 2:** Add FTS5 virtual table for search
-**Priority 3:** Add `backup_db()` function
-**Priority 4:** SQLModel + Alembic migration
-
----
-
-## Agent Quick Index
-
-| File | Agent | Trigger |
-|---|---|---|
-| `.claude/agents/phase-02-audio-testing.md` | phase-02-audio-testing | Phase 2 audio tests |
-| `.claude/agents/phase-03-database.md` | phase-03-database | SQLModel, Alembic, migrations |
-| `.claude/agents/phase-04-cli.md` | phase-04-cli | Typer CLI, Rich UX |
-| `.claude/agents/phase-05-web.md` | phase-05-web | Flask, HTMX, SSE |
-| `.claude/agents/phase-06-desktop.md` | phase-06-desktop | Tauri 2, Svelte 5 |
-| `.claude/agents/phase-07-fl-studio.md` | phase-07-fl-studio | FL Studio, AppleScript, MIDI |
-| `.claude/agents/phase-08-vst-plugin.md` | phase-08-vst-plugin | JUCE 8, VST3/AU |
-| `.claude/agents/phase-09-sample-packs.md` | phase-09-sample-packs | .smpack format |
-| `.claude/agents/phase-10-production.md` | phase-10-production | signing, CI/CD, release |
-| `.claude/agents/audio-analyzer.md` | audio-analyzer | librosa, features, classifiers |
-| `.claude/agents/tauri-builder.md` | tauri-builder | Rust, Tauri, Svelte |
-| `.claude/agents/fl-studio-agent.md` | fl-studio-agent | FL Studio, JUCE, sidecar |
-| `.claude/agents/test-runner.md` | test-runner | pytest, coverage, CI |
-| `.claude/agents/doc-writer.md` | doc-writer | docs, ARCHITECTURE.md |
+| Agent | Trigger |
+|-------|---------|
+| `phase-01-foundation` | Phase 1, pyproject.toml, pydantic-settings, structlog |
+| `phase-02-audio-testing` | Phase 2, WAV fixtures, conftest, audio testing |
+| `phase-03-database` | Phase 3, SQLModel, Alembic, ORM, migrations |
+| `phase-04-cli` | Phase 4, Typer, Rich, --json flag |
+| `phase-06-desktop` | Phase 6, Tauri, Svelte 5 Runes, IPC |
+| `phase-08-vst-plugin` | Phase 8, JUCE, VST3, AU, PluginProcessor |
+| `phase-09-sample-packs` | Phase 9, .smpack, manifest.json, pack format |
+| `phase-10-production` | Phase 10, macOS signing, notarization, release |
+| `phase-11-semantic-search` | Phase 11, CLAP, FAISS, embed_audio, VectorIndex |
+| `phase-12-ai-curation` | Phase 12, LiteLLM, curate, smart playlist |
+| `phase-13-cloud-sync` | Phase 13, cloud sync, R2, Supabase, boto3 |
+| `phase-14-analytics` | Phase 14, analytics, Plotly, BPM histogram |
+| `phase-15-marketplace` | Phase 15, marketplace, Stripe, pack publishing |
+| `phase-16-ai-generation` | Phase 16, AudioCraft, generate sample, text-to-audio |
 
 ---
 
-## Command Quick Index
+## Command Quick Index (23 commands)
 
-| Command | File | Purpose |
-|---|---|---|
-| `/analyze` | `.claude/commands/analyze.md` | Analyze a WAV file (fingerprint, batch) |
-| `/build` | `.claude/commands/build.md` | Build Tauri, Python, sidecar, plugin |
-| `/check` | `.claude/commands/check.md` | Full CI: ruff + pytest + clippy + coverage |
-| `/db-migrate` | `.claude/commands/db-migrate.md` | Run Alembic migrations |
-| `/import` | `.claude/commands/import.md` | Import audio folder |
-| `/pack` | `.claude/commands/pack.md` | Export/import .smpack |
-| `/phase-doc` | `.claude/commands/phase-doc.md` | Generate phase documentation |
-| `/search` | `.claude/commands/search.md` | Search library |
-| `/sidecar` | `.claude/commands/sidecar.md` | Start/stop Python sidecar |
-| `/test` | `.claude/commands/test.md` | Run test suite |
+| Command | Purpose |
+|---------|---------|
+| `/analyze` | Analyze a WAV file (8 features + optional fingerprint) |
+| `/auth` | JWT auth management (register, login, tokens) |
+| `/build` | Build Tauri desktop app, Python sidecar, JUCE plugin |
+| `/check` | Full CI suite: ruff + pyright + pytest + alembic check + clippy |
+| `/db-inspect` | Inspect database schema, stats, sample counts |
+| `/db-migrate` | Create and apply Alembic migrations |
+| `/debug` | Debug classifier decisions, IPC issues, test failures |
+| `/export` | Export filtered samples to a target directory |
+| `/health` | Check all service health (FastAPI, Flask, sidecar, DB) |
+| `/import` | Import audio folder into library |
+| `/lint` | Run ruff check + ruff format + pyright |
+| `/list` | List library samples with filters |
+| `/pack` | Manage .smpack sample packs (create, import, verify) |
+| `/phase-doc` | Scaffold a new phase documentation file |
+| `/search` | Search library by text, instrument, energy, BPM |
+| `/serve` | Start Flask web UI (port 5000 or 5174 for Tauri) |
+| `/setup` | Run dev environment setup (uv sync, alembic, pnpm) |
+| `/sidecar` | Start/stop Python sidecar socket server |
+| `/start` | Quick-start all services in correct order |
+| `/stats` | Show library statistics (by instrument, energy, mood) |
+| `/tag` | Manually tag a sample (genre, tags) |
+| `/test` | Run pytest (with markers, coverage, parallel options) |
+| `/workflow` | Run multi-step development workflows |
+
+---
+
+## Specs Index (KFC spec-driven development)
+
+| Spec | Status | Next Step |
+|------|--------|-----------|
+| `.claude/specs/phase-08-vst-plugin/` | requirements.md ready | Run spec design |
+| `.claude/specs/phase-11-semantic-search/` | requirements.md ready | Run spec design |
+
+To continue a spec: describe the feature in chat, Claude will invoke the KFC spec workflow
+automatically (requirements → design → tasks → implementation).
+
+---
+
+## Steering Files (always-on context)
+
+| File | Type | Loaded When |
+|------|------|-------------|
+| `always-audio-domain.md` | always | Every conversation |
+| `always-python-tooling.md` | always | Every conversation |
+| `conditional-database.md` | conditional | Editing `src/samplemind/data/**` |
+| `conditional-testing.md` | conditional | Editing `tests/**` |
+| `conditional-tauri-ipc.md` | conditional | Editing `app/**` |

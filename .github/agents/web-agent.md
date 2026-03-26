@@ -1,6 +1,6 @@
 ---
 name: "Web Agent"
-description: "Use for Flask web UI tasks: Jinja2 templates, session auth, HTMX live search, SSE progress streams, audio streaming /audio/<id>, Flask routes in src/samplemind/web/app.py, or 'update the web UI' requests in SampleMind-AI."
+description: "Use for Phase 5, Flask web UI tasks: Jinja2 templates, session auth, HTMX live search, SSE progress streams, audio streaming /audio/<id>, Flask routes in src/samplemind/web/app.py, 'add a web feature', 'fix the web UI', 'HTMX not updating', or 'Phase 5 work' in SampleMind-AI."
 argument-hint: "Describe the Flask route or UI feature to add or change: endpoint path, method, auth requirement, template changes, or HTMX behavior."
 tools: [read, edit, search, execute]
 user-invocable: true

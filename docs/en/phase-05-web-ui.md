@@ -1,5 +1,7 @@
 # Phase 5 — Web UI with Flask and HTMX
 
+**Status: ✅ Complete** — Flask + HTMX + SSE live, Blueprints active | Phase 5 of 16
+
 > Upgrade the Flask application to a `create_app()` factory with Blueprints, and replace
 > manual JavaScript with **HTMX** for live updates and SSE for import progress.
 

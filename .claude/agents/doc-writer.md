@@ -13,7 +13,7 @@ description: >
   NOT a test fixture or code-adjacent config, and contains section headers like ## Overview,
   ## Architecture, ## Phase, ## Usage, ## Installation, ## Contributing.
   Do NOT wait for the user to ask — route here for all documentation creation and editing tasks.
-model: sonnet
+model: haiku
 tools: Read, Grep, Glob, Write
 ---
 

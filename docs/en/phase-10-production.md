@@ -1,5 +1,7 @@
 # Phase 10 — Production and Distribution
 
+**Status: 📋 Planned** — depends on Phase 6 (desktop app) | Phase 10 of 16 | Agent: `phase-10-production`
+
 > Sign, notarize, and distribute SampleMind as a native macOS `.app` and Windows `.exe` via GitHub Actions.
 
 ---

@@ -1,5 +1,7 @@
 # Phase 7 — FL Studio Integration (macOS and Windows)
 
+**Status: 📋 Planned** — depends on Phase 6 (desktop app) | Phase 7 of 16 | Agent: `fl-studio-agent`
+
 > Connect SampleMind to FL Studio using filesystem export, AppleScript automation,
 > virtual MIDI, and clipboard — from simplest to most integrated.
 

@@ -1,5 +1,7 @@
 # Phase 12 — AI Curation Agent
 
+**Status: 📋 Planned** — depends on Phase 11 (semantic search) | Phase 12 of 16 | Agent: `phase-12-ai-curation`
+
 > **Goal:** Automate repetitive library management tasks — let an LLM reason
 > about your sample collection and suggest organization, identify gaps,
 > generate curated playlists, and surface hidden gems.

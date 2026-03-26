@@ -1,5 +1,7 @@
 # Phase 15 — Sample Pack Marketplace
 
+**Status: 📋 Planned** — depends on Phase 9 (sample packs) + Phase 13 (cloud sync) | Phase 15 of 16 | Agent: `phase-15-marketplace`
+
 > **Goal:** A producer-facing marketplace where creators can publish, discover,
 > and install sample packs — with ratings, previews, commercial licensing,
 > and revenue sharing for paid packs.

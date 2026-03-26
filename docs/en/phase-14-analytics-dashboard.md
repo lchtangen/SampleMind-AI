@@ -1,5 +1,7 @@
 # Phase 14 — Advanced Analytics Dashboard
 
+**Status: 📋 Planned** — depends on Phase 5 (web UI) + Phase 3 (database) | Phase 14 of 16 | Agent: `phase-14-analytics`
+
 > **Goal:** Surface deep insights about the sample library — BPM trends, key
 > distribution heatmaps, usage patterns, collection growth over time, and
 > producer session statistics. Helps identify creative ruts and opportunities.

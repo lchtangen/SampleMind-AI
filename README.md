@@ -170,6 +170,7 @@ lipo -info app/src-tauri/target/universal-apple-darwin/release/bundle/macos/Samp
 See [ROADMAP.md](ROADMAP.md) for the full roadmap.
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the system architecture.
 See [docs/en/](docs/en/) for detailed per-phase documentation.
+See [docs/meta/](docs/meta/) for project meta and agent guides (agent routing, CLAUDE, and execution guides).
 
 ---
 

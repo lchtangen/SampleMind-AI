@@ -13,11 +13,28 @@
       }
     },
     {
+      "name": "macos-release",
+      "displayName": "macOS Release (Universal)",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build/macos-release",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "linux-debug",
       "displayName": "Linux Debug",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/linux-debug",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     }
   ]
 }

@@ -1,5 +1,7 @@
 # Phase 16 — AI-Assisted Sample Generation
 
+**Status: 📋 Planned** — depends on Phase 11 (embeddings) + Phase 12 (AI agent) | Phase 16 of 16 | Agent: `phase-16-ai-generation`
+
 > **Goal:** Generate new audio samples from text descriptions, style references,
 > and mood/BPM targets — directly integrated into the SampleMind workflow.
 >

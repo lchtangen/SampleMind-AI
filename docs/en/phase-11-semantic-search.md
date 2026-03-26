@@ -1,5 +1,8 @@
 # Phase 11 — Semantic Search & Vector Embeddings
 
+**Status: 📋 Planned — Spec ready** | Phase 11 of 16 | Agent: `phase-11-semantic-search`
+Spec: [`.claude/specs/phase-11-semantic-search/requirements.md`](../../.claude/specs/phase-11-semantic-search/requirements.md)
+
 > **Goal:** Find samples by sound similarity and natural language description.
 > "Find samples that sound like rain on a metal roof" — and get results in < 100 ms.
 >

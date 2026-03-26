@@ -80,6 +80,16 @@
             // done event
             statusMsg = `Done — ${payload.imported} of ${payload.total} imported`;
             progress  = total;
+            // Send native OS notification (Tauri only — no-op in browser)
+            if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+              const { sendNotification } = await import(
+                "@tauri-apps/plugin-notification"
+              );
+              sendNotification({
+                title: "SampleMind — Import Complete",
+                body: `${payload.imported} of ${payload.total} samples imported`,
+              });
+            }
           } else if ("error" in payload && "filename" in payload) {
             // per-file error — continue streaming
             console.warn("Import error:", payload);

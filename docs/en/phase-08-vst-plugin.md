@@ -1,5 +1,8 @@
 # Phase 8 — VST3/AU Plugin with JUCE 8
 
+**Status: 📋 Planned — Spec ready** | Phase 8 of 16 | Agent: `phase-08-vst-plugin`
+Spec: [`.claude/specs/phase-08-vst-plugin/requirements.md`](../../.claude/specs/phase-08-vst-plugin/requirements.md)
+
 > Build a JUCE 8 C++ plugin (VST3 + AU) that runs inside FL Studio and communicates with the
 > Python backend via a local socket.
 

@@ -273,3 +273,87 @@ def test_export_to_fl_no_fl_installed_returns_500(
 
     assert r.status_code == 500
     assert "No FL Studio" in r.get_json()["error"]
+
+
+# ── /api/import SSE endpoint ──────────────────────────────────────────────────
+
+
+def test_import_sse_bad_folder_returns_400(client: FlaskClient) -> None:
+    """POST /api/import with a non-existent folder returns 400."""
+    r = client.post("/api/import", json={"folder": "/does/not/exist/xyz"})
+    assert r.status_code == 400
+    assert b"error" in r.data.lower()
+
+
+def test_import_sse_streams_events(client: FlaskClient, tmp_path) -> None:
+    """POST /api/import streams SSE events: start → progress* → done."""
+    import json as _json
+    from unittest.mock import patch as _patch
+
+    # Create a real WAV file so the folder glob finds it
+    import numpy as np
+    import soundfile as sf
+
+    wav = tmp_path / "beat.wav"
+    sf.write(str(wav), np.zeros(22050, dtype=np.float32), 22050)
+
+    fake_analysis = {
+        "bpm": 120.0,
+        "key": "C maj",
+        "energy": "mid",
+        "mood": "neutral",
+        "instrument": "unknown",
+    }
+
+    with _patch(
+        "samplemind.web.blueprints.import_.analyze_file",
+        return_value=fake_analysis,
+    ):
+        r = client.post("/api/import", json={"folder": str(tmp_path)})
+        # Consume the streaming generator while the mock is still active.
+        raw = r.data.decode()
+
+    assert r.status_code == 200
+    assert r.content_type.startswith("text/event-stream")
+    events = [blk for blk in raw.split("\n\n") if blk.strip()]
+    event_types = []
+    for blk in events:
+        for line in blk.splitlines():
+            if line.startswith("event:"):
+                event_types.append(line.split(":", 1)[1].strip())
+
+    assert "start" in event_types
+    assert "done" in event_types
+    assert "progress" in event_types
+
+    # The done event should report 1 imported file
+    done_blk = next(b for b in events if "event: done" in b)
+    done_data = _json.loads(
+        next(ln.split("data:", 1)[1] for ln in done_blk.splitlines() if ln.startswith("data:"))
+    )
+    assert done_data["imported"] == 1
+    assert done_data["total"] == 1
+
+
+def test_import_sse_handles_analysis_error_gracefully(
+    client: FlaskClient, tmp_path
+) -> None:
+    """POST /api/import streams an 'error' event when analyze_file raises."""
+    import numpy as np
+    import soundfile as sf
+    from unittest.mock import patch as _patch
+
+    wav = tmp_path / "bad.wav"
+    sf.write(str(wav), np.zeros(22050, dtype=np.float32), 22050)
+
+    with _patch(
+        "samplemind.web.blueprints.import_.analyze_file",
+        side_effect=RuntimeError("corrupted file"),
+    ):
+        r = client.post("/api/import", json={"folder": str(tmp_path)})
+        # Consume the streaming generator while the mock is still active.
+        raw = r.data.decode()
+
+    assert r.status_code == 200
+    assert "event: error" in raw
+    assert "corrupted file" in raw

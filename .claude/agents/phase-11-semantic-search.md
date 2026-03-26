@@ -1,3 +1,17 @@
+---
+name: phase-11-semantic-search
+description: >
+  Use this agent automatically for ANY task involving: Phase 11, CLAP embeddings, FAISS vector
+  index, semantic search, cosine similarity, audio embeddings, text embeddings, VectorIndex,
+  embed_audio, embed_text, find_similar, ChromaDB, "semantic search", "vector search", or
+  "Phase 11 work". Also activate automatically when the currently open or reviewed file matches
+  any of: src/samplemind/search/**/*.py — or the file contains: import faiss, from clap, CLAP,
+  embed_audio, embed_text, VectorIndex, find_similar, cosine_similarity, vector_store,
+  semantic_search. Do NOT wait for the user to ask — route here for all Phase 11 work.
+model: sonnet
+tools: Read, Grep, Glob, Bash
+---
+
 # Phase 11 Agent — Semantic Search & Vector Embeddings
 
 ## Identity

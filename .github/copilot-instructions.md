@@ -402,7 +402,7 @@ alias smapi="uv run samplemind api --reload"
 
 ---
 
-## Agent Routing Reference (20 agents)
+## Agent Routing Reference (24 agents)
 
 | Task involves... | Agent |
 |-----------------|-------|
@@ -419,9 +419,9 @@ alias smapi="uv run samplemind api --reload"
 | Phase 2 (audio testing, WAV fixtures) | `phase-02-audio-testing` |
 | Phase 3 (SQLModel, Alembic) | `phase-03-database` |
 | Phase 4 (Typer CLI, Rich, --json) | `phase-04-cli` |
-| Phase 5 (Flask API, HTMX, SSE) | `phase-05-web` |
+| Phase 5 (Flask API, HTMX, SSE) | `web-agent` |
 | Phase 6 (Tauri desktop, Svelte 5) | `phase-06-desktop` |
-| Phase 7 (FL Studio automation) | `phase-07-fl-studio` |
+| Phase 7 (FL Studio automation) | `fl-studio-agent` |
 | Phase 8 (JUCE plugin, CMake, auval) | `phase-08-vst-plugin` |
 | Phase 9 (sample packs, .smpack) | `phase-09-sample-packs` |
 | Phase 10 (production, signing, notarization) | `phase-10-production` |
@@ -643,9 +643,9 @@ For feature-specific changes, use the appropriate `.github/agents/*.md` file:
 | librosa, classifiers, WAV fixtures, LUFS, stereo | `phase-02-audio-testing.md` |
 | SQLModel, Alembic, FTS5, DB backup | `phase-03-database.md` |
 | Typer, Rich, CLI commands, watch mode, export | `phase-04-cli.md` |
-| Flask, FastAPI, HTMX, Socket.IO, WaveSurfer | `phase-05-web.md` |
+| Flask, FastAPI, HTMX, Socket.IO, WaveSurfer | `web-agent.md` |
 | Tauri, Rust, Svelte 5 Runes, system tray | `phase-06-desktop.md` |
-| FL Studio, AppleScript, MIDI clock, IAC Driver | `phase-07-fl-studio.md` |
+| FL Studio, AppleScript, MIDI clock, IAC Driver | `fl-studio-agent.md` |
 | JUCE, VST3, AU, sidecar socket, preset manager | `phase-08-vst-plugin.md` |
 | .smpack format, pack registry, licensing | `phase-09-sample-packs.md` |
 | CI/CD, signing, feature flags, crash reporter | `phase-10-production.md` |

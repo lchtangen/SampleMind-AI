@@ -27,8 +27,8 @@ and JUCE VST3/AU plugin — all reading the same database.
 
 **Key docs:**
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram, IPC contract table
-- [docs/en/phase-01-foundation.md](docs/en/phase-01-foundation.md) through [docs/en/phase-10-production.md](docs/en/phase-10-production.md) — phase upgrade path
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — system diagram, IPC contract table
+- [docs/en/phase-01-foundation.md](../docs/en/phase-01-foundation.md) through [docs/en/phase-10-production.md](../docs/en/phase-10-production.md) — phase upgrade path
 
 ---
 
@@ -210,14 +210,6 @@ zcr = float(librosa.feature.zero_crossing_rate(y).mean())
 | `mood` | `"dark"` `"chill"` `"aggressive"` `"euphoric"` `"melancholic"` `"neutral"` |
 | `instrument` | `"loop"` `"hihat"` `"kick"` `"snare"` `"bass"` `"pad"` `"lead"` `"sfx"` `"unknown"` |
 
-**Audio fingerprinting** (SHA-256 of first 64 KB — for deduplication):
-
-```python
-def fingerprint_file(path: Path) -> str:
-    with open(path, "rb") as f:
-        return hashlib.sha256(f.read(65536)).hexdigest()
-```
-
 **CLI and IPC Contract:**
 
 - Use Typer for new CLI features in src/samplemind/cli.
@@ -314,45 +306,6 @@ def hihat_wav(tmp_path: Path) -> Path:
     return path
 ```
 
-**DB fixtures** — always use in-memory SQLite via the `orm_engine` fixture, not sqlite3 directly.
-The following fixtures are already defined in `tests/conftest.py`:
-
-```python
-# orm_engine — shared in-memory SQLite engine with all SQLModel tables created.
-# Uses StaticPool so all threads see the same in-memory database (required for FastAPI tests).
-@pytest.fixture(name="orm_engine")
-def orm_engine_fixture():
-    engine = create_engine(
-        "sqlite://",                          # no file — pure in-memory
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,                 # one shared connection across all threads
-    )
-    # Import models first so SQLModel.metadata knows about all tables
-    import samplemind.core.models.user    # noqa: F401 — registers User table
-    import samplemind.core.models.sample  # noqa: F401 — registers Sample table
-    SQLModel.metadata.create_all(engine)  # creates users + samples tables
-    yield engine
-    SQLModel.metadata.drop_all(engine)    # clean up after each test
-
-# test_user — a seeded User row created via UserRepository.
-# The password is "testpassword123" — use verify_password() to check it.
-@pytest.fixture(name="test_user")
-def test_user_fixture(orm_engine):
-    import samplemind.data.orm as orm_module
-    orm_module._engine = orm_engine       # redirect get_session() to in-memory engine
-    from samplemind.core.models.user import UserCreate, UserRole
-    from samplemind.data.repositories.user_repository import UserRepository
-    user_data = UserCreate(email="test@example.com", password="testpassword123", role=UserRole.owner)
-    return UserRepository.create(user_data)
-
-# access_token — valid JWT bearer token string for the test_user.
-# Pass in Authorization header: {"Authorization": f"Bearer {access_token}"}
-@pytest.fixture(name="access_token")
-def access_token_fixture(test_user):
-    from samplemind.core.auth.jwt_handler import create_access_token
-    return create_access_token({"sub": str(test_user.id), "role": test_user.role})
-```
-
 ---
 
 ## Code Safety Rules
@@ -413,7 +366,7 @@ System Preferences → Privacy & Security → Accessibility → add the app.
 
 ## AI Agent Routing (2026)
 
-This repo has **19 specialized agents** in `.claude/agents/` that activate automatically.
+This repo has **24 specialized agents** in `.claude/agents/` that activate automatically.
 Agents are triggered by three signals — in priority order:
 
 1. **Open file path** — the file being edited matches an agent's file glob patterns
@@ -472,7 +425,7 @@ This table is the **canonical reference** — it mirrors `.auggie/routing.yaml` 
 | `plugin/Source/**/*.h` | `phase-08-vst-plugin` |
 | `plugin/CMakeLists.txt` | `phase-08-vst-plugin` |
 | `src/samplemind/sidecar/**/*.py` | `fl-studio-agent` |
-| `src/samplemind/integrations/**/*.py` | `phase-07-fl-studio` |
+| `src/samplemind/integrations/**/*.py` | `fl-studio-agent` |
 | `src/samplemind/packs/**/*.py` | `phase-09-sample-packs` |
 | `src/samplemind/search/**/*.py` | `phase-11-semantic-search` |
 | `src/samplemind/agent/**/*.py` | `phase-12-ai-curation` |
@@ -539,9 +492,9 @@ This table is the **canonical reference** — it mirrors `.auggie/routing.yaml` 
 | Phase 2 | `phase-02-audio-testing` |
 | Phase 3 | `phase-03-database` |
 | Phase 4 | `phase-04-cli` |
-| Phase 5 | `phase-05-web` |
+| Phase 5 | `web-agent` |
 | Phase 6 | `phase-06-desktop` |
-| Phase 7 | `phase-07-fl-studio` |
+| Phase 7 | `fl-studio-agent` |
 | Phase 8 | `phase-08-vst-plugin` |
 | Phase 9 | `phase-09-sample-packs` |
 | Phase 10 | `phase-10-production` |
@@ -634,15 +587,15 @@ SampleRepository.tag("/abs/path/kick.wav", SampleUpdate(genre="trap", tags="808,
 ```
 Phase docs:   docs/en/phase-NN-*.md
 Architecture: ARCHITECTURE.md
-Routing:      .auggie/routing.yaml  → canonical file/code/keyword → agent map
 Memory:       .claude/projects/.../memory/ (auto-loaded by Claude Code)
 
-Claude Code agents (19 total — auto-activated by file, code, or keyword):
+Claude Code agents (24 total — auto-activated by file, code, or keyword):
   Domain:  audio-analyzer  test-runner  tauri-builder  doc-writer  fl-studio-agent
            api-agent  web-agent  security-agent  devops-agent  ml-agent
-  Phase:   phase-02-audio-testing  phase-03-database  phase-04-cli
-           phase-05-web  phase-06-desktop  phase-07-fl-studio
-           phase-08-vst-plugin  phase-09-sample-packs  phase-10-production
+  Phase:   phase-01-foundation  phase-02-audio-testing  phase-03-database  phase-04-cli
+           phase-06-desktop  phase-08-vst-plugin  phase-09-sample-packs  phase-10-production
+           phase-11-semantic-search  phase-12-ai-curation  phase-13-cloud-sync
+           phase-14-analytics  phase-15-marketplace  phase-16-ai-generation
 
 Claude Code commands (13 total — type /command in chat):
   /analyze   /import    /search    /check     /test      /build

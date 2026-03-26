@@ -1,5 +1,7 @@
 # Phase 6 — Desktop App with Tauri 2 and Svelte 5
 
+**Status: 📋 Planned** — next after Phase 5 | Phase 6 of 16 | Agent: `phase-06-desktop`
+
 > Build the complete Svelte 5 frontend that replaces `app/dist/index.html`, and extend the
 > Rust backend with typed commands that call the Python CLI via IPC.
 

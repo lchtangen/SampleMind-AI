@@ -24,40 +24,74 @@ import numpy as np
 warnings.filterwarnings("ignore", message="n_fft=.*is too large")
 
 
+def _safe_float(value: object, default: float = 0.0) -> float:
+    """Convert a numpy scalar or 0-dim array to Python float, with a fallback."""
+    try:
+        v = float(value)  # type: ignore[arg-type]
+        return default if (v != v) else v  # guard against NaN
+    except (TypeError, ValueError):
+        return default
+
+
 def _features(y: np.ndarray, sr: int | float, duration: float) -> dict[str, float]:
-    """Extract all classification features from a loaded audio signal."""
+    """Extract all classification features from a loaded audio signal.
+
+    All per-feature computations are individually guarded so that very short or
+    pathological files (e.g. fewer samples than n_fft) return safe fallback
+    values instead of raising exceptions.
+    """
 
     # RMS energy — scalar representing overall loudness
-    rms = float(np.sqrt(np.mean(y**2)))
+    rms = _safe_float(np.sqrt(np.mean(y**2)))
 
     # Spectral centroid — average across time frames, normalized by Nyquist freq
-    # Gives a value 0-1 where 0 = all energy at DC (silence) and 1 = all at top
-    centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
-    centroid_mean = float(centroid.mean()) / (sr / 2)
+    try:
+        centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
+        centroid_mean = _safe_float(centroid.mean()) / (sr / 2)
+    except Exception:
+        centroid_mean = 0.0
 
     # Zero crossing rate — fraction of frames where signal crosses zero
-    zcr = float(librosa.feature.zero_crossing_rate(y).mean())
+    try:
+        zcr = _safe_float(librosa.feature.zero_crossing_rate(y).mean())
+    except Exception:
+        zcr = 0.0
 
     # Spectral flatness — 0 = pure tone (sine wave), 1 = white noise
-    flatness = float(librosa.feature.spectral_flatness(y=y).mean())
+    try:
+        flatness = _safe_float(librosa.feature.spectral_flatness(y=y).mean())
+    except Exception:
+        flatness = 0.0
 
     # Spectral rolloff — normalized frequency below 85% of energy
-    rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr, roll_percent=0.85)
-    rolloff_norm = float(rolloff.mean()) / (sr / 2)
+    try:
+        rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr, roll_percent=0.85)
+        rolloff_norm = _safe_float(rolloff.mean()) / (sr / 2)
+    except Exception:
+        rolloff_norm = 0.0
 
     # Onset strength — mean strength of rhythmic attacks
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    onset_mean = float(onset_env.mean())
-    onset_max = float(onset_env.max())
+    # onset_env.max() raises ValueError on empty arrays (very short clips)
+    try:
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        if onset_env.size == 0:
+            onset_mean, onset_max = 0.0, 0.0
+        else:
+            onset_mean = _safe_float(onset_env.mean())
+            onset_max = _safe_float(onset_env.max())
+    except Exception:
+        onset_mean, onset_max = 0.0, 0.0
 
     # Low-frequency energy ratio — energy below 300 Hz vs total
-    # Kicks and bass have very high low_freq_ratio; hihats have near zero
-    stft = np.abs(librosa.stft(y))
-    freqs = librosa.fft_frequencies(sr=sr)
-    low_mask = freqs < 300
-    low_energy = float(stft[low_mask].sum())
-    total_energy = float(stft.sum()) + 1e-8
-    low_freq_ratio = low_energy / total_energy
+    try:
+        stft = np.abs(librosa.stft(y))
+        freqs = librosa.fft_frequencies(sr=sr)
+        low_mask = freqs < 300
+        low_energy = _safe_float(stft[low_mask].sum())
+        total_energy = _safe_float(stft.sum()) + 1e-8
+        low_freq_ratio = low_energy / total_energy
+    except Exception:
+        low_freq_ratio = 0.0
 
     return {
         "rms": rms,

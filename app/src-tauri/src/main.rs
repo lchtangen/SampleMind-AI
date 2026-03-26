@@ -7,11 +7,13 @@ use commands::{clear_token, get_token, is_directory, pick_folder, store_token};
 use state::AuthTokenStore;
 
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
+use tauri_plugin_notification::NotificationExt;
 
 const FLASK_PORT: u16 = 5174;
 const FLASK_URL: &str = "http://127.0.0.1:5174";
@@ -25,12 +27,12 @@ fn repo_root() -> PathBuf {
     cwd.parent().map(|p| p.to_path_buf()).unwrap_or(cwd)
 }
 
-fn python_exe(root: &PathBuf) -> PathBuf {
+fn python_exe(root: &Path) -> PathBuf {
     let venv = root.join(".venv").join("bin").join("python");
     if venv.exists() { venv } else { PathBuf::from("python3") }
 }
 
-fn main_py(root: &PathBuf) -> PathBuf {
+fn main_py(root: &Path) -> PathBuf {
     root.join("src").join("main.py")
 }
 
@@ -46,7 +48,7 @@ fn main_py(root: &PathBuf) -> PathBuf {
 ///      Tauri puts sidecar binaries next to the app executable.
 ///
 /// Returns (executable, optional_script_arg)
-fn resolve_server(app: &tauri::AppHandle) -> (PathBuf, Option<PathBuf>) {
+fn resolve_server(_app: &tauri::AppHandle) -> (PathBuf, Option<PathBuf>) {
     #[cfg(debug_assertions)]
     {
         let root = repo_root();
@@ -78,7 +80,7 @@ fn wait_for_port(port: u16, timeout_secs: u64) -> bool {
 
 fn set_status(window: &tauri::WebviewWindow, msg: &str) {
     let safe = msg.replace('\\', "\\\\").replace('\'', "\\'");
-    let _ = window.eval(&format!(
+    let _ = window.eval(format!(
         "document.getElementById('status') && (document.getElementById('status').textContent = '{safe}')"
     ));
 }
@@ -89,20 +91,22 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let show_item = MenuItem::with_id(app, "show", "Show SampleMind AI", true, None::<&str>)?;
-    let sep       = tauri::menu::PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit",               true, None::<&str>)?;
+    let show_item  = MenuItem::with_id(app, "show",  "Show SampleMind AI", true, None::<&str>)?;
+    let stats_item = MenuItem::with_id(app, "stats", "Library Stats",      true, None::<&str>)?;
+    let sep        = tauri::menu::PredefinedMenuItem::separator(app)?;
+    let quit_item  = MenuItem::with_id(app, "quit",  "Quit",               true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&show_item, &sep, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &stats_item, &sep, &quit_item])?;
 
     TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
         .tooltip("SampleMind AI")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "show" => show_main_window(app),
-            "quit" => app.exit(0),
-            _      => {}
+            "show"  => show_main_window(app),
+            "stats" => show_library_stats(app),
+            "quit"  => app.exit(0),
+            _       => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -126,6 +130,32 @@ fn show_main_window(app: &tauri::AppHandle) {
     }
 }
 
+/// Spawn `samplemind stats --json` and show the total count as a native notification.
+fn show_library_stats(app: &tauri::AppHandle) {
+    let output = Command::new("samplemind").args(["stats", "--json"]).output();
+    match output {
+        Ok(out) => {
+            let body = if let Ok(data) =
+                serde_json::from_slice::<serde_json::Value>(&out.stdout)
+            {
+                let total = data["total"].as_i64().unwrap_or(0);
+                format!("{total} samples in library")
+            } else {
+                "Could not read library stats".to_string()
+            };
+            let _ = app
+                .notification()
+                .builder()
+                .title("SampleMind Library")
+                .body(body)
+                .show();
+        }
+        Err(e) => {
+            eprintln!("[SampleMind] stats command failed: {e}");
+        }
+    }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 fn main() {
@@ -135,6 +165,41 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    // ⌘⇧S / Ctrl+Shift+S — toggle window visibility
+                    let is_toggle =
+                        shortcut.matches(Modifiers::SUPER | Modifiers::SHIFT, Code::KeyS)
+                            || shortcut
+                                .matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyS);
+                    // ⌘⇧F / Ctrl+Shift+F — show window + focus search
+                    let is_focus =
+                        shortcut.matches(Modifiers::SUPER | Modifiers::SHIFT, Code::KeyF)
+                            || shortcut
+                                .matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyF);
+                    if is_toggle {
+                        if let Some(win) = app.get_webview_window("main") {
+                            if win.is_visible().unwrap_or(false) {
+                                let _ = win.hide();
+                            } else {
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            }
+                        }
+                    } else if is_focus {
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                    }
+                })
+                .build(),
+        )
         // Register all IPC commands — must match capabilities/default.json
         .invoke_handler(tauri::generate_handler![
             pick_folder,
@@ -146,6 +211,12 @@ fn main() {
         .manage(AuthTokenStore::default())
         .setup(move |app| {
             setup_tray(app)?;
+
+            // Register global shortcuts
+            app.global_shortcut()
+                .register("CommandOrControl+Shift+S")?;
+            app.global_shortcut()
+                .register("CommandOrControl+Shift+F")?;
 
             let window = app
                 .get_webview_window("main")
@@ -188,7 +259,7 @@ fn main() {
                         set_status(&win, "Waiting for server...");
                         if wait_for_port(FLASK_PORT, 30) {
                             set_status(&win, "Ready!");
-                            let _ = win.eval(&format!(
+                            let _ = win.eval(format!(
                                 "window.location.replace('{FLASK_URL}')"
                             ));
                         } else {

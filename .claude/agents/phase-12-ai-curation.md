@@ -1,3 +1,17 @@
+---
+name: phase-12-ai-curation
+description: >
+  Use this agent automatically for ANY task involving: Phase 12, LiteLLM, AI curation,
+  smart playlists, library analysis, energy arc, gap analysis, analyze_library, curate(,
+  playlist_by_energy, "curate", "smart playlist", "AI curation", or "Phase 12 work".
+  Also activate automatically when the currently open or reviewed file matches any of:
+  src/samplemind/agent/**/*.py — or the file contains: import litellm, analyze_library,
+  curate(, playlist_by_energy, energy_arc, gap_analysis, LLMCurator, SmartPlaylist.
+  Do NOT wait for the user to ask — route here for all Phase 12 work.
+model: sonnet
+tools: Read, Grep, Glob, Bash
+---
+
 # Phase 12 Agent — AI Curation Agent
 
 ## Identity

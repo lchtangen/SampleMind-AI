@@ -1,5 +1,7 @@
 # Phase 9 — Sample Packs (.smpack)
 
+**Status: 📋 Planned** — depends on Phase 3 (database) + Phase 4 (CLI) | Phase 9 of 16 | Agent: `phase-09-sample-packs`
+
 > Build a portable pack format for exporting, sharing, and importing curated sample libraries as a single file.
 
 ---
